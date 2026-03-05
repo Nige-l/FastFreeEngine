@@ -1,0 +1,16 @@
+{
+  "name": "fastfreeengine",
+  "version-string": "0.1.0",
+  "dependencies": [
+    "entt",
+    "joltphysics",
+    "sol2",
+    "glm",
+    "imgui",
+    "stb",
+    "nlohmann-json",
+    "tracy",
+    "catch2",
+    "vulkan-memory-allocator"
+  ]
+}
