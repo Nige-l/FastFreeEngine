@@ -561,3 +561,102 @@ TEST_CASE("Shutdown and re-init clears all state", "[input][headless]") {
     ffe::updateInput();
     REQUIRE(ffe::isKeyUp(ffe::Key::W));
 }
+
+// =============================================================================
+// Action capacity exhaustion
+// =============================================================================
+
+TEST_CASE("Register MAX_ACTIONS actions - all succeed", "[input][actions][capacity]") {
+    InputFixture fix;
+
+    for (ffe::i32 i = 0; i < ffe::MAX_ACTIONS; ++i) {
+        // Use a fixed-size buffer; names are just "a0".."a63"
+        char name[8];
+        // Build name manually to avoid sprintf (not needed in hot path anyway,
+        // but we follow the no-hidden-heap-in-hot-paths rule for clarity)
+        name[0] = 'a';
+        name[1] = static_cast<char>('0' + (i / 10));
+        name[2] = static_cast<char>('0' + (i % 10));
+        name[3] = '\0';
+        const ffe::i32 idx = ffe::registerAction(name);
+        REQUIRE(idx >= 0);
+    }
+}
+
+TEST_CASE("Registering a 65th action returns -1, does not crash", "[input][actions][capacity]") {
+    InputFixture fix;
+
+    // Fill all MAX_ACTIONS slots
+    for (ffe::i32 i = 0; i < ffe::MAX_ACTIONS; ++i) {
+        char name[8];
+        name[0] = 'a';
+        name[1] = static_cast<char>('0' + (i / 10));
+        name[2] = static_cast<char>('0' + (i % 10));
+        name[3] = '\0';
+        ffe::registerAction(name);
+    }
+
+    // One too many
+    const ffe::i32 overflow = ffe::registerAction("overflow");
+    REQUIRE(overflow == -1);
+}
+
+TEST_CASE("Bind MAX_BINDINGS_PER_ACTION keys to one action - all succeed", "[input][actions][capacity]") {
+    InputFixture fix;
+
+    const ffe::i32 action = ffe::registerAction("multi");
+    REQUIRE(action >= 0);
+
+    // Use four distinct keys
+    REQUIRE(ffe::bindActionKey(action, ffe::Key::A));
+    REQUIRE(ffe::bindActionKey(action, ffe::Key::B));
+    REQUIRE(ffe::bindActionKey(action, ffe::Key::C));
+    REQUIRE(ffe::bindActionKey(action, ffe::Key::D));
+}
+
+TEST_CASE("Binding a 5th key to the same action returns false, does not crash", "[input][actions][capacity]") {
+    InputFixture fix;
+
+    const ffe::i32 action = ffe::registerAction("multi_overflow");
+    REQUIRE(action >= 0);
+
+    REQUIRE(ffe::bindActionKey(action, ffe::Key::A));
+    REQUIRE(ffe::bindActionKey(action, ffe::Key::B));
+    REQUIRE(ffe::bindActionKey(action, ffe::Key::C));
+    REQUIRE(ffe::bindActionKey(action, ffe::Key::D));
+
+    // Fifth binding must fail
+    REQUIRE_FALSE(ffe::bindActionKey(action, ffe::Key::E));
+}
+
+// =============================================================================
+// Right modifier keys
+// =============================================================================
+
+TEST_CASE("RIGHT_CTRL triggers isCtrlDown", "[input][keyboard][modifiers]") {
+    InputFixture fix;
+
+    ffe::test::simulateKeyPress(ffe::Key::RIGHT_CTRL);
+    ffe::updateInput();
+    REQUIRE(ffe::isCtrlDown());
+
+    ffe::test::simulateKeyRelease(ffe::Key::RIGHT_CTRL);
+    ffe::updateInput();
+    REQUIRE_FALSE(ffe::isCtrlDown());
+}
+
+TEST_CASE("RIGHT_ALT triggers isAltDown", "[input][keyboard][modifiers]") {
+    InputFixture fix;
+
+    ffe::test::simulateKeyPress(ffe::Key::RIGHT_ALT);
+    ffe::updateInput();
+    REQUIRE(ffe::isAltDown());
+
+    ffe::test::simulateKeyRelease(ffe::Key::RIGHT_ALT);
+    ffe::updateInput();
+    REQUIRE_FALSE(ffe::isAltDown());
+}
+
+// Note: RIGHT_SHIFT coverage already exists in "Modifier convenience functions"
+// above which explicitly presses RIGHT_SHIFT and checks isShiftDown(). No
+// duplicate needed here.
