@@ -434,3 +434,28 @@ All of the following must be true before the session is complete:
 - game-dev-tester builds a small interactive demo using the input system
 - Address api-designer's 8 API review findings (SystemDescriptor boilerplate, naming)
 - Consider texture loading API (game-dev-tester friction point)
+
+---
+
+## 2026-03-05 — Between-Session Review (Sessions 4 → 5)
+
+### Summary
+
+User ran the `hello_sprites` demo on real hardware and confirmed sprites are visible and working. Two visual observations reported:
+
+1. **Occasional flickering** — appears intermittently. Hypotheses: hardware health (display/cable/GPU stability), vsync not enabled or vsync tearing, frame timing desync with monitor refresh. To be investigated in Session 5.
+2. **Slight movement jitter** — visible when watching sprite motion closely. Most likely candidate: interpolation alpha not being applied correctly, or fixed-timestep accumulator producing minor timing irregularities. To be investigated in Session 5.
+
+Both observations are logged as known issues to investigate in Session 5. Neither is blocking — the renderer is functional and sprites render correctly.
+
+### Session 5 Plan Confirmed
+
+Session 5 priorities (in order):
+1. Lua scripting implementation (ADR-004, sol2/LuaJIT)
+2. Texture/image loading (stb_image integration)
+3. api-designer reviews input API, updates `engine/core/.context.md`
+4. game-dev-tester builds interactive demo (input + sprites)
+5. Investigate hello_sprites flickering and jitter
+6. Fix SystemDescriptor boilerplate friction
+
+Session 5 handover document written at `docs/session5-handover.md`.
