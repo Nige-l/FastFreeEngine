@@ -1,0 +1,2 @@
+add_subdirectory(hello_sprites)
+add_subdirectory(headless_test)

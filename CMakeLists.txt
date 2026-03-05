@@ -39,6 +39,12 @@ add_subdirectory(third_party/glad)
 # --- Engine library ---
 add_subdirectory(engine)
 
+# --- Examples ---
+option(FFE_BUILD_EXAMPLES "Build example programs" ON)
+if(FFE_BUILD_EXAMPLES)
+    add_subdirectory(examples)
+endif()
+
 # --- Tests ---
 option(FFE_BUILD_TESTS "Build unit tests" ON)
 if(FFE_BUILD_TESTS)

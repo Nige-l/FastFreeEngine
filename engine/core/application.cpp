@@ -72,6 +72,12 @@ int32_t Application::run() {
 
         accumulator += frameTime;
 
+        // In headless mode, ensure at least one tick per frame so systems always run.
+        // Without this, frame time is near-zero and accumulator never reaches fixedDt.
+        if (m_config.headless && accumulator < fixedDt) {
+            accumulator = fixedDt;
+        }
+
         // Reset render queue before tick — renderPrepareSystem populates it during tick
         m_renderQueue.clear();
 
@@ -219,6 +225,21 @@ Result Application::startup() {
     renderer::initSpriteBatch(m_spriteBatch,
         renderer::getShader(m_shaderLibrary, renderer::BuiltinShader::SPRITE));
 
+    // 5cc. Create a 1x1 white default texture for untextured sprites.
+    // The sprite shader multiplies texel * color, so a white pixel lets color through.
+    {
+        static constexpr u8 WHITE_PIXEL[] = {255, 255, 255, 255};
+        rhi::TextureDesc texDesc;
+        texDesc.width     = 1;
+        texDesc.height    = 1;
+        texDesc.format    = rhi::TextureFormat::RGBA8;
+        texDesc.filter    = rhi::TextureFilter::NEAREST;
+        texDesc.wrap      = rhi::TextureWrap::CLAMP_TO_EDGE;
+        texDesc.pixelData = WHITE_PIXEL;
+        m_defaultWhiteTexture = rhi::createTexture(texDesc);
+        m_world.registry().ctx().emplace<rhi::TextureHandle>(m_defaultWhiteTexture);
+    }
+
     // 5d. Setup camera for 2D (orthographic, pixel-space)
     m_camera.projType = renderer::ProjectionType::ORTHOGRAPHIC;
     m_camera.orthoLeft   = static_cast<f32>(-m_config.windowWidth)  / 2.0f;
@@ -265,6 +286,12 @@ void Application::shutdown() {
 
     // 5e. Destroy render queue
     renderer::destroyRenderQueue(m_renderQueue);
+
+    // 5cc. Destroy default white texture
+    if (rhi::isValid(m_defaultWhiteTexture)) {
+        rhi::destroyTexture(m_defaultWhiteTexture);
+        m_defaultWhiteTexture = {};
+    }
 
     // 5c. Shutdown sprite batch
     renderer::shutdownSpriteBatch(m_spriteBatch);
@@ -330,11 +357,19 @@ void Application::render(const float alpha) {
             sprite.size     = {cmd.scaleX, cmd.scaleY};
             sprite.uvMin    = {0.0f, 0.0f};
             sprite.uvMax    = {1.0f, 1.0f};
-            sprite.color    = {1.0f, 1.0f, 1.0f, 1.0f};
+            sprite.color    = {
+                static_cast<f32>(cmd.colorR) / 255.0f,
+                static_cast<f32>(cmd.colorG) / 255.0f,
+                static_cast<f32>(cmd.colorB) / 255.0f,
+                static_cast<f32>(cmd.colorA) / 255.0f
+            };
             sprite.rotation = 0.0f;
             sprite.depth    = 0.0f;
 
-            renderer::addSprite(m_spriteBatch, cmd.texture, sprite);
+            // Use the default white texture if the sprite has no texture assigned
+            const rhi::TextureHandle tex = rhi::isValid(cmd.texture)
+                ? cmd.texture : m_defaultWhiteTexture;
+            renderer::addSprite(m_spriteBatch, tex, sprite);
         }
 
         renderer::endSpriteBatch(m_spriteBatch);

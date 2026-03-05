@@ -1,0 +1,2 @@
+add_executable(ffe_hello_sprites main.cpp)
+target_link_libraries(ffe_hello_sprites PRIVATE ffe_engine)

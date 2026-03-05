@@ -65,6 +65,7 @@ private:
     renderer::RenderQueue m_renderQueue;
     renderer::ShaderLibrary m_shaderLibrary;
     renderer::SpriteBatch m_spriteBatch;
+    rhi::TextureHandle m_defaultWhiteTexture;
     glm::vec4 m_clearColor = {0.1f, 0.1f, 0.12f, 1.0f};
 };
 

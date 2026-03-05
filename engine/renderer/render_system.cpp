@@ -44,6 +44,12 @@ void renderPrepareSystem(World& world, const float dt) {
         cmd.scaleX = transform.scale.x * sprite.size.x;
         cmd.scaleY = transform.scale.y * sprite.size.y;
 
+        // Pack sprite color as RGBA8
+        cmd.colorR = static_cast<u8>(glm::clamp(sprite.color.r, 0.0f, 1.0f) * 255.0f);
+        cmd.colorG = static_cast<u8>(glm::clamp(sprite.color.g, 0.0f, 1.0f) * 255.0f);
+        cmd.colorB = static_cast<u8>(glm::clamp(sprite.color.b, 0.0f, 1.0f) * 255.0f);
+        cmd.colorA = static_cast<u8>(glm::clamp(sprite.color.a, 0.0f, 1.0f) * 255.0f);
+
         // Sprite pipeline: alpha blend, no depth test, no culling
         rhi::PipelineState ps;
         ps.blend      = rhi::BlendMode::ALPHA;

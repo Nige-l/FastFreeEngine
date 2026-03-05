@@ -1,0 +1,2 @@
+add_executable(ffe_headless_test main.cpp)
+target_link_libraries(ffe_headless_test PRIVATE ffe_engine)
