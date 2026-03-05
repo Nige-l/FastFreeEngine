@@ -1,0 +1,19 @@
+# Build directories
+build/
+build-*/
+
+# IDE and editor
+.cache/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+compile_commands.json
+
+# vcpkg installed packages
+vcpkg_installed/
+
+# OS
+.DS_Store
+Thumbs.db
