@@ -20,3 +20,35 @@ target_compile_definitions(ffe_tests PRIVATE FFE_TEST)
 
 include(Catch)
 catch_discover_tests(ffe_tests)
+
+# --- Lua sandbox tests ---
+# Separate executable to isolate Lua state and avoid linking scripting deps into ffe_tests.
+add_executable(ffe_tests_scripting
+    test_main.cpp
+    scripting/test_lua_sandbox.cpp
+)
+
+target_link_libraries(ffe_tests_scripting
+    PRIVATE
+        ffe_scripting
+        Catch2::Catch2WithMain
+)
+
+catch_discover_tests(ffe_tests_scripting)
+
+# --- Texture loader tests ---
+# Separate executable because texture_loader tests mutate global static state
+# (setAssetRoot write-once) and the tests depend on declaration order within
+# the translation unit. Isolation prevents cross-contamination with ffe_tests.
+add_executable(ffe_tests_texture
+    test_main.cpp
+    renderer/test_texture_loader.cpp
+)
+
+target_link_libraries(ffe_tests_texture
+    PRIVATE
+        ffe_renderer
+        Catch2::Catch2WithMain
+)
+
+catch_discover_tests(ffe_tests_texture)

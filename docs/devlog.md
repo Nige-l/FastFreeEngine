@@ -459,3 +459,26 @@ Session 5 priorities (in order):
 6. Fix SystemDescriptor boilerplate friction
 
 Session 5 handover document written at `docs/session5-handover.md`.
+
+---
+
+## Session 5 — [2026-03-05] — Implementation Session
+
+### Goals
+1. Lua scripting subsystem (ADR-004, sol2 + Lua via vcpkg)
+2. Texture/image loading (ADR-005, stb_image embedded in third_party/)
+3. api-designer reviews input API, updates engine/core/.context.md
+4. performance-critic + security-auditor review both implementations
+5. test-engineer writes Lua sandbox tests + texture loader tests
+6. game-dev-tester builds interactive demo (input + sprites + textures)
+7. Investigate hello_sprites flickering and jitter
+
+### Pre-conditions met
+- ADR-005 security review: PASS WITH CONDITIONS (implementation may begin)
+- ADR-004 security review: PASS from Session 4 (no re-review needed)
+- 101/101 tests passing on Clang-18
+- Performance quick wins applied (cos/sin fast path, pipeline bits hoist)
+- 6-phase dispatch plan in docs/session5-handover.md
+
+### Session opened
+Autonomous execution underway. User is away. Will produce handover + summary at 95% usage.
