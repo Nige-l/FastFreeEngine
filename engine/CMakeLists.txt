@@ -9,7 +9,7 @@ add_subdirectory(editor)
 add_library(ffe_engine INTERFACE)
 target_link_libraries(ffe_engine INTERFACE
     ffe_core
-    # ffe_renderer   — added when renderer is implemented
+    ffe_renderer
     # ffe_audio      — added when audio is implemented
     # ffe_physics    — added when physics is implemented
     # ffe_scripting  — added when scripting is implemented

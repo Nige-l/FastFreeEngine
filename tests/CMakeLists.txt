@@ -5,11 +5,13 @@ add_executable(ffe_tests
     core/test_logging.cpp
     core/test_application.cpp
     core/test_ecs.cpp
+    core/test_renderer_headless.cpp
 )
 
 target_link_libraries(ffe_tests
     PRIVATE
         ffe_core
+        ffe_renderer
         Catch2::Catch2WithMain
 )
 

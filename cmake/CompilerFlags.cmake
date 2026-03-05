@@ -1,8 +1,8 @@
 # Compiler warning flags — non-negotiable
 add_compile_options(-Wall -Wextra -Wpedantic)
 
-# No RTTI, no exceptions in engine core
-add_compile_options(-fno-rtti -fno-exceptions)
+# No RTTI, no exceptions in engine core (C++ only)
+add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-rtti> $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>)
 
 # Linker: use mold if available
 find_program(MOLD_LINKER mold)

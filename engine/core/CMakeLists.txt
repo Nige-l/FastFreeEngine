@@ -1,3 +1,5 @@
+find_package(glfw3 3.3 REQUIRED)
+
 add_library(ffe_core STATIC
     application.cpp
     arena_allocator.cpp
@@ -13,4 +15,7 @@ target_link_libraries(ffe_core
         EnTT::EnTT
         glm::glm
         Tracy::TracyClient
+    PRIVATE
+        glad
+        glfw
 )

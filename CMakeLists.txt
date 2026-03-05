@@ -9,7 +9,7 @@ endif()
 
 project(FastFreeEngine
     VERSION 0.1.0
-    LANGUAGES CXX
+    LANGUAGES CXX C
 )
 
 set(CMAKE_CXX_STANDARD 20)
@@ -32,6 +32,9 @@ find_package(Tracy CONFIG REQUIRED)
 find_package(sol2 CONFIG REQUIRED)
 find_package(Catch2 CONFIG REQUIRED)
 # imgui, stb, joltphysics, vulkan-memory-allocator found when needed
+
+# --- Third-party libraries ---
+add_subdirectory(third_party/glad)
 
 # --- Engine library ---
 add_subdirectory(engine)

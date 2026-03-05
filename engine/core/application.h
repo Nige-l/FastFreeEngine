@@ -4,10 +4,16 @@
 #include "core/arena_allocator.h"
 #include "core/logging.h"
 #include "core/ecs.h"
+#include "renderer/camera.h"
+#include "renderer/render_queue.h"
+#include "renderer/shader_library.h"
+#include "renderer/sprite_batch.h"
 
 #include <tracy/Tracy.hpp>
 
 #include <atomic>
+
+struct GLFWwindow;
 
 namespace ffe {
 
@@ -52,6 +58,14 @@ private:
     World m_world;
     ArenaAllocator m_frameAllocator;
     std::atomic<bool> m_running = false;
+
+    // Renderer state
+    GLFWwindow* m_window = nullptr;
+    renderer::Camera m_camera;
+    renderer::RenderQueue m_renderQueue;
+    renderer::ShaderLibrary m_shaderLibrary;
+    renderer::SpriteBatch m_spriteBatch;
+    glm::vec4 m_clearColor = {0.1f, 0.1f, 0.12f, 1.0f};
 };
 
 } // namespace ffe
