@@ -11,6 +11,8 @@ namespace ffe {
 
 class World {
 public:
+    World() { m_systems.reserve(32); }
+
     // --- Entity lifecycle ---
     EntityId createEntity();
     void destroyEntity(EntityId id);

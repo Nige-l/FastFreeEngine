@@ -47,18 +47,25 @@ void logMessage(const LogLevel level, const char* system, const char* fmt, ...) 
         "TRACE", "DEBUG", "INFO ", "WARN ", "ERROR", "FATAL"
     };
 
-    // Lock and write. This is the only mutex in the logging system.
-    const std::lock_guard<std::mutex> lock(s_logMutex);
-    fprintf(s_output, "[%02d:%02d:%02d.%03d] [%s] [%s] %s\n",
+    // Format the entire output line on the stack before acquiring the lock
+    char lineBuffer[1280];
+    const int lineLen = snprintf(lineBuffer, sizeof(lineBuffer),
+        "[%02d:%02d:%02d.%03d] [%s] [%s] %s\n",
         hours, minutes, seconds, millis,
         LEVEL_NAMES[static_cast<uint8_t>(level)],
         system,
         messageBuffer
     );
 
-    // Flush FATAL immediately
-    if (level == LogLevel::FATAL) {
-        fflush(s_output);
+    // Lock only for the write — minimize lock hold time
+    {
+        const std::lock_guard<std::mutex> lock(s_logMutex);
+        fwrite(lineBuffer, 1, static_cast<size_t>(lineLen), s_output);
+
+        // Flush FATAL immediately
+        if (level == LogLevel::FATAL) {
+            fflush(s_output);
+        }
     }
 }
 

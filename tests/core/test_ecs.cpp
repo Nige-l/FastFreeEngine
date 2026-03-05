@@ -140,3 +140,99 @@ TEST_CASE("World system registration and sorting", "[ecs]") {
     REQUIRE(world.getComponent<Position>(e).y == 5.0f);
     REQUIRE(world.getComponent<Health>(e).hp == 99);
 }
+
+TEST_CASE("Stale entity handle is invalid after reuse", "[ecs]") {
+    ffe::World world;
+
+    // Create and destroy an entity
+    const ffe::EntityId e1 = world.createEntity();
+    world.addComponent<Position>(e1, 1.0f, 2.0f);
+    world.destroyEntity(e1);
+
+    // Create a new entity — may reuse the same index with a different version
+    const ffe::EntityId e2 = world.createEntity();
+
+    // The old handle must no longer be valid (version mismatch)
+    REQUIRE_FALSE(world.isValid(e1));
+    REQUIRE(world.isValid(e2));
+}
+
+TEST_CASE("Destroyed entity with components does not appear in views", "[ecs]") {
+    ffe::World world;
+
+    const ffe::EntityId e1 = world.createEntity();
+    world.addComponent<Position>(e1, 1.0f, 0.0f);
+    world.addComponent<Velocity>(e1, 1.0f, 0.0f);
+
+    const ffe::EntityId e2 = world.createEntity();
+    world.addComponent<Position>(e2, 2.0f, 0.0f);
+    world.addComponent<Velocity>(e2, 2.0f, 0.0f);
+
+    world.destroyEntity(e1);
+
+    int count = 0;
+    auto v = world.view<Position, Velocity>();
+    for (const auto entity : v) {
+        (void)entity;
+        ++count;
+    }
+    REQUIRE(count == 1);
+
+    // The surviving entity should still be accessible
+    REQUIRE(world.getComponent<Position>(e2).x == 2.0f);
+}
+
+TEST_CASE("Empty view iteration yields zero entities", "[ecs]") {
+    ffe::World world;
+
+    // No entities exist at all
+    int count = 0;
+    auto v = world.view<Position, Velocity>();
+    for (const auto entity : v) {
+        (void)entity;
+        ++count;
+    }
+    REQUIRE(count == 0);
+
+    // Create an entity with only Position — view requiring both should still be empty
+    const ffe::EntityId e = world.createEntity();
+    world.addComponent<Position>(e, 1.0f, 0.0f);
+
+    count = 0;
+    auto v2 = world.view<Position, Velocity>();
+    for (const auto entity : v2) {
+        (void)entity;
+        ++count;
+    }
+    REQUIRE(count == 0);
+}
+
+TEST_CASE("Const World view and getComponent", "[ecs]") {
+    ffe::World world;
+
+    const ffe::EntityId e = world.createEntity();
+    world.addComponent<Position>(e, 42.0f, 99.0f);
+    world.addComponent<Health>(e, 75);
+
+    // Access through a const reference
+    const ffe::World& cworld = world;
+
+    const auto& pos = cworld.getComponent<Position>(e);
+    REQUIRE(pos.x == 42.0f);
+    REQUIRE(pos.y == 99.0f);
+
+    const auto& hp = cworld.getComponent<Health>(e);
+    REQUIRE(hp.hp == 75);
+
+    REQUIRE(cworld.hasComponent<Position>(e));
+    REQUIRE_FALSE(cworld.hasComponent<Velocity>(e));
+
+    // Const view iteration
+    int count = 0;
+    auto v = cworld.view<Position>();
+    for (const auto entity : v) {
+        (void)entity;
+        ++count;
+    }
+    REQUIRE(count == 1);
+}

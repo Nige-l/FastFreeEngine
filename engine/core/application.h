@@ -7,6 +7,8 @@
 
 #include <tracy/Tracy.hpp>
 
+#include <atomic>
+
 namespace ffe {
 
 struct ApplicationConfig {
@@ -49,7 +51,7 @@ private:
     ApplicationConfig m_config;
     World m_world;
     ArenaAllocator m_frameAllocator;
-    bool m_running = false;
+    std::atomic<bool> m_running = false;
 };
 
 } // namespace ffe

@@ -1,5 +1,6 @@
 add_executable(ffe_tests
     test_main.cpp
+    core/test_types.cpp
     core/test_arena_allocator.cpp
     core/test_logging.cpp
     core/test_application.cpp

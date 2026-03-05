@@ -11,7 +11,7 @@ Application::Application(const ApplicationConfig& config)
 }
 
 Application::~Application() {
-    if (m_running) {
+    if (m_running.load(std::memory_order_relaxed)) {
         shutdown();
     }
 }
@@ -23,7 +23,7 @@ int32_t Application::run() {
         return 1;
     }
 
-    m_running = true;
+    m_running.store(true, std::memory_order_relaxed);
 
     const float fixedDt = 1.0f / m_config.tickRate;   // e.g., 1/60 = 0.01667s
     const float maxFrameTime = 0.25f;                  // Spiral-of-death clamp
@@ -38,7 +38,7 @@ int32_t Application::run() {
     int32_t frameCount = 0;
     static constexpr int32_t HEADLESS_MAX_FRAMES = 10;
 
-    while (m_running) {
+    while (m_running.load(std::memory_order_relaxed)) {
         ZoneScoped; // Tracy: marks entire frame
 
         const auto currentTime = Clock::now();
@@ -75,7 +75,7 @@ int32_t Application::run() {
         if (m_config.headless) {
             ++frameCount;
             if (frameCount >= HEADLESS_MAX_FRAMES) {
-                m_running = false;
+                m_running.store(false, std::memory_order_relaxed);
             }
         }
     }
@@ -85,7 +85,7 @@ int32_t Application::run() {
 }
 
 void Application::requestShutdown() {
-    m_running = false;
+    m_running.store(false, std::memory_order_relaxed);
 }
 
 World& Application::world() {
@@ -130,7 +130,7 @@ Result Application::startup() {
 }
 
 void Application::shutdown() {
-    m_running = false;
+    m_running.store(false, std::memory_order_relaxed);
 
     // Reverse order of startup
     // 9. Call user shutdown callback — not yet implemented

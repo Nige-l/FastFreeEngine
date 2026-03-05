@@ -83,3 +83,82 @@ TEST_CASE("ArenaAllocator array allocation", "[arena]") {
         REQUIRE(arr[i] == 0);
     }
 }
+
+TEST_CASE("ArenaAllocator allocate exactly capacity bytes succeeds", "[arena]") {
+    ffe::ArenaAllocator arena(256);
+
+    // Request exactly capacity bytes with alignment 1 to avoid padding
+    void* ptr = arena.allocate(256, 1);
+    REQUIRE(ptr != nullptr);
+    REQUIRE(arena.remaining() == 0);
+}
+
+TEST_CASE("ArenaAllocator allocate capacity+1 bytes returns nullptr", "[arena]") {
+    ffe::ArenaAllocator arena(256);
+
+    void* ptr = arena.allocate(257, 1);
+    REQUIRE(ptr == nullptr);
+    REQUIRE(arena.used() == 0); // Arena state unchanged on failure
+}
+
+TEST_CASE("ArenaAllocator zero-byte allocation", "[arena]") {
+    ffe::ArenaAllocator arena(256);
+
+    // Zero-byte allocation should succeed (returns a valid pointer)
+    void* ptr = arena.allocate(0);
+    REQUIRE(ptr != nullptr);
+}
+
+TEST_CASE("ArenaAllocator sequential alignment after 1-byte alloc", "[arena]") {
+    ffe::ArenaAllocator arena(4096);
+
+    // Allocate 1 byte with minimal alignment to intentionally misalign
+    void* first = arena.allocate(1, 1);
+    REQUIRE(first != nullptr);
+
+    // Request 64-byte aligned allocation
+    void* aligned = arena.allocate(64, 64);
+    REQUIRE(aligned != nullptr);
+    REQUIRE(reinterpret_cast<uintptr_t>(aligned) % 64 == 0);
+}
+
+TEST_CASE("ArenaAllocator reset then re-allocate", "[arena]") {
+    ffe::ArenaAllocator arena(512);
+
+    void* first = arena.allocate(256, 1);
+    REQUIRE(first != nullptr);
+    REQUIRE(arena.used() >= 256);
+
+    arena.reset();
+    REQUIRE(arena.used() == 0);
+    REQUIRE(arena.remaining() == 512);
+
+    // Re-allocate the full capacity — memory is reusable
+    void* second = arena.allocate(512, 1);
+    REQUIRE(second != nullptr);
+    REQUIRE(arena.remaining() == 0);
+}
+
+TEST_CASE("ArenaAllocator create<T> when exhausted returns nullptr", "[arena]") {
+    // Arena too small to hold the struct after alignment
+    ffe::ArenaAllocator arena(4);
+
+    struct Big {
+        double a;
+        double b;
+        double c;
+    };
+    static_assert(sizeof(Big) > 4, "Big must exceed arena capacity for this test");
+
+    auto* ptr = arena.create<Big>(1.0, 2.0, 3.0);
+    REQUIRE(ptr == nullptr);
+}
+
+TEST_CASE("ArenaAllocator allocateArray<T>(0) behavior", "[arena]") {
+    ffe::ArenaAllocator arena(256);
+
+    // Zero-count array allocation — should succeed (degenerate case)
+    auto* arr = arena.allocateArray<int>(0);
+    // allocate(0) returns non-null, so this should too
+    REQUIRE(arr != nullptr);
+}
