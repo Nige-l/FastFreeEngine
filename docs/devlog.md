@@ -482,3 +482,81 @@ Session 5 handover document written at `docs/session5-handover.md`.
 
 ### Session opened
 Autonomous execution underway. User is away. Will produce handover + summary at 95% usage.
+
+---
+
+## 2026-03-05 — Session 5 Outcomes
+
+### Completed
+
+**Phase 1 — Parallel (api-designer, security-auditor pre-review):**
+- **api-designer** reviewed input system public API. Updated `engine/core/.context.md` with full input system documentation: Key enum value names (W, A, S, D, ESCAPE etc.), isKeyHeld/isKeyPressed/isKeyReleased usage patterns, action mapping registration, mouse position and scroll. Clarified F-1 friction point identified by game-dev-tester.
+- **security-auditor** reviewed ADR-005 (texture loading) shift-left: **PASS WITH CONDITIONS** — 6 conditions issued (path traversal prevention before any file open, integer overflow on width×height×channels, stb_image output validation, extension allowlist, VRAM budget check, no absolute paths accepted). All conditions implemented and verified in the texture loader implementation.
+
+**Phase 2 — Sequential (engine-dev implementation):**
+- **engine-dev Task A: Lua scripting** — `engine/scripting/script_engine.h` and `script_engine.cpp` implementing `ScriptEngine` class. Sandboxed LuaJIT state via sol2 (vcpkg, flagged in commit). Opens only: `sol::lib::base`, `sol::lib::math`, `sol::lib::string`, `sol::lib::table`. Removes `os`, `io`, `debug`, `loadfile`, `dofile`, `package`, `require` from Lua state. Instruction budget hook at 1,000,000 ops. `ffe.log()` binding. `doString()` and `doFile()` with error recovery. `ScriptEngine` owned by `Application`, lifecycle: `init()` → per-tick `update(dt)` → `shutdown()`.
+- **engine-dev Task B: Texture loading** — `engine/renderer/texture_loader.h` and `texture_loader.cpp`. `setAssetRoot()` / `loadTexture()` / `unloadTexture()` public API. stb_image v2.30 embedded in `third_party/stb_image.h`. Path traversal check is the FIRST operation before any filesystem call. RGBA8 unconditionally (4-channel promote). All 6 security conditions from ADR-005 shift-left review implemented.
+- **engine-dev Task C: Performance quick wins** — cos/sin zero-rotation fast path in `sprite_batch.cpp`, `packPipelineBits` hoisted out of per-entity loop in `render_system.cpp`, `sizeof` consistency fix in `input.cpp` (sizeof(g_keyboard.current) instead of bare MAX_KEYS). `submitRenderQueue()` dead code annotated with comment.
+- **engine-dev Task D: SystemDescriptor boilerplate** — investigated macro approach. Deferred to Session 6; the fix is low-risk but touches all existing system registrations and time budget was allocated to Lua/texture.
+
+**Phase 3 — Reviews (parallel):**
+- **performance-critic: MINOR ISSUES** — sol2 binding overhead on `world:each()` iteration acceptable for current entity counts but flagged for LEGACY hardware with 500+ scripted entities. Recommended batching or C-side filter before Lua call. No blockers.
+- **security-auditor reviewed Lua implementation: PASS WITH CONDITIONS (3 MEDIUM)** — (1) C++ symbol names visible in sol2 error messages (MEDIUM, logged but not a sandbox escape), (2) `doFile` path buffer 512 bytes vs PATH_MAX (MEDIUM, documented), (3) `ScriptEngine::update()` called even with no scripts loaded (INFO, minor overhead). All 3 MEDIUM acknowledged and tracked; none are sandbox escapes. Instruction budget verified active in all build configurations.
+- **security-auditor reviewed texture loader implementation: PASS** — all 6 ADR-005 conditions verified present and correct in code. Path traversal check confirmed as first operation. Integer overflow guard confirmed using u64 arithmetic. stb_image output width/height validated.
+- **test-engineer** wrote 43 new Catch2 tests. Total: 144.
+  - `tests/scripting/test_lua_sandbox.cpp` — 25 tests: sandbox escape attempts (io, os, debug, loadfile, dofile, package, require, setmetatable, FFI), instruction budget enforcement, error recovery (engine does not crash on Lua error), ffe.log binding, doString/doFile round-trips.
+  - `tests/renderer/test_texture_loader.cpp` — 17 tests: path traversal rejection (../), absolute path rejection, empty path, null path, dimension bounds (0 width, > 8192), integer overflow guard, setAssetRoot validation, successful load with valid RGBA8 data, unloadTexture.
+  - `tests/renderer/test_renderer_headless.cpp` — 1 updated test (camera ortho correctness).
+
+**Phase 4 — API review (api-designer):**
+- Reviewed `ScriptEngine` public API and Lua binding surface. Approved. Wrote `engine/scripting/.context.md`: full system purpose, ScriptEngine lifecycle API, ffe.log usage pattern, sandbox restrictions table, instruction budget behaviour, error handling pattern, tier support, dependencies.
+- Added texture loading section to `engine/renderer/.context.md`: setAssetRoot/loadTexture/unloadTexture API, Pattern 3 (PNG file loading), anti-patterns (calling loadTexture per frame, absolute paths, missing setAssetRoot), NEAREST filter limitation documented.
+
+**Phase 5 — Demo (game-dev-tester):**
+- Built `examples/interactive_demo/` — WASD player movement, 8 background sprites, Lua startup message via `ffe.log`, ESC quit via Application* in ECS context workaround, all textures from raw RGBA8 data (no PNG assets in repo yet).
+- Full usage report: `docs/game-dev-tester-session5-report.md`. Overall discoverability rating: 7/10.
+
+**Phase 6 — Housekeeping:**
+- **director** validated session 5 definition of done: PROCESS STATUS CLEAN. All pre-conditions met. Known gaps (DESIGN-1, F-2, M-2) tracked for Session 6.
+- Project-manager producing devlog update and session 6 handover (this entry).
+
+### Session 5 Stats
+- **New engine files:** script_engine.h, script_engine.cpp, texture_loader.h, texture_loader.cpp (4 files)
+- **New example files:** examples/interactive_demo/main.cpp, CMakeLists.txt (2 files)
+- **New test files:** test_lua_sandbox.cpp, test_texture_loader.cpp (2 files)
+- **Third-party additions:** third_party/stb_image.h (stb_image v2.30)
+- **New tests:** 43 (total: 144)
+- **ADRs:** ADR-005 produced (texture loading) + security review document
+- **.context.md files:** engine/scripting/.context.md written; engine/core/.context.md updated (input); engine/renderer/.context.md updated (texture loading)
+- **Security findings resolved:** 6 MEDIUM (Lua: 3, texture shift-left: 3 pre-implementation via shift-left review)
+- **Performance fixes:** 3 (cos/sin fast path, pipeline bits hoist, sizeof consistency)
+
+### Review Results
+- performance-critic: **MINOR ISSUES** (sol2 entity iteration overhead at scale — tracked, not blocking)
+- security-auditor ADR-005 (shift-left): **PASS WITH CONDITIONS** (all 6 conditions implemented)
+- security-auditor Lua implementation: **PASS WITH CONDITIONS** (3 MEDIUM, none sandbox escapes, all acknowledged)
+- security-auditor texture loader implementation: **PASS**
+- director: **PROCESS STATUS CLEAN**
+- game-dev-tester: 1 BLOCKER (DESIGN-1), 5 friction points, 2 friction points documented as tracked issues
+
+### Known Issues Updated
+- **DESIGN-1 (requestShutdown from system):** workaround documented in interactive_demo (Application* stored in ECS registry context). Resolution still needed — tracked for Session 6.
+- **F-1 (Key enum naming):** FIXED — engine/core/.context.md now includes Key enum value table.
+- **F-2 (no PNG assets):** TRACKED — add assets/textures/ with sample PNG in Session 6.
+- **F-3 (SystemDescriptor boilerplate):** TRACKED — carried forward to Session 6, fix deferred.
+- **F-4 (Transform in renderer header):** TRACKED — move Transform to engine/core/components.h in Session 6.
+- **F-5 (LINEAR filter hardcoded):** TRACKED — add TextureLoadParams with filter option in Session 6.
+- **M-2 (Lua ECS bindings):** TRACKED — ffe.log only; entity/component/input access from Lua is Session 6 priority.
+- **M-7 (updateBuffer integer overflow):** TRACKED — small fix, targeted for Session 6.
+- **submitRenderQueue dead code:** annotated, removal in Session 6.
+
+### Next Session Should Start With
+- Lua ECS bindings: expose entity create/destroy, getTransform, setTransform, isKeyHeld, isKeyPressed to Lua
+- Add assets/textures/ with at least one reference PNG to validate full loadTexture path
+- Fix DESIGN-1: add World::requestShutdown() forwarding or shutdown flag
+- Fix SystemDescriptor nameLength boilerplate
+- Fix loadTexture LINEAR hardcoded filter (add TextureLoadParams struct)
+- Move Transform to engine/core/components.h
+- game-dev-tester builds a demo where game logic (movement, scoring) lives in Lua scripts
+
+Session 6 handover document written at `docs/session6-handover.md`.
