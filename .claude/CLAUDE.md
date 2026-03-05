@@ -159,6 +159,18 @@ Dispatch agents sequentially when **any** of these are true:
 
 Example: `architect` designs the ECS interface, then `engine-dev` implements it, then `performance-critic` reviews it — this is sequential.
 
+### Shift-Left Security Review
+
+When `architect` produces an ADR that touches any attack surface listed in Section 5 (asset loading, networking, scripting, file I/O, or external input), `security-auditor` reviews the ADR **before** implementation begins. This is in addition to the existing post-implementation security review. The goal is to bake security constraints (input validation, safe integer arithmetic, sandboxing boundaries) into the design so that implementation starts with those constraints, rather than discovering them in review of finished code.
+
+### API Review Before Examples
+
+When a feature adds or changes public API surface, the sequencing is: implement -> `api-designer` reviews the public API and writes/updates `.context.md` files -> `game-dev-tester` writes usage examples against the reviewed API. Examples are the artifact of `game-dev-tester`'s usage, not the implementer's. This ensures examples test API discoverability, not just correctness.
+
+### game-dev-tester in Session Plans
+
+`project-manager` must include `game-dev-tester` in the session plan for any feature that adds user-facing API surface. `game-dev-tester` writes examples and usage reports — engine-dev and renderer-specialist do not write end-user examples. If `game-dev-tester` cannot run (e.g., no Lua layer exists yet), document the skip explicitly in the devlog.
+
 ### Environment Failures
 
 **Always route environment failures to `system-engineer` before retrying anything else.** If a build fails due to a missing header, broken linker, or misconfigured tool, do not retry the build. Send the error to `system-engineer`, wait for the fix, then retry.
@@ -174,11 +186,13 @@ A feature is **not done** until every applicable item is satisfied:
 - [ ] All existing tests in `tests/` pass
 - [ ] New unit tests and integration tests written by `test-engineer`
 - [ ] `performance-critic` returns **PASS** or **MINOR ISSUES**
-- [ ] `security-auditor` has reviewed anything touching the attack surface — no CRITICAL or HIGH findings
+- [ ] `security-auditor` has reviewed the ADR/design for attack surface features (shift-left review) — before implementation
+- [ ] `security-auditor` has reviewed the implementation for anything touching the attack surface — no CRITICAL or HIGH findings
+- [ ] `api-designer` has reviewed the public API and written/updated `.context.md` before examples are written
 - [ ] Lua bindings exist where applicable
 - [ ] `api-designer` has reviewed the Lua bindings
 - [ ] A working Lua usage example exists
-- [ ] `game-dev-tester` has built something with it and reported no blockers
+- [ ] `game-dev-tester` has built something with it and reported no blockers — examples are written by `game-dev-tester`, not engine-dev
 - [ ] A `.context.md` file exists in the system's directory, written for LLM consumption
 - [ ] Changes are committed with a clear [Conventional Commit](https://www.conventionalcommits.org/) message
 

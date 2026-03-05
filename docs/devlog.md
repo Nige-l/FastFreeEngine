@@ -220,3 +220,172 @@ All of the following must be true before the session is complete:
 - api-designer reviews the public API and writes engine/core/.context.md
 - Begin Lua scripting layer (sol2 integration) so game logic moves to Lua
 - Consider input handling (keyboard/mouse via GLFW)
+
+---
+
+## 2026-03-05 — Session 4 Plan: Input System + Scripting Design + Process Debt
+
+### Goals
+
+1. **Close process debt from Session 3:** api-designer reviews renderer and core public APIs, writes real `.context.md` files (not placeholders). game-dev-tester runs hello_sprites and provides user feedback.
+2. **Design the input system** (keyboard/mouse via GLFW) — architect writes ADR-003, security-auditor reviews it before implementation (shift-left), engine-dev implements.
+3. **Begin Lua scripting design** — architect writes ADR-004 for sol2 integration, security-auditor reviews it (Lua sandbox is a major attack surface). Implementation deferred to Session 5.
+
+### Carryover from Session 3 (Process Debt)
+
+| Item | Status | Action |
+|------|--------|--------|
+| api-designer reviews renderer public API surface | Open | Task A |
+| api-designer writes `engine/renderer/.context.md` (real content, not placeholder) | Open | Task A |
+| api-designer writes `engine/core/.context.md` (real content, not placeholder) | Open | Task A |
+| game-dev-tester runs hello_sprites and provides user feedback | Open | Task B |
+
+### Task Breakdown
+
+#### Task A — API Review and .context.md Files (api-designer)
+**Files to create/modify:**
+- `engine/renderer/.context.md` — full content per CLAUDE.md Section 9: system purpose, public API (RHI types, sprite batch, render queue, camera, shader library), common usage patterns (creating a sprite, setting up a camera, submitting draw calls), anti-patterns, tier support, dependencies
+- `engine/core/.context.md` — full content: Application lifecycle, ECS usage (EnTT wrapper), arena allocator, logging, Result type, system registration, common patterns, anti-patterns, tier support
+- Review the public API surface of `engine/renderer/` and `engine/core/` — report any discoverability or naming concerns
+
+**Definition of done:** Both `.context.md` files contain all six required sections from CLAUDE.md Section 9. api-designer has reviewed the public API and reported findings. Files are written for LLM consumption, not as placeholder stubs.
+
+#### Task B — hello_sprites User Feedback (game-dev-tester)
+**Steps:**
+1. Build the project (`cmake --preset default && ninja -C build`)
+2. Run `xvfb-run ./build/examples/hello_sprites/hello_sprites` (or with a real display if available)
+3. If headless, run `./build/examples/headless_test/headless_test` as fallback
+4. Report: Was it easy to understand the example code? What was confusing? What would a first-time user struggle with? Any crashes or unexpected behaviour?
+
+**Definition of done:** Written feedback report appended to this devlog entry at session end. game-dev-tester has attempted to run the demo and reported results.
+
+#### Task C — Input System Design (architect)
+**File to create:**
+- `docs/architecture/003-input-system.md` — ADR-003 covering:
+  - GLFW key/mouse callback registration and polling
+  - Input state model: pressed, held, released for keys and mouse buttons
+  - Mouse position and scroll wheel
+  - How input integrates with the game loop (polled at start of tick, before systems run)
+  - Input mapping / action system (key -> action abstraction for rebinding)
+  - ECS integration: InputState as a singleton component or global resource
+  - Thread safety considerations (GLFW callbacks run on main thread)
+  - File layout under `engine/core/` (input is core, not renderer)
+  - Tier support (all tiers — input is not GPU-dependent)
+
+**Definition of done:** ADR-003 is written with enough detail that engine-dev can implement without clarifying questions. Same standard as ADR-001 and ADR-002.
+
+#### Task D — Security Review of ADR-003 (security-auditor)
+**Scope:** Review ADR-003 for attack surface concerns. Input is external data — keyboard/mouse events come from the OS via GLFW. Consider:
+- Can malformed input events cause buffer overflows or out-of-bounds access?
+- Are there bounds on input state arrays (key count, button count)?
+- Does the action mapping system accept untrusted configuration (e.g., from a config file)?
+- Any denial-of-service vectors (e.g., flooding input events)?
+
+**Definition of done:** security-auditor returns assessment with any findings classified as CRITICAL/HIGH/MEDIUM/LOW/INFO. No CRITICAL or HIGH findings, or findings are addressed in ADR-003 revisions before implementation begins.
+
+#### Task E — Lua Scripting Design (architect)
+**File to create:**
+- `docs/architecture/004-lua-scripting.md` — ADR-004 covering:
+  - sol2 integration strategy (header-only, vcpkg dependency)
+  - Lua sandbox design: what Lua scripts CAN access (ECS queries, input state, transform/sprite components, math, logging) and what they CANNOT (filesystem, network, OS, raw pointers, C FFI)
+  - Script lifecycle: load, init, update(dt), shutdown
+  - How Lua scripts register as ECS systems
+  - Binding generation pattern (manual sol2 bindings vs automated)
+  - Error handling: Lua errors must not crash the engine
+  - Performance budget: Lua script execution time cap per frame
+  - Hot-reload strategy for development
+  - File layout under `engine/scripting/`
+  - Dependencies: sol2, Lua 5.4 (via vcpkg)
+
+**Definition of done:** ADR-004 is written with enough detail for engine-dev + api-designer to implement the scripting layer. Sandbox boundaries are explicit and exhaustive.
+
+#### Task F — Security Review of ADR-004 (security-auditor)
+**Scope:** This is the most security-critical review so far. The Lua sandbox is a major attack surface per CLAUDE.md Section 5. Review ADR-004 for:
+- Sandbox escape vectors: can a Lua script access `os`, `io`, `debug`, `loadfile`, `dofile`, `package`?
+- Memory exhaustion: can a Lua script allocate unbounded memory?
+- CPU exhaustion: can a Lua script run an infinite loop and freeze the engine?
+- Can Lua scripts access raw pointers or corrupt engine memory through sol2 bindings?
+- Are all exposed C++ objects properly lifetime-managed when accessed from Lua?
+- Can untrusted scripts be loaded (e.g., mods)? If so, what is the threat model?
+
+**Definition of done:** security-auditor returns assessment. Any CRITICAL or HIGH findings must be resolved in ADR-004 before implementation begins in a future session.
+
+#### Task G — Input System Implementation (engine-dev)
+**Files to create/modify:**
+- Files as specified in ADR-003 (likely under `engine/core/`):
+  - `engine/core/input.h` — input state types, action mapping
+  - `engine/core/input.cpp` — GLFW callback registration, state management
+  - Integration with Application game loop (poll input at start of tick)
+- Update `engine/core/CMakeLists.txt` to include new files
+
+**Definition of done:** Input system compiles clean on both compilers. Key press/release/held detection works. Mouse position and button state works. Integration with game loop is functional.
+
+#### Task H — Input System Reviews (performance-critic, security-auditor, test-engineer)
+**Performance-critic:** Review input system for hot-path allocations, cache friendliness of input state, overhead per frame.
+**Security-auditor:** Final implementation review (post shift-left ADR review).
+**Test-engineer:** Write unit tests for input state transitions (press -> held -> release), action mapping, edge cases.
+
+**Definition of done:** performance-critic returns PASS or MINOR ISSUES. security-auditor returns no CRITICAL or HIGH. Tests written and passing on both compilers.
+
+### Agent Assignments and Dispatch Order
+
+#### Phase 1 — Parallel (all start immediately)
+These tasks have no dependencies on each other:
+
+| Agent | Task | Touches |
+|-------|------|---------|
+| api-designer | Task A — API review + .context.md files | `engine/renderer/.context.md`, `engine/core/.context.md` |
+| game-dev-tester | Task B — hello_sprites feedback | Read-only engine code, runs examples |
+| architect | Task C — ADR-003 input system | `docs/architecture/003-input-system.md` |
+| architect | Task E — ADR-004 Lua scripting | `docs/architecture/004-lua-scripting.md` |
+
+Note: Tasks C and E are both architect tasks. If the orchestrator runs a single architect instance, these are sequential (C then E). If separate instances are possible, they can be parallel since they write to different files.
+
+#### Phase 2 — Sequential (after Phase 1 ADRs are written)
+Security-auditor reviews both ADRs:
+
+| Agent | Task | Depends On |
+|-------|------|------------|
+| security-auditor | Task D — Review ADR-003 | Task C complete |
+| security-auditor | Task F — Review ADR-004 | Task E complete |
+
+Tasks D and F can run in parallel if security-auditor can handle both, since they review different documents. If a single instance, run D then F (ADR-003 is likely simpler and faster to review).
+
+#### Phase 3 — Sequential (after ADR-003 security review clears)
+
+| Agent | Task | Depends On |
+|-------|------|------------|
+| engine-dev | Task G — Implement input system | Task D complete (ADR-003 security-cleared) |
+
+#### Phase 4 — Sequential (after implementation)
+
+| Agent | Task | Depends On |
+|-------|------|------------|
+| performance-critic | Task H (perf review) | Task G complete |
+| security-auditor | Task H (security review) | Task G complete |
+| test-engineer | Task H (tests) | Task G complete |
+
+Performance-critic and security-auditor can review in parallel. Test-engineer can start writing tests as soon as Task G is complete (or even in parallel with reviews if the interface is stable).
+
+#### Phase 5 — Final validation
+- Build and run full test suite on both compilers
+- api-designer reviews input system public API (can be deferred to Session 5 if time-constrained, but flag it)
+- Commit all changes
+
+### Definition of Done for Session 4
+
+All of the following must be true before the session is complete:
+
+- [ ] `engine/renderer/.context.md` contains all six required sections (not a placeholder)
+- [ ] `engine/core/.context.md` contains all six required sections (not a placeholder)
+- [ ] game-dev-tester has attempted to run hello_sprites and provided written feedback
+- [ ] ADR-003 (input system) is written and security-reviewed before implementation
+- [ ] ADR-004 (Lua scripting) is written and security-reviewed (implementation deferred to Session 5)
+- [ ] Input system is implemented from ADR-003
+- [ ] performance-critic returns PASS or MINOR ISSUES on input system
+- [ ] security-auditor returns no CRITICAL or HIGH on input system implementation
+- [ ] test-engineer has written input system tests, all passing on both compilers
+- [ ] Zero warnings on Clang-18 and GCC-13 with `-Wall -Wextra -Wpedantic`
+- [ ] All tests pass on both compilers
+- [ ] All changes committed with Conventional Commit messages
+- [ ] This devlog entry is updated with actual outcomes at session end
