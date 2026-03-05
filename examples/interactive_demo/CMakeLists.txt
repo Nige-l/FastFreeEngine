@@ -1,0 +1,2 @@
+add_executable(ffe_interactive_demo main.cpp)
+target_link_libraries(ffe_interactive_demo PRIVATE ffe_engine)
