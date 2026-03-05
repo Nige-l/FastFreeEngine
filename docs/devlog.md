@@ -153,13 +153,70 @@
 
 All of the following must be true before the session is complete:
 
-- [ ] All Session 1 test gaps are closed: Result type, stale entity handles, requestShutdown (or documented design limitation), arena edge cases
-- [ ] New test file `tests/core/test_types.cpp` exists and passes
-- [ ] All three performance-critic minor issues from Session 1 are resolved in code
-- [ ] performance-critic returns PASS or MINOR ISSUES on Task B changes
-- [ ] ADR-002 (Renderer RHI) is written and ready for Session 3 implementation
-- [ ] README.md exists at repo root with accurate build instructions
-- [ ] Zero warnings on Clang-18 and GCC-13 with `-Wall -Wextra -Wpedantic`
-- [ ] All tests pass on both compilers (existing 17 + new tests from Task A)
-- [ ] All changes committed with Conventional Commit messages
-- [ ] This devlog entry is updated with actual outcomes at session end
+- [x] All Session 1 test gaps are closed: Result type, stale entity handles, requestShutdown (documented design limitation), arena edge cases
+- [x] New test file `tests/core/test_types.cpp` exists and passes (7 test cases)
+- [x] All three performance-critic minor issues from Session 1 are resolved in code
+- [x] performance-critic returns PASS on Task B changes
+- [x] ADR-002 (Renderer RHI) is written and ready for Session 3 implementation
+- [x] README.md exists at repo root with accurate build instructions
+- [x] Zero warnings on Clang-18 and GCC-13 with `-Wall -Wextra -Wpedantic`
+- [x] All tests pass on both compilers (17 -> 37 tests)
+- [x] All changes committed with Conventional Commit messages
+- [x] This devlog entry is updated with actual outcomes at session end
+
+---
+
+## 2026-03-05 — Session 3: Renderer Implementation + First Visual Demo
+
+### Planned
+- Renderer-specialist implements LEGACY tier OpenGL 3.3 backend from ADR-002
+- Performance-critic and security-auditor review renderer
+- Fix all blocking issues
+- Create runnable demo for game-dev-tester
+
+### Completed
+- **35 new files** implementing the full LEGACY renderer:
+  - RHI abstraction (rhi.h, rhi_types.h) with compile-time backend selection
+  - OpenGL 3.3 backend (rhi_opengl.cpp) with fixed-size resource pools
+  - Sprite batching (2048 sprites/batch, texture-break flushing)
+  - Render queue with 64-byte DrawCommands and packed u64 sort keys
+  - Camera (ortho/perspective), shader library (3 built-in shaders)
+  - ECS render system collecting Transform+Sprite components
+  - GLFW window creation, glad GL loader (embedded in third_party/)
+  - GLSL 330 core shaders (sprite, solid, textured)
+- **Performance-critic first review: BLOCK** — found 2 blocking issues:
+  1. Use-after-free: render queue allocated from frame arena after tick() used it
+  2. Sprite batch and render queue not connected (nothing actually rendered)
+  Plus 3 must-fix: 512KB unnecessary zeroing, per-draw-call vertex attribs, redundant shader binds
+- **Security-auditor first review: 2 HIGH** findings:
+  1. Integer overflow in VRAM calculation (u32 overflow on large textures)
+  2. No texture dimension validation
+  Plus 4 MEDIUM findings
+- **All blockers fixed by engine-dev:**
+  - Render queue now uses persistent malloc'd storage, cleared per frame
+  - Sprite batch drives actual rendering from render queue commands
+  - VAO caches vertex attribs, shader bound once per batch
+  - VRAM calc uses u64, textures validated (0 < dim <= 8192)
+  - Null pointer checks on buffer/shader creation
+- **Performance-critic re-review: PASS**
+- **Security-auditor re-review: All HIGH resolved, merge unblocked**
+- **Test count: 47** (37 core + 10 renderer headless tests), all passing on both compilers
+- **Two example programs created:**
+  - `examples/hello_sprites/` — 20 colored bouncing sprites in a window
+  - `examples/headless_test/` — CI-safe headless demo (50 entities, 10 frames)
+- Default 1x1 white texture for solid-color sprite rendering
+
+### Known Issues / Tracked for Future
+- M-7 (security): updateBuffer offset+sizeBytes potential integer overflow
+- M-1 (security): uniform cache hash collisions (FNV-1a, no string verify)
+- M-3 (security): sort key truncates textureId to 12 bits (safe if MAX_TEXTURES <= 4096)
+- Redundant glBindBuffer(target, 0) after updateBuffer (minor perf nit)
+- submitRenderQueue() is dead code (sprite batch path used instead)
+- requestShutdown() not accessible from systems (design gap — needs app reference)
+
+### Next Session Should Start With
+- Run hello_sprites demo on a real display and verify visual output
+- game-dev-tester builds a small game with the sprite system
+- api-designer reviews the public API and writes engine/core/.context.md
+- Begin Lua scripting layer (sol2 integration) so game logic moves to Lua
+- Consider input handling (keyboard/mouse via GLFW)
