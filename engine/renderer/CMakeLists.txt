@@ -9,6 +9,7 @@ set(RENDERER_SOURCES
     sprite_batch.cpp
     render_system.cpp
     shader_library.cpp
+    texture_loader.cpp
 )
 
 # Backend selection based on tier
@@ -26,6 +27,7 @@ add_library(ffe_renderer STATIC ${RENDERER_SOURCES})
 
 target_include_directories(ffe_renderer
     PUBLIC ${CMAKE_SOURCE_DIR}/engine
+    PRIVATE ${CMAKE_SOURCE_DIR}/third_party
 )
 
 target_link_libraries(ffe_renderer
