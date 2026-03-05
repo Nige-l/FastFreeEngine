@@ -95,8 +95,16 @@ void addSprite(SpriteBatch& batch, const rhi::TextureHandle texture, const Sprit
     // Compute rotated quad corners
     const f32 hw = sprite.size.x * 0.5f;
     const f32 hh = sprite.size.y * 0.5f;
-    const f32 cosR = std::cos(sprite.rotation);
-    const f32 sinR = std::sin(sprite.rotation);
+    // Fast-path: skip trig entirely for the common zero-rotation case.
+    // == 0.0f is intentional here — callers set this to the literal 0.0f.
+    float cosR, sinR;
+    if (sprite.rotation == 0.0f) {
+        cosR = 1.0f;
+        sinR = 0.0f;
+    } else {
+        cosR = std::cos(sprite.rotation);
+        sinR = std::sin(sprite.rotation);
+    }
 
     // Corners relative to center: TL, TR, BR, BL
     const glm::vec2 offsets[4] = {

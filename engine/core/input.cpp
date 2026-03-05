@@ -176,7 +176,7 @@ void shutdownInput() {
 
 void updateInput() {
     // 1. Keyboard: copy current -> previous
-    std::memcpy(g_keyboard.previous, g_keyboard.current, MAX_KEYS);
+    std::memcpy(g_keyboard.previous, g_keyboard.current, sizeof(g_keyboard.current));
 
     // 2. Process pending key events
     for (i32 i = 0; i < g_pendingKeyCount; ++i) {

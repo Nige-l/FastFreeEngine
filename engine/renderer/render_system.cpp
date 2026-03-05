@@ -19,6 +19,14 @@ void renderPrepareSystem(World& world, const float dt) {
     const auto* shaderLib = world.registry().ctx().find<ShaderLibrary>();
     if (shaderLib == nullptr) return;
 
+    // Sprite pipeline state is constant for all sprites — pack it once before the loop.
+    rhi::PipelineState spritePipeline;
+    spritePipeline.blend      = rhi::BlendMode::ALPHA;
+    spritePipeline.depth      = rhi::DepthFunc::NONE;
+    spritePipeline.cull       = rhi::CullMode::NONE;
+    spritePipeline.depthWrite = false;
+    const u8 spritePipelineBits = packPipelineBits(spritePipeline);
+
     // Iterate all entities with Transform + Sprite
     const auto spriteView = world.view<const Transform, const Sprite>();
     for (const auto entity : spriteView) {
@@ -50,13 +58,7 @@ void renderPrepareSystem(World& world, const float dt) {
         cmd.colorB = static_cast<u8>(glm::clamp(sprite.color.b, 0.0f, 1.0f) * 255.0f);
         cmd.colorA = static_cast<u8>(glm::clamp(sprite.color.a, 0.0f, 1.0f) * 255.0f);
 
-        // Sprite pipeline: alpha blend, no depth test, no culling
-        rhi::PipelineState ps;
-        ps.blend      = rhi::BlendMode::ALPHA;
-        ps.depth      = rhi::DepthFunc::NONE;
-        ps.cull       = rhi::CullMode::NONE;
-        ps.depthWrite = false;
-        cmd.pipelineBits = packPipelineBits(ps);
+        cmd.pipelineBits = spritePipelineBits;
     }
 }
 

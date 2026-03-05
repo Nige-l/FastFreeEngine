@@ -37,6 +37,9 @@ void sortRenderQueue(RenderQueue& queue) {
         });
 }
 
+// NOTE: This function is currently unused — the sprite batch path is used for rendering.
+// Retained for future use with draw-call-level render queue submission.
+// TODO(session5): remove if no use case emerges.
 void submitRenderQueue(const RenderQueue& queue) {
     ZoneScopedN("SubmitRenderQueue");
 
