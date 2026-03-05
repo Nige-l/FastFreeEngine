@@ -1,4 +1,5 @@
 #include "core/application.h"
+#include "core/input.h"
 #include "renderer/rhi.h"
 #include "renderer/render_system.h"
 
@@ -197,6 +198,9 @@ Result Application::startup() {
         }
     }
 
+    // 4b. Initialize the input system (handles nullptr window in headless mode)
+    initInput(m_window);
+
     // 5. Initialize the renderer
     {
         rhi::RhiConfig rhiConfig;
@@ -259,6 +263,14 @@ Result Application::startup() {
     // 6. Initialize the scripting engine — not yet implemented
 
     // 7. Register built-in systems
+    const SystemDescriptor inputDesc = {
+        "InputUpdate",
+        11, // strlen("InputUpdate")
+        [](World& /*world*/, float /*dt*/) { updateInput(); },
+        0   // Priority 0 -- runs before all gameplay systems
+    };
+    m_world.registerSystem(inputDesc);
+
     const SystemDescriptor renderPrepDesc = {
         "RenderPrepare",
         13, // strlen("RenderPrepare")
@@ -301,6 +313,9 @@ void Application::shutdown() {
 
     // 5. Shutdown renderer
     rhi::shutdown();
+
+    // 4b. Shutdown input system (before window destruction)
+    shutdownInput();
 
     // 4. Destroy window
     if (m_window != nullptr) {

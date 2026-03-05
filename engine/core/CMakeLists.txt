@@ -3,6 +3,7 @@ find_package(glfw3 3.3 REQUIRED)
 add_library(ffe_core STATIC
     application.cpp
     arena_allocator.cpp
+    input.cpp
     logging.cpp
 )
 
@@ -19,3 +20,8 @@ target_link_libraries(ffe_core
         glad
         glfw
 )
+
+# Enable test hooks when building tests
+if(FFE_BUILD_TESTS)
+    target_compile_definitions(ffe_core PUBLIC FFE_TEST)
+endif()
