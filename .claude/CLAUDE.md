@@ -46,7 +46,7 @@ Every session follows this exact sequence:
 1. User states a goal
 2. Claude invokes `project-manager` with the goal and any relevant context
 3. PM reads context (CLAUDE.md, devlog, roadmap) and produces a session plan
-4. PM dispatches agents according to the plan (architect, engine-dev, test-engineer, etc.)
+4. PM dispatches agents according to the plan (architect, engine-dev, reviewers, etc.)
 5. PM reports results back to Claude
 6. Claude relays results to the user
 7. If the user has follow-up requests, Claude sends them to PM (go to step 3)
@@ -191,7 +191,7 @@ Each directory has a clear owner. Agents do not write to directories they do not
 | `engine/scene/` | `engine-dev` (future — scene graph, serialisation) |
 | `editor/` | `engine-dev` (future — standalone editor application) |
 | `website/` | TBD (future — documentation and training site) |
-| `tests/` | `test-engineer` |
+| `tests/` | `engine-dev` (note: `test-engineer` is dormant — available for release audits, not routine sessions) |
 | `docs/architecture/` | `architect` |
 | `docs/agents/` | `director` |
 | `docs/devlog.md` | `project-manager` |
@@ -212,38 +212,68 @@ Each directory has a clear owner. Agents do not write to directories they do not
 
 **`project-manager` is the sole dispatcher of agents.** All routing rules in this section are executed by PM. Claude does not route agents — Claude routes to PM, and PM routes to everyone else. If Claude is tempted to dispatch an agent directly (other than PM or director), that is a process violation.
 
-### Parallel Dispatch
+### 3-Phase Development Flow
 
-Dispatch agents in parallel when **all** of these are true:
+Every feature follows this flow. PM dispatches each phase.
 
-- Tasks touch different directories with no shared headers
-- No task depends on output from another
-- No shared state or files being written concurrently
+#### Phase 1 — Design (sequential, skip if trivial)
 
-Example: `engine-dev` working on `engine/audio/` while `renderer-specialist` works on `engine/renderer/` — these can run in parallel.
+1. `architect` writes a design note (if non-trivial or cross-cutting)
+2. `security-auditor` shift-left review (only if the feature touches attack surface per Section 5)
 
-### Sequential Dispatch
+Skip Phase 1 entirely for straightforward features where the implementation path is obvious and no new attack surface is introduced.
 
-Dispatch agents sequentially when **any** of these are true:
+#### Phase 2 — Implementation (single pass, one build)
 
-- Task B needs output, headers, or interfaces defined by task A
-- Tasks modify shared files or interfaces
-- Scope is unclear and needs `architect` review first
-- A review agent (`performance-critic`, `security-auditor`) needs to see completed work
+1. `engine-dev` (or `renderer-specialist`) implements the feature, Lua bindings, tests, and demo updates in **one pass**
+2. **No intermediate builds** — write all code, then build and test once
+3. If build/tests fail, fix and rebuild (expect 0-1 fix cycles)
 
-Example: `architect` designs the ECS interface, then `engine-dev` implements it, then `performance-critic` reviews it — this is sequential.
+`engine-dev` owns `tests/` and writes Catch2 tests alongside the implementation. There is no separate test-writing step.
+
+#### Phase 3 — Expert Panel (parallel — MUST be dispatched simultaneously)
+
+All three reviewers run in parallel with zero dependencies between them:
+
+- `performance-critic` (always)
+- `security-auditor` post-implementation review (only if the feature touches attack surface per Section 5)
+- `api-designer` (reviews public API, updates `.context.md`)
+
+These are all read-only agents. **Sequential dispatch of Phase 3 agents is a process violation.** They have no dependencies on each other and must run simultaneously.
+
+#### Phase 4 — Remediation (if needed)
+
+- **BLOCK or CRITICAL findings:** `engine-dev` fixes, rebuilds, reviewers re-check
+- **All PASS or MINOR ISSUES:** commit
+
+### game-dev-tester: Conditional Only
+
+`game-dev-tester` is invoked only when:
+- A new API paradigm is introduced (not just a new binding in an existing pattern)
+- PM judges that discoverability risk is high
+
+If `game-dev-tester` is not invoked, document the skip in the devlog.
+
+### Build Cycle Rules
+
+- **Build once** after all Phase 2 code is written
+- **Build once** after Phase 4 fixes (if needed)
+- **Never build** during design (Phase 1) or read-only reviews (Phase 3)
+
+### Multi-Feature Sessions
+
+When a session includes multiple features:
+- Parallelize Phase 2 if features touch different directories with no shared headers
+- **One build** after all implementation completes
+- Phase 3 reviews everything in **one pass** (reviewers see all changes at once)
 
 ### Shift-Left Security Review
 
-When `architect` produces an ADR that touches any attack surface listed in Section 5 (asset loading, networking, scripting, file I/O, or external input), `security-auditor` reviews the ADR **before** implementation begins. This is in addition to the existing post-implementation security review. The goal is to bake security constraints (input validation, safe integer arithmetic, sandboxing boundaries) into the design so that implementation starts with those constraints, rather than discovering them in review of finished code.
+When `architect` produces a design note that touches any attack surface listed in Section 5 (asset loading, networking, scripting, file I/O, or external input), `security-auditor` reviews the design **before** implementation begins. This is in addition to the post-implementation review in Phase 3. The goal is to bake security constraints into the design so implementation starts with them.
 
 ### API Review Before Examples
 
-When a feature adds or changes public API surface, the sequencing is: implement -> `api-designer` reviews the public API and writes/updates `.context.md` files -> `game-dev-tester` writes usage examples against the reviewed API. Examples are the artifact of `game-dev-tester`'s usage, not the implementer's. This ensures examples test API discoverability, not just correctness.
-
-### game-dev-tester in Session Plans
-
-`project-manager` must include `game-dev-tester` in the session plan for any feature that adds user-facing API surface. `game-dev-tester` writes examples and usage reports — engine-dev and renderer-specialist do not write end-user examples. If `game-dev-tester` cannot run (e.g., no Lua layer exists yet), document the skip explicitly in the devlog.
+When a feature adds or changes public API surface, the sequencing is: implement (Phase 2) -> `api-designer` reviews the public API and writes/updates `.context.md` files (Phase 3) -> `game-dev-tester` writes usage examples (if invoked). Examples are the artifact of `game-dev-tester`'s usage, not the implementer's.
 
 ### Environment Failures
 
@@ -258,7 +288,7 @@ A feature is **not done** until every applicable item is satisfied:
 - [ ] Compiles clean with zero warnings on Clang-18 (`-Wall -Wextra`)
 - [ ] Compiles clean with zero warnings on GCC-13 (`-Wall -Wextra`)
 - [ ] All existing tests in `tests/` pass
-- [ ] New unit tests and integration tests written by `test-engineer`
+- [ ] New unit tests and integration tests written alongside the implementation
 - [ ] `performance-critic` returns **PASS** or **MINOR ISSUES**
 - [ ] `security-auditor` has reviewed the ADR/design for attack surface features (shift-left review) — before implementation
 - [ ] `security-auditor` has reviewed the implementation for anything touching the attack surface — no CRITICAL or HIGH findings
@@ -266,7 +296,7 @@ A feature is **not done** until every applicable item is satisfied:
 - [ ] Lua bindings exist where applicable
 - [ ] `api-designer` has reviewed the Lua bindings
 - [ ] A working Lua usage example exists
-- [ ] `game-dev-tester` has built something with it and reported no blockers — examples are written by `game-dev-tester`, not engine-dev
+- [ ] `game-dev-tester` has validated the API (if invoked per Section 7), OR skip documented in devlog
 - [ ] A `.context.md` file exists in the system's directory, written for LLM consumption
 - [ ] Changes are committed with a clear [Conventional Commit](https://www.conventionalcommits.org/) message
 
@@ -334,4 +364,4 @@ Performance is how we deliver on this mission. By running well on old hardware, 
 | Is my API good? | Ask `api-designer`, then `game-dev-tester` |
 | Can Claude write code directly? | **No** — invoke `project-manager`, who dispatches the right agent |
 | Can Claude invoke engine-dev directly? | **No** — only PM dispatches implementation agents |
-| Can Claude run builds or tests? | **No** — `engine-dev` and `test-engineer` do that through PM |
+| Can Claude run builds or tests? | **No** — `engine-dev` does that through PM |
