@@ -1755,3 +1755,34 @@ User-reported bugs: F1 editor toggle broken, no audio. After initial fix (Sessio
 
 ---
 
+## 2026-03-06 — Session 26: Camera Shake, Editor Polish, Demo Juice
+
+### Completed
+
+**New Engine Feature: Camera Shake**
+- `CameraShake` struct in ECS context (intensity, duration, elapsed)
+- Application ticks the timer and applies sin/cos jitter offset to camera during render
+- Decays linearly over duration — no heap allocations, no per-frame state changes after expiry
+- `ffe.cameraShake(intensity, duration)` Lua binding — clamps intensity [0,100], duration [0,5], NaN/Inf rejected
+- All three demos use it: breakout (brick hit + life lost), pong (goal scored), lua_demo (star collected)
+
+**Editor Overlay Enhancements:**
+- Performance panel: added texture VRAM usage (KB/MB display) and per-frame collision event count
+- Entity inspector: added SpriteAnimation state (frame, playing, looping) and Collider2D details (shape, extents, trigger)
+- Entity inspector: sprite color is now editable via ImGui ColorEdit4 widget (live color picker)
+- Entity inspector: sprite size is now editable via DragFloat2
+
+**Demo Polish:**
+- lua_demo: pickup ring effects (expanding gold rings on star collection), player color pulse when moving, score flash, camera shake on collect
+- breakout: camera shake on brick destroy (small) and life lost (big)
+- pong: camera shake on goal scored
+
+**Documentation:**
+- Tutorial: added camera effects section (Section 10), updated section numbering, added breakout to "What's Next?"
+- Scripting .context.md: added ffe.cameraShake API documentation
+
+### Test Results
+- **349 tests pass** on both Clang-18 and GCC-13, zero warnings
+
+---
+
