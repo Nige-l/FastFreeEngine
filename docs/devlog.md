@@ -1831,5 +1831,58 @@ User-reported bugs: F1 editor toggle broken, no audio. After initial fix (Sessio
 ### Test Results
 - **371 tests pass** on both Clang-18 and GCC-13, zero warnings (6 new tests)
 
+### Additional (post-plan)
+- `ffe.drawRect()` — screen-space filled rectangle for HUD panels (1 new test, 372 total)
+- `ffe.getScreenWidth()`/`getScreenHeight()` for text centering
+- Camera shake pixel-snapping fix (`std::round`) + reduced intensities
+- Title screens for all three demos
+- HUD panels with semi-transparent backgrounds behind text
+- Screenshot added to README (docs/screenshots/breakout.png)
+
+### User Feedback (live testing)
+- Camera shake "looked like a visual bug" — **FIXED** (pixel-snapping + reduced intensity)
+- Music and SFX: **working great**
+- F1 editor: **NOT WORKING** in demos — user says backlog, editor should be a separate app later
+- Screenshot provided for README
+
+---
+
+## Session 28 Plan: Engine Polish + Sprite Rotation
+
+### Context
+User tested all three demos on real hardware. Music, SFX, text rendering, and title screens all working well. Camera shake fixed. Editor overlay backlogged — it should become a separate application (like Unity/Unreal editor) rather than an in-game overlay, but that's a larger effort for later.
+
+### Goals (Priority Order)
+
+**P0: Sprite Rotation in Render Pipeline**
+DrawCommand currently has no rotation field — sprites always render axis-aligned. This blocks any game needing rotated sprites (e.g., spinning entities, angled projectiles). The Transform component already stores rotation. The fix is:
+1. Add `f32 rotation` to `DrawCommand`
+2. Pass rotation through `renderPrepareSystem` (lerp between prev and current)
+3. `SpriteInstance` already has rotation — sprite_batch.cpp already handles it
+4. Test with a demo that rotates sprites
+
+**P1: Tutorial Documentation Update**
+`docs/tutorial.md` needs to cover the new features from Sessions 26-27:
+- `ffe.drawText()` and `ffe.drawRect()` for HUD text
+- `ffe.getScreenWidth()`/`getScreenHeight()` for centering
+- `ffe.cameraShake()` for game feel
+- `ffe.setBackgroundColor()` for custom backgrounds
+- Title screen state machine pattern
+- Updated quick-start example
+
+**P2: Sprite Flipping**
+Many 2D games need horizontal/vertical sprite flipping (e.g., character facing direction). This can be done cheaply by negating UV coordinates or scale. Add `ffe.setSpriteFlip(entityId, flipX, flipY)` Lua binding.
+
+**P3: Timer/Delay Utility**
+Games frequently need "do X after Y seconds." A simple `ffe.after(seconds, callback)` or timer API would reduce boilerplate in Lua game code.
+
+### Backlog (from user feedback + director review)
+- Editor as separate application (not in-game overlay) — large effort, future
+- Text rendering: TTF font support (stb_truetype) — current bitmap font is good enough for now
+- Scene/state management system — currently done in Lua with state variables, works fine
+- Windows build documentation
+- Gamepad input support
+- Networking subsystem
+
 ---
 
