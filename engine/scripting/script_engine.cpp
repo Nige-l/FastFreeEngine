@@ -13,6 +13,8 @@ extern "C" {
 #include "core/input.h"
 #include "renderer/render_system.h"
 
+#include <algorithm>  // std::max, std::min
+#include <cinttypes>  // PRId64
 #include <climits>    // PATH_MAX
 #include <cmath>      // std::isfinite
 #include <cstring>    // strnlen, strstr, strlen, memcpy
@@ -556,6 +558,279 @@ void ScriptEngine::registerEcsBindings() {
         return 0;
     });
     lua_setfield(L, -2, "requestShutdown");
+
+    // ----------------------------------------------------------------
+    // Entity lifecycle bindings
+    //
+    // ffe.createEntity()
+    //   → integer entity ID on success, nil if ECS is out of space
+    //
+    // ffe.destroyEntity(entityId)
+    //   → nothing; no-op for invalid or out-of-range IDs
+    //
+    // ffe.addTransform(entityId, x, y, rotation, scaleX, scaleY)
+    //   → true on success, false on failure
+    //
+    // ffe.addSprite(entityId, texHandle, width, height, r, g, b, a, layer)
+    //   → true on success, false on failure
+    //
+    // ffe.addPreviousTransform(entityId)
+    //   → true on success, false on failure
+    //
+    // Security: all entity IDs use the full two-sided range check (H-1).
+    // Overwrite guard: uses emplace_or_replace via registry() escape hatch (H-2).
+    // Texture handle: rejects rawHandle <= 0 (M-1).
+    // ----------------------------------------------------------------
+
+    // Helper: two-sided entity ID range check.
+    // Returns false (and pushes nothing) if the ID is in range.
+    // Callers use: if (rawId < 0 || rawId > MAX_ENTITY_ID) { push nil/false; return N; }
+    static constexpr lua_Integer MAX_ENTITY_ID =
+        static_cast<lua_Integer>(UINT32_MAX - 1u);
+
+    // ffe.createEntity() -> integer or nil
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            lua_pushnil(state);
+            return 1;
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const ffe::EntityId entityId = world->createEntity();
+        if (entityId == ffe::NULL_ENTITY) {
+            FFE_LOG_ERROR("ScriptEngine", "createEntity: ECS out of space");
+            lua_pushnil(state);
+            return 1;
+        }
+        lua_pushinteger(state, static_cast<lua_Integer>(entityId));
+        return 1;
+    });
+    lua_setfield(L, -2, "createEntity");
+
+    // ffe.destroyEntity(entityId) -> nothing
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            return 0;
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = luaL_checkinteger(state, 1);
+        // Full two-sided range check (H-1): reject negatives and values above UINT32_MAX-1.
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) {
+            return 0; // no-op for out-of-range IDs
+        }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) {
+            return 0; // no-op for invalid IDs
+        }
+        world->destroyEntity(entityId);
+        return 0;
+    });
+    lua_setfield(L, -2, "destroyEntity");
+
+    // ffe.addTransform(entityId, x, y, rotation, scaleX, scaleY) -> bool
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = luaL_checkinteger(state, 1);
+        // Full two-sided range check (H-1).
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) {
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) {
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+
+        const lua_Number x        = luaL_checknumber(state, 2);
+        const lua_Number y        = luaL_checknumber(state, 3);
+        const lua_Number rotation = luaL_checknumber(state, 4);
+        const lua_Number scaleX   = luaL_checknumber(state, 5);
+        const lua_Number scaleY   = luaL_checknumber(state, 6);
+
+        // Reject non-finite values — same pattern as setTransform.
+        if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(rotation) ||
+            !std::isfinite(scaleX) || !std::isfinite(scaleY)) {
+            FFE_LOG_ERROR("ScriptEngine", "addTransform: non-finite value rejected");
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+
+        // Overwrite guard (H-2): use emplace_or_replace to safely handle duplicate components.
+        if (world->hasComponent<ffe::Transform>(entityId)) {
+            FFE_LOG_WARN("ScriptEngine", "addTransform: entity already has Transform — overwriting");
+        }
+        ffe::Transform& t = world->registry().emplace_or_replace<ffe::Transform>(
+            static_cast<entt::entity>(entityId));
+        t.position.x = static_cast<ffe::f32>(x);
+        t.position.y = static_cast<ffe::f32>(y);
+        t.rotation   = static_cast<ffe::f32>(rotation);
+        t.scale.x    = static_cast<ffe::f32>(scaleX);
+        t.scale.y    = static_cast<ffe::f32>(scaleY);
+
+        lua_pushboolean(state, 1);
+        return 1;
+    });
+    lua_setfield(L, -2, "addTransform");
+
+    // ffe.addSprite(entityId, texHandle, width, height, r, g, b, a, layer) -> bool
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = luaL_checkinteger(state, 1);
+        // Full two-sided range check (H-1).
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) {
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) {
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+
+        // Texture handle validation (M-1): reject <= 0 (0 is null sentinel).
+        const lua_Integer rawHandle = luaL_checkinteger(state, 2);
+        if (rawHandle <= 0 || rawHandle > static_cast<lua_Integer>(UINT32_MAX)) {
+            FFE_LOG_ERROR("ScriptEngine", "addSprite: invalid texture handle %" PRId64,
+                          static_cast<long long>(rawHandle));
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        const ffe::rhi::TextureHandle texHandle{static_cast<ffe::u32>(rawHandle)};
+
+        const lua_Number width  = luaL_checknumber(state, 3);
+        const lua_Number height = luaL_checknumber(state, 4);
+
+        // Width and height must be finite and positive (SEC-E-6).
+        if (!std::isfinite(width) || !std::isfinite(height) || width <= 0.0 || height <= 0.0) {
+            FFE_LOG_ERROR("ScriptEngine", "addSprite: invalid width/height (must be finite and > 0)");
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+
+        // Colour channels: clamp to [0.0, 1.0].
+        // NaN-safe: std::max/std::min have unspecified behaviour with NaN; treat
+        // any non-finite value as 0.0 (safe black/transparent default).
+        const lua_Number rawR = luaL_checknumber(state, 5);
+        const lua_Number rawG = luaL_checknumber(state, 6);
+        const lua_Number rawB = luaL_checknumber(state, 7);
+        const lua_Number rawA = luaL_checknumber(state, 8);
+
+        auto clampColor = [](lua_Number v) -> ffe::f32 {
+            if (!std::isfinite(v)) { return 0.0f; }
+            return static_cast<ffe::f32>(v < 0.0 ? 0.0 : (v > 1.0 ? 1.0 : v));
+        };
+        const ffe::f32 r = clampColor(rawR);
+        const ffe::f32 g = clampColor(rawG);
+        const ffe::f32 b = clampColor(rawB);
+        const ffe::f32 a = clampColor(rawA);
+
+        // Layer: clamp to [0, 15] before casting to i16 (LOW-2: static_cast<i16>
+        // on an unclamped lua_Integer is UB for values outside [-32768, 32767]).
+        const lua_Integer rawLayer = luaL_checkinteger(state, 9);
+        if (rawLayer < 0 || rawLayer > 15) {
+            FFE_LOG_WARN("ScriptEngine",
+                         "addSprite: layer %" PRId64 " is outside [0, 15] — clamping",
+                         static_cast<long long>(rawLayer));
+        }
+        const ffe::i16 layerClamped =
+            static_cast<ffe::i16>(rawLayer < 0 ? 0 : (rawLayer > 15 ? 15 : rawLayer));
+
+        // Overwrite guard (H-2): use emplace_or_replace to safely handle duplicate components.
+        if (world->hasComponent<ffe::Sprite>(entityId)) {
+            FFE_LOG_WARN("ScriptEngine", "addSprite: entity already has Sprite — overwriting");
+        }
+        ffe::Sprite& sprite = world->registry().emplace_or_replace<ffe::Sprite>(
+            static_cast<entt::entity>(entityId));
+        sprite.texture   = texHandle;
+        sprite.size      = glm::vec2(static_cast<ffe::f32>(width), static_cast<ffe::f32>(height));
+        sprite.color     = glm::vec4(r, g, b, a);
+        sprite.layer     = layerClamped;
+        sprite.uvMin     = glm::vec2(0.0f, 0.0f);
+        sprite.uvMax     = glm::vec2(1.0f, 1.0f);
+        sprite.sortOrder = 0;
+
+        lua_pushboolean(state, 1);
+        return 1;
+    });
+    lua_setfield(L, -2, "addSprite");
+
+    // ffe.addPreviousTransform(entityId) -> bool
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = luaL_checkinteger(state, 1);
+        // Full two-sided range check (H-1).
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) {
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) {
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+
+        // Overwrite guard (H-2): use emplace_or_replace.
+        if (world->hasComponent<ffe::PreviousTransform>(entityId)) {
+            FFE_LOG_WARN("ScriptEngine", "addPreviousTransform: entity already has PreviousTransform — overwriting");
+        }
+
+        // Initialise from Transform if it exists, otherwise zero with a warning.
+        ffe::PreviousTransform pt{};
+        if (world->hasComponent<ffe::Transform>(entityId)) {
+            const ffe::Transform& t = world->getComponent<ffe::Transform>(entityId);
+            pt.position = t.position;
+            pt.scale    = t.scale;
+            pt.rotation = t.rotation;
+        } else {
+            FFE_LOG_WARN("ScriptEngine",
+                         "addPreviousTransform: entity has no Transform — initialising to zero. "
+                         "Call addTransform first.");
+        }
+
+        world->registry().emplace_or_replace<ffe::PreviousTransform>(
+            static_cast<entt::entity>(entityId), pt);
+
+        lua_pushboolean(state, 1);
+        return 1;
+    });
+    lua_setfield(L, -2, "addPreviousTransform");
 
     // Set the 'ffe' table as a global.
     lua_setglobal(L, "ffe");

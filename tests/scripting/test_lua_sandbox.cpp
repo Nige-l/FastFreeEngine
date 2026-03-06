@@ -598,3 +598,300 @@ TEST_CASE("ffe.requestShutdown without World is a no-op", "[scripting][shutdown]
     ScriptFixture fix;
     REQUIRE(fix.engine.doString("ffe.requestShutdown()"));
 }
+
+// =============================================================================
+// Entity lifecycle bindings — createEntity, destroyEntity,
+// addTransform, addSprite, addPreviousTransform
+// =============================================================================
+
+TEST_CASE("ffe.createEntity returns an integer when World is registered", "[scripting][ecs][lifecycle]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+    // createEntity must return a Lua integer (type 'number').
+    REQUIRE(fix.engine.doString("local id = ffe.createEntity(); assert(type(id) == 'number')"));
+}
+
+TEST_CASE("ffe.createEntity returns nil when no World is registered", "[scripting][ecs][lifecycle]") {
+    ScriptFixture fix;
+    // No setWorld() — must return nil, not crash.
+    REQUIRE(fix.engine.doString("local id = ffe.createEntity(); assert(id == nil)"));
+}
+
+TEST_CASE("ffe.destroyEntity destroys a valid entity", "[scripting][ecs][lifecycle]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    // Destroy via Lua, then verify from C++ that the entity is no longer valid.
+    const std::string script = "ffe.destroyEntity(" + std::to_string(entity) + ")";
+    REQUIRE(fix.engine.doString(script.c_str()));
+    REQUIRE_FALSE(world.isValid(entity));
+}
+
+TEST_CASE("ffe.destroyEntity with invalid ID is a no-op without crash", "[scripting][ecs][lifecycle]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+    // NULL_ENTITY (4294967295) is always invalid — must not crash.
+    REQUIRE(fix.engine.doString("ffe.destroyEntity(4294967295)"));
+}
+
+TEST_CASE("ffe.destroyEntity with out-of-range ID (UINT32_MAX) is a no-op", "[scripting][ecs][lifecycle][security]") {
+    // UINT32_MAX == 4294967295 is NULL_ENTITY and also equals UINT32_MAX.
+    // The full two-sided check (H-1) treats it as out-of-range (> UINT32_MAX-1).
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+    REQUIRE(fix.engine.doString("ffe.destroyEntity(4294967295)"));
+}
+
+TEST_CASE("ffe.addTransform succeeds on a valid entity without existing Transform", "[scripting][ecs][lifecycle]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    const std::string script =
+        "local ok = ffe.addTransform(" + std::to_string(entity) + ", 1, 2, 0.5, 1, 1)\n"
+        "assert(ok == true)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+    REQUIRE(world.hasComponent<ffe::Transform>(entity));
+
+    const ffe::Transform& t = world.getComponent<ffe::Transform>(entity);
+    REQUIRE(t.position.x == Catch::Approx(1.0f));
+    REQUIRE(t.position.y == Catch::Approx(2.0f));
+    REQUIRE(t.rotation   == Catch::Approx(0.5f));
+    REQUIRE(t.scale.x    == Catch::Approx(1.0f));
+    REQUIRE(t.scale.y    == Catch::Approx(1.0f));
+}
+
+TEST_CASE("ffe.addTransform with NaN x returns false without crash", "[scripting][ecs][lifecycle][security]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    // 0/0 is NaN in Lua. addTransform must reject it and return false.
+    const std::string script =
+        "local ok = ffe.addTransform(" + std::to_string(entity) + ", 0/0, 0, 0, 1, 1)\n"
+        "assert(ok == false)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+    // Entity must not have an invalid Transform as a side-effect.
+    REQUIRE_FALSE(world.hasComponent<ffe::Transform>(entity));
+}
+
+TEST_CASE("ffe.addTransform overwrites existing Transform with warning", "[scripting][ecs][lifecycle]") {
+    // H-2 guard: calling addTransform on an entity that already has Transform
+    // must overwrite via emplace_or_replace (not UB).
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    world.addComponent<ffe::Transform>(entity);  // pre-existing Transform
+    fix.engine.setWorld(&world);
+
+    const std::string script =
+        "local ok = ffe.addTransform(" + std::to_string(entity) + ", 10, 20, 0, 2, 3)\n"
+        "assert(ok == true)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+
+    const ffe::Transform& t = world.getComponent<ffe::Transform>(entity);
+    REQUIRE(t.position.x == Catch::Approx(10.0f));
+    REQUIRE(t.position.y == Catch::Approx(20.0f));
+}
+
+TEST_CASE("ffe.addSprite succeeds with a valid texture handle", "[scripting][ecs][lifecycle]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    // Use handle id=1 — headless RHI ignores actual GPU validity.
+    const std::string script =
+        "local ok = ffe.addSprite(" + std::to_string(entity) + ", 1, 32, 32, 1, 1, 1, 1, 0)\n"
+        "assert(ok == true)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+    REQUIRE(world.hasComponent<ffe::Sprite>(entity));
+
+    const ffe::Sprite& sprite = world.getComponent<ffe::Sprite>(entity);
+    REQUIRE(sprite.texture.id == 1u);
+    REQUIRE(sprite.size.x == Catch::Approx(32.0f));
+    REQUIRE(sprite.size.y == Catch::Approx(32.0f));
+}
+
+TEST_CASE("ffe.addSprite with texture handle 0 returns false (null sentinel)", "[scripting][ecs][lifecycle][security]") {
+    // M-1: rawHandle <= 0 must be rejected; 0 is TextureHandle null sentinel.
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    const std::string script =
+        "local ok = ffe.addSprite(" + std::to_string(entity) + ", 0, 32, 32, 1, 1, 1, 1, 0)\n"
+        "assert(ok == false)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+    REQUIRE_FALSE(world.hasComponent<ffe::Sprite>(entity));
+}
+
+TEST_CASE("ffe.addPreviousTransform copies position from existing Transform", "[scripting][ecs][lifecycle]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    ffe::Transform& t = world.addComponent<ffe::Transform>(entity);
+    t.position = {5.0f, 10.0f, 0.0f};
+    t.scale    = {2.0f, 3.0f, 1.0f};
+    t.rotation = 1.0f;
+    fix.engine.setWorld(&world);
+
+    const std::string script =
+        "local ok = ffe.addPreviousTransform(" + std::to_string(entity) + ")\n"
+        "assert(ok == true)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+    REQUIRE(world.hasComponent<ffe::PreviousTransform>(entity));
+
+    const ffe::PreviousTransform& pt = world.getComponent<ffe::PreviousTransform>(entity);
+    REQUIRE(pt.position.x == Catch::Approx(5.0f));
+    REQUIRE(pt.position.y == Catch::Approx(10.0f));
+    REQUIRE(pt.rotation   == Catch::Approx(1.0f));
+    REQUIRE(pt.scale.x    == Catch::Approx(2.0f));
+    REQUIRE(pt.scale.y    == Catch::Approx(3.0f));
+}
+
+TEST_CASE("ffe.addPreviousTransform on entity without Transform sets zero position", "[scripting][ecs][lifecycle]") {
+    // If there is no Transform, PreviousTransform should be zeroed and a warning logged.
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    // No Transform added.
+    fix.engine.setWorld(&world);
+
+    const std::string script =
+        "local ok = ffe.addPreviousTransform(" + std::to_string(entity) + ")\n"
+        "assert(ok == true)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+    REQUIRE(world.hasComponent<ffe::PreviousTransform>(entity));
+
+    const ffe::PreviousTransform& pt = world.getComponent<ffe::PreviousTransform>(entity);
+    REQUIRE(pt.position.x == Catch::Approx(0.0f));
+    REQUIRE(pt.position.y == Catch::Approx(0.0f));
+    REQUIRE(pt.rotation   == Catch::Approx(0.0f));
+}
+
+TEST_CASE("ffe.createEntity and ffe.getTransform round-trip via Lua", "[scripting][ecs][lifecycle]") {
+    // Full round-trip: create entity in Lua, add transform in Lua, read it back.
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    const std::string script =
+        "local id = ffe.createEntity()\n"
+        "assert(id ~= nil)\n"
+        "local ok = ffe.addTransform(id, 7, 14, 0, 1, 1)\n"
+        "assert(ok == true)\n"
+        "local t = ffe.getTransform(id)\n"
+        "assert(t ~= nil)\n"
+        "assert(math.abs(t.x - 7) < 0.001)\n"
+        "assert(math.abs(t.y - 14) < 0.001)\n";
+    REQUIRE(fix.engine.doString(script.c_str()));
+}
+
+TEST_CASE("ffe.destroyEntity with negative ID is a no-op", "[scripting][ecs][lifecycle][security]") {
+    // H-1: negative IDs must be rejected immediately, no crash.
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+    REQUIRE(fix.engine.doString("ffe.destroyEntity(-1)"));
+}
+
+// =============================================================================
+// Additional lifecycle coverage — gaps identified in test review
+// =============================================================================
+
+TEST_CASE("ffe.addTransform with Infinity (math.huge) returns false without crash", "[scripting][ecs][lifecycle][security]") {
+    // addTransform has the same std::isfinite guard as setTransform.
+    // +Inf via math.huge must be rejected and return false.
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    const std::string script =
+        "local ok = ffe.addTransform(" + std::to_string(entity) + ", math.huge, 0, 0, 1, 1)\n"
+        "assert(ok == false)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+    // Entity must not have gained a Transform as a side-effect of the rejected call.
+    REQUIRE_FALSE(world.hasComponent<ffe::Transform>(entity));
+}
+
+TEST_CASE("ffe.addSprite with texture handle UINT32_MAX+1 returns false (overflow rejection)", "[scripting][ecs][lifecycle][security]") {
+    // The binding checks rawHandle > UINT32_MAX. Lua integers are 64-bit on all
+    // modern platforms so UINT32_MAX+1 (4294967296) is representable and must be
+    // rejected to prevent a silent truncation to 0 when cast to u32.
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    // 4294967296 == UINT32_MAX + 1 == 2^32
+    const std::string script =
+        "local ok = ffe.addSprite(" + std::to_string(entity) + ", 4294967296, 32, 32, 1, 1, 1, 1, 0)\n"
+        "assert(ok == false)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+    REQUIRE_FALSE(world.hasComponent<ffe::Sprite>(entity));
+}
+
+TEST_CASE("ffe.addPreviousTransform called twice on same entity is safe (H-2 overwrite)", "[scripting][ecs][lifecycle]") {
+    // H-2: emplace_or_replace must not UB, crash, or corrupt state on a second call.
+    // The second call should silently overwrite and return true.
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    ffe::Transform& t = world.addComponent<ffe::Transform>(entity);
+    t.position = {1.0f, 2.0f, 0.0f};
+    t.scale    = {1.0f, 1.0f, 1.0f};
+    t.rotation = 0.0f;
+    fix.engine.setWorld(&world);
+
+    const std::string script =
+        "local ok1 = ffe.addPreviousTransform(" + std::to_string(entity) + ")\n"
+        "assert(ok1 == true)\n"
+        "local ok2 = ffe.addPreviousTransform(" + std::to_string(entity) + ")\n"
+        "assert(ok2 == true)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+
+    // Component must still be valid and readable from C++.
+    REQUIRE(world.hasComponent<ffe::PreviousTransform>(entity));
+    const ffe::PreviousTransform& pt = world.getComponent<ffe::PreviousTransform>(entity);
+    REQUIRE(pt.position.x == Catch::Approx(1.0f));
+    REQUIRE(pt.position.y == Catch::Approx(2.0f));
+}
+
+TEST_CASE("ffe.addTransform on destroyed entity returns false", "[scripting][ecs][lifecycle]") {
+    // After destroyEntity, the entity ID is invalid. addTransform must detect this
+    // via isValid() and return false without crashing.
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    world.destroyEntity(entity);  // destroy from C++ before Lua call
+    fix.engine.setWorld(&world);
+
+    const std::string script =
+        "local ok = ffe.addTransform(" + std::to_string(entity) + ", 1, 2, 0, 1, 1)\n"
+        "assert(ok == false)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+}
+
+TEST_CASE("ffe.addSprite with zero width returns false (invalid dimension)", "[scripting][ecs][lifecycle][security]") {
+    // The addSprite binding enforces width > 0 (SEC-E-6). Zero width must be rejected.
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    const std::string script =
+        "local ok = ffe.addSprite(" + std::to_string(entity) + ", 1, 0, 32, 1, 1, 1, 1, 0)\n"
+        "assert(ok == false)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+    REQUIRE_FALSE(world.hasComponent<ffe::Sprite>(entity));
+}

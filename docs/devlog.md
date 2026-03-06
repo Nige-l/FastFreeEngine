@@ -757,3 +757,75 @@ Session 8 handover document written at `docs/session8-handover.md`.
 
 ---
 
+## Session 8 — [2026-03-06] — Entity Lifecycle from Lua + ADR-006 Audio Design
+
+### Goals
+1. P0 — Entity lifecycle from Lua: `ffe.createEntity()`, `ffe.destroyEntity()`, `ffe.addTransform()`, `ffe.addSprite()`, `ffe.addPreviousTransform()`
+2. P1 — Audio subsystem design: ADR-006 (miniaudio, shift-left security review)
+3. P2 — M-1 getTransform GC pressure (deferred — entity lifecycle is higher priority)
+
+### Session opened
+Autonomous execution continuing.
+
+---
+
+## 2026-03-06 — Session 8 Outcomes
+
+### Completed
+
+**Phase 1 — Parallel (architect x2):**
+- **architect** wrote `design-note-entity-from-lua.md` — answered 7 design questions: entity ID as `lua_Integer` with two-sided range check `[0, UINT32_MAX-1]`, no ownership tracking (World::isValid is the boundary), texture handles as opaque u32 integers, `addTransform` overwrites with warning, `ffe.loadTexture` deferred, `addPreviousTransform` copies from Transform if present, nil/false error signalling. 12 numbered security properties listed for security-auditor.
+- **architect** wrote `ADR-006-audio.md` — chose **miniaudio** (single-header, public domain, consistent with stb_image/glad embedding pattern). OGG via stb_vorbis. Background audio callback thread with SPSC ring buffer (64 commands, atomic head/tail). Global module singleton `ffe::audio`. Path traversal via same `isPathSafe()` + `realpath()` + prefix-check model as ADR-005. 9 explicit security constraints documented.
+
+**Phase 2 — Security reviews (parallel):**
+- **security-auditor reviewed entity-from-Lua design: PASS WITH CONDITIONS** — 2 HIGH (entity ID two-sided range check not in existing pattern; `emplace` UB on duplicate component), 2 MEDIUM (texture handle zero-rejection `<= 0`; dangling handle documented in .context.md). All 4 conditions addressed in implementation.
+- **security-auditor reviewed ADR-006: PASS WITH CONDITIONS** — 2 HIGH (path concatenation buffer overflow check before `realpath()`; decoder output validation ordering before decoded-size multiplication), 2 MEDIUM (strnlen in path safety function; stb_vorbis codebook heap documented). Audio implementation gates on these conditions.
+
+**Phase 3 — Implementation (engine-dev):**
+- **engine-dev** implemented entity lifecycle bindings in `engine/scripting/script_engine.cpp`:
+  - `ffe.createEntity()` — returns `lua_Integer` entity ID or nil
+  - `ffe.destroyEntity(entityId)` — two-sided ID range check; no-op for invalid IDs
+  - `ffe.addTransform(entityId, x, y, rotation, scaleX, scaleY)` — NaN/Inf rejection; `emplace_or_replace` (H-2); two-sided ID check (H-1)
+  - `ffe.addSprite(entityId, texHandle, width, height, r, g, b, a, layer)` — `rawHandle <= 0` rejection (M-1); NaN-safe color clamp; layer clamped to [0,15] before `i16` cast (LOW-2 UB fix); `emplace_or_replace` (H-2)
+  - `ffe.addPreviousTransform(entityId)` — copies from Transform if present; zero-init with warning if not; `emplace_or_replace` (H-2)
+- All conditions H-1, H-2, M-1 implemented; LOW-1 (NaN in color) and LOW-2 (layer i16 UB) also fixed before commit
+
+**Phase 4 — Reviews (parallel):**
+- **security-auditor post-impl: PASS WITH MINOR ISSUES** — all 4 conditions verified. LOW-1 (NaN color clamping) and LOW-2 (layer i16 UB) identified as advisory. Both fixed immediately.
+- **test-engineer** added 14 new scripting tests (engine-dev) + 5 coverage gap tests (test-engineer). Total scripting test file: 74 test cases. **196/196 total tests pass on Clang-18 and GCC-13.**
+
+**Phase 5 — API review + demo (parallel):**
+- **api-designer** updated `engine/scripting/.context.md` (Session 8 revision): added "Entity Lifecycle" subsection to Lua API, Pattern 6 (full C++/Lua entity creation flow), expanded Security section, updated Dependencies table.
+- **game-dev-tester** updated `examples/lua_demo/game.lua`: follower entity spawned from Lua using all 5 new bindings, chases player. SPACE spawns up to 5 static markers at player position. Usage report: no blockers, API discoverability 7/10.
+
+### Session 8 Stats
+- **New architecture docs:** design-note-entity-from-lua.md, ADR-006-audio.md, security review docs (×3)
+- **Modified engine files:** script_engine.cpp (5 new bindings + 2 LOW fixes)
+- **Modified test files:** test_lua_sandbox.cpp (+19 tests total this session)
+- **New tests:** 19 (total: 196, was 177 at session start)
+- **Security findings resolved:** 2 HIGH + 2 MEDIUM (entity binding shift-left); 2 LOW (post-impl: NaN color, layer UB)
+- **ADRs produced:** ADR-006 (audio — implementation in Session 9)
+
+### Review Results
+- security-auditor entity shift-left: **PASS WITH CONDITIONS** (all 4 conditions implemented)
+- security-auditor ADR-006 shift-left: **PASS WITH CONDITIONS** (gates audio implementation — Session 9)
+- security-auditor entity post-impl: **PASS WITH MINOR ISSUES** (LOW issues fixed before commit)
+- test-engineer: **PASS** (196/196, zero warnings, both compilers)
+- api-designer: **APPROVED** (.context.md updated with full entity lifecycle API)
+- game-dev-tester: **No blockers** — 7/10 discoverability
+
+### Known Issues Updated
+- **FRICTION-3 (entity creation from Lua):** FIXED — ffe.createEntity/destroyEntity/addTransform/addSprite/addPreviousTransform all implemented.
+- **FRICTION-4 (no ffe.loadTexture):** NEW — game-dev-tester flagged: `addSprite` requires a texture handle integer, but Lua cannot load textures yet. C++ must pre-load and pass handles. Tracked for Session 9.
+- **ADR-006 audio:** DESIGNED + SECURITY REVIEWED — implementation in Session 9.
+- **M-1 (getTransform GC pressure):** Still tracked.
+
+### Next Session Should Start With
+- Implement audio subsystem from ADR-006 (miniaudio embedded, ADR-006 security review conditions must be satisfied)
+- Implement `ffe.loadTexture(path)` Lua binding — allows scripts to load their own textures
+- game-dev-tester: run lua_demo on real hardware; report follower AI and marker spawning
+
+Session 9 handover document written at `docs/session9-handover.md`.
+
+---
+
