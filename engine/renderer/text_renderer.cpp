@@ -155,6 +155,23 @@ void initTextRenderer(TextRenderer& tr, const f32 screenWidth, const f32 screenH
         }
     }
 
+    // Fill cell 95 (unused by font) as a solid white block for drawRect().
+    {
+        const u32 col = 95 % FONT_ATLAS_COLS; // col=15
+        const u32 row = 95 / FONT_ATLAS_COLS; // row=5
+        for (u32 py = 0; py < FONT_GLYPH_H; ++py) {
+            for (u32 px = 0; px < FONT_GLYPH_W; ++px) {
+                const u32 atlasX = col * FONT_GLYPH_W + px;
+                const u32 atlasY = row * FONT_GLYPH_H + py;
+                const u32 offset = (atlasY * ATLAS_W + atlasX) * 4;
+                pixelData[offset + 0] = 255;
+                pixelData[offset + 1] = 255;
+                pixelData[offset + 2] = 255;
+                pixelData[offset + 3] = 255;
+            }
+        }
+    }
+
     rhi::TextureDesc desc;
     desc.width     = ATLAS_W;
     desc.height    = ATLAS_H;
@@ -228,6 +245,32 @@ void drawText(TextRenderer& tr, const char* text,
 
         x += glyphW;
     }
+}
+
+void drawRect(TextRenderer& tr,
+              const f32 x, const f32 y, const f32 width, const f32 height,
+              const f32 r, const f32 g, const f32 b, const f32 a) {
+    if (tr.glyphCount >= MAX_TEXT_GLYPHS) return;
+
+    // Cell 95 is the solid white block
+    const f32 uvW = 1.0f / static_cast<f32>(FONT_ATLAS_COLS);
+    const f32 uvH = 1.0f / static_cast<f32>(FONT_ATLAS_ROWS);
+    const u32 col = 95 % FONT_ATLAS_COLS;
+    const u32 row = 95 / FONT_ATLAS_COLS;
+
+    GlyphQuad& gq = tr.glyphs[tr.glyphCount++];
+    gq.x      = x;
+    gq.y      = y;
+    gq.width  = width;
+    gq.height = height;
+    gq.uvMinX = static_cast<f32>(col) * uvW;
+    gq.uvMinY = static_cast<f32>(row) * uvH;
+    gq.uvMaxX = gq.uvMinX + uvW;
+    gq.uvMaxY = gq.uvMinY + uvH;
+    gq.r = r;
+    gq.g = g;
+    gq.b = b;
+    gq.a = a;
 }
 
 void flushText(TextRenderer& tr, SpriteBatch& batch,

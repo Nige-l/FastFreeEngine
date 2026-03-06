@@ -1000,6 +1000,47 @@ void ScriptEngine::registerEcsBindings() {
     });
     lua_setfield(L, -2, "drawText");
 
+    // ffe.drawRect(x, y, width, height, r, g, b, a) — draw a filled rectangle.
+    // Screen-space coordinates, origin top-left. Color clamped [0,1].
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            return 0;
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        auto** trPtr = world->registry().ctx().find<ffe::renderer::TextRenderer*>();
+        if (trPtr == nullptr || *trPtr == nullptr) return 0;
+
+        const lua_Number x = luaL_checknumber(state, 1);
+        const lua_Number y = luaL_checknumber(state, 2);
+        const lua_Number w = luaL_checknumber(state, 3);
+        const lua_Number h = luaL_checknumber(state, 4);
+        const lua_Number r = luaL_optnumber(state, 5, 1.0);
+        const lua_Number g = luaL_optnumber(state, 6, 1.0);
+        const lua_Number b = luaL_optnumber(state, 7, 1.0);
+        const lua_Number a = luaL_optnumber(state, 8, 1.0);
+
+        if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(w) || !std::isfinite(h) ||
+            !std::isfinite(r) || !std::isfinite(g) || !std::isfinite(b) || !std::isfinite(a)) {
+            return 0;
+        }
+
+        const auto clamp01 = [](lua_Number v) -> ffe::f32 {
+            return static_cast<ffe::f32>(v < 0.0 ? 0.0 : (v > 1.0 ? 1.0 : v));
+        };
+
+        ffe::renderer::drawRect(**trPtr,
+            static_cast<ffe::f32>(x), static_cast<ffe::f32>(y),
+            static_cast<ffe::f32>(w), static_cast<ffe::f32>(h),
+            clamp01(r), clamp01(g), clamp01(b), clamp01(a));
+        return 0;
+    });
+    lua_setfield(L, -2, "drawRect");
+
     // ffe.getScreenWidth() -> number
     // ffe.getScreenHeight() -> number
     // Returns the screen dimensions in pixels. Useful for centering text.

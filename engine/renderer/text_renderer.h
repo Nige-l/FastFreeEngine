@@ -43,6 +43,12 @@ void drawText(TextRenderer& tr, const char* text,
               f32 x, f32 y, f32 scale,
               f32 r, f32 g, f32 b, f32 a);
 
+// Queue a filled rectangle for rendering. Same coordinate space as drawText.
+// Uses the font atlas's solid-white cell so no extra texture bind is needed.
+void drawRect(TextRenderer& tr,
+              f32 x, f32 y, f32 width, f32 height,
+              f32 r, f32 g, f32 b, f32 a);
+
 // Flush all queued text. Renders using the provided sprite batch.
 // Sets up a screen-space ortho projection internally, then restores the
 // previous VP matrix after rendering. Call after world sprite rendering.

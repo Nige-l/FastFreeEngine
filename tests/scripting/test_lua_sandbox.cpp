@@ -2228,3 +2228,31 @@ TEST_CASE("ffe.getScreenWidth/Height return TextRenderer dimensions", "[scriptin
     REQUIRE(fix.engine.doString("assert(ffe.getScreenWidth() == 1280)"));
     REQUIRE(fix.engine.doString("assert(ffe.getScreenHeight() == 720)"));
 }
+
+// =============================================================================
+// drawRect binding
+// =============================================================================
+
+TEST_CASE("ffe.drawRect queues a glyph quad", "[scripting][text]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    ffe::renderer::TextRenderer tr{};
+    tr.screenWidth  = 1280.0f;
+    tr.screenHeight = 720.0f;
+    tr.glyphCount   = 0;
+    tr.glyphs       = static_cast<ffe::renderer::GlyphQuad*>(
+        std::malloc(ffe::renderer::MAX_TEXT_GLYPHS * sizeof(ffe::renderer::GlyphQuad)));
+    world.registry().ctx().emplace<ffe::renderer::TextRenderer*>(&tr);
+
+    ffe::renderer::beginText(tr);
+    REQUIRE(fix.engine.doString("ffe.drawRect(10, 20, 200, 50, 0, 0, 0, 0.7)"));
+    REQUIRE(tr.glyphCount == 1);
+    REQUIRE(tr.glyphs[0].x == Catch::Approx(10.0f));
+    REQUIRE(tr.glyphs[0].width == Catch::Approx(200.0f));
+    REQUIRE(tr.glyphs[0].a == Catch::Approx(0.7f));
+
+    std::free(tr.glyphs);
+    tr.glyphs = nullptr;
+}

@@ -446,19 +446,23 @@ function update(entityId, dt)
     end
 
     -- HUD: score display
-    ffe.drawText(tostring(scoreLeft), 560, 30, 5, 0.4, 0.7, 1.0, 0.9)
-    ffe.drawText(tostring(scoreRight), 680, 30, 5, 1.0, 0.5, 0.4, 0.9)
-    ffe.drawText("-", 630, 30, 5, 0.5, 0.5, 0.5, 0.7)
+    ffe.drawRect(530, 20, 220, 50, 0, 0, 0, 0.5)
+    ffe.drawText(tostring(scoreLeft), 560, 25, 5, 0.4, 0.7, 1.0, 0.9)
+    ffe.drawText("-", 630, 25, 5, 0.5, 0.5, 0.5, 0.7)
+    ffe.drawText(tostring(scoreRight), 680, 25, 5, 1.0, 0.5, 0.4, 0.9)
 
     if serving and not gameOver then
-        ffe.drawText("SPACE TO SERVE", 480, 400, 3, 0.7, 0.7, 0.8, 0.6 + 0.4 * math.sin(gameTime * 4))
+        ffe.drawRect(450, 390, 380, 36, 0, 0, 0, 0.5)
+        ffe.drawText("SPACE TO SERVE", 480, 394, 3, 0.7, 0.7, 0.8, 0.6 + 0.4 * math.sin(gameTime * 4))
     end
     if gameOver then
         local winner = scoreLeft >= WIN_SCORE and "LEFT" or "RIGHT"
-        ffe.drawText(winner .. " WINS!", 440, 320, 5, 1, 1, 0.3, 1)
-        ffe.drawText("SPACE TO RESTART", 460, 420, 3, 0.7, 0.7, 0.8, 0.6 + 0.4 * math.sin(gameTime * 4))
+        ffe.drawRect(400, 310, 480, 130, 0, 0, 0, 0.6)
+        ffe.drawText(winner .. " WINS!", 440, 316, 5, 1, 1, 0.3, 1)
+        ffe.drawText("SPACE TO RESTART", 460, 414, 3, 0.7, 0.7, 0.8, 0.6 + 0.4 * math.sin(gameTime * 4))
     end
-    ffe.drawText("W/S | UP/DOWN | M music | ESC quit", 330, 690, 2, 0.4, 0.4, 0.5, 0.6)
+    ffe.drawRect(300, 682, 680, 28, 0, 0, 0, 0.4)
+    ffe.drawText("W/S | UP/DOWN | M music | ESC quit", 330, 686, 2, 0.4, 0.4, 0.5, 0.6)
 end
 
 -- ---------------------------------------------------------------------------

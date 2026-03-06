@@ -614,24 +614,29 @@ function update(entityId, dt)
     end
 
     -- HUD: score and lives
-    ffe.drawText("SCORE: " .. tostring(score), 20, 20, 3, 1, 1, 1, 1)
-    -- Draw life indicators
+    local scoreStr = "SCORE: " .. tostring(score)
+    ffe.drawRect(10, 10, #scoreStr * 24 + 20, 38, 0, 0, 0, 0.5)
+    ffe.drawText(scoreStr, 20, 16, 3, 1, 1, 1, 1)
     local livesStr = "LIVES: "
     for i = 1, lives do livesStr = livesStr .. "<3 " end
-    ffe.drawText(livesStr, 1020, 20, 3, 1, 0.3, 0.3, 1)
+    ffe.drawRect(1000, 10, #livesStr * 24 + 20, 38, 0, 0, 0, 0.5)
+    ffe.drawText(livesStr, 1010, 16, 3, 1, 0.3, 0.3, 1)
 
     if not ballLaunched and not gameOver then
-        ffe.drawText("SPACE TO LAUNCH", 460, 500, 3, 0.7, 0.7, 0.8, 0.6 + 0.4 * math.sin(gameTime * 4))
+        ffe.drawRect(430, 490, 420, 36, 0, 0, 0, 0.5)
+        ffe.drawText("SPACE TO LAUNCH", 460, 494, 3, 0.7, 0.7, 0.8, 0.6 + 0.4 * math.sin(gameTime * 4))
     end
     if gameOver then
+        ffe.drawRect(390, 310, 500, 130, 0, 0, 0, 0.6)
         if gameWon then
-            ffe.drawText("YOU WIN!", 460, 320, 5, 0.3, 1, 0.3, 1)
+            ffe.drawText("YOU WIN!", 460, 316, 5, 0.3, 1, 0.3, 1)
         else
-            ffe.drawText("GAME OVER", 430, 320, 5, 1, 0.3, 0.3, 1)
+            ffe.drawText("GAME OVER", 430, 316, 5, 1, 0.3, 0.3, 1)
         end
-        ffe.drawText("SPACE TO RESTART", 430, 420, 3, 0.7, 0.7, 0.8, 0.6 + 0.4 * math.sin(gameTime * 4))
+        ffe.drawText("SPACE TO RESTART", 430, 414, 3, 0.7, 0.7, 0.8, 0.6 + 0.4 * math.sin(gameTime * 4))
     end
-    ffe.drawText("A/D move | SPACE launch | M music | ESC quit", 280, 690, 2, 0.4, 0.4, 0.5, 0.6)
+    ffe.drawRect(250, 682, 780, 28, 0, 0, 0, 0.4)
+    ffe.drawText("A/D move | SPACE launch | M music | ESC quit", 280, 686, 2, 0.4, 0.4, 0.5, 0.6)
 end
 
 -- ---------------------------------------------------------------------------
