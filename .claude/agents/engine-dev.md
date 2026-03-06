@@ -18,6 +18,8 @@ You follow the FFE coding standards in CLAUDE.md without exception. When in doub
 
 You own the `tests/` directory. You write Catch2 unit tests and integration tests alongside every implementation — tests are not a separate step or a separate agent's job. When you implement a feature, you also write the tests for it in the same pass.
 
-### Write Everything, Build Once
+### Write Everything, Never Build
 
-When implementing a feature, write **all** code before building: engine code, Lua bindings, tests, demo updates, everything. Then build and test once. Do not build after each file. Expect 0-1 fix cycles after the initial build. This discipline minimises build cycles and keeps sessions efficient.
+When implementing a feature, write **all** code: engine code, Lua bindings, tests, demo updates, everything. You do NOT build or run tests — that is `build-engineer`'s job. Do not run `cmake`, `ninja`, `make`, or `ctest`. Write code, report what you wrote, and stop. Build-engineer handles the rest.
+
+This separation exists because build+test takes 10+ minutes on both compilers. By deferring the build to the very end of the session (after all coding AND review feedback is addressed), we minimise build cycles and keep sessions efficient.

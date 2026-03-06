@@ -34,7 +34,7 @@ Claude has two jobs: (1) relay between the user and the agent team, and (2) disp
 
 - **`project-manager`** — to produce plans, make decisions, write devlog
 - **`director`** — only when the user explicitly asks to review or change the agent team structure, CLAUDE.md, or the process itself
-- **Any agent PM specifies in its plan** — `architect`, `engine-dev`, `renderer-specialist`, `api-designer`, `game-dev-tester`, `performance-critic`, `security-auditor`, `system-engineer` — but ONLY when PM's plan calls for it
+- **Any agent PM specifies in its plan** — `architect`, `engine-dev`, `renderer-specialist`, `api-designer`, `game-dev-tester`, `performance-critic`, `security-auditor`, `system-engineer`, `build-engineer` — but ONLY when PM's plan calls for it
 
 Claude must NEVER decide on its own which implementation, review, or design agent to invoke. That decision belongs to PM.
 
@@ -224,6 +224,7 @@ Each directory has a clear owner. Agents do not write to directories they do not
 - `performance-critic` — reads and reports, never fixes
 - `security-auditor` — reads and reports, never fixes
 - `game-dev-tester` — writes test games only, never modifies engine code
+- `build-engineer` — builds and runs tests only, never fixes code
 
 ---
 
@@ -231,9 +232,9 @@ Each directory has a clear owner. Agents do not write to directories they do not
 
 **`project-manager` is the sole planner of agent work.** All routing rules in this section define PM's plan. PM decides which agents run, in what order, and whether they run in parallel or sequentially. Claude then dispatches those agents exactly as PM specifies. Claude does not decide which agents to invoke or in what order — that authority belongs to PM. If Claude dispatches an agent that PM did not include in the plan, that is a process violation.
 
-### 3-Phase Development Flow
+### 5-Phase Development Flow
 
-Every feature follows this flow. PM dispatches each phase.
+Every feature follows this flow. PM dispatches each phase. The key principle: **all coding and review happens before any build step.** Build+test is expensive (10+ minutes on both compilers) and only happens once at the end.
 
 #### Phase 1 — Design (sequential, skip if trivial)
 
@@ -242,17 +243,17 @@ Every feature follows this flow. PM dispatches each phase.
 
 Skip Phase 1 entirely for straightforward features where the implementation path is obvious and no new attack surface is introduced.
 
-#### Phase 2 — Implementation (single pass, one build)
+#### Phase 2 — Implementation (write only, NO build)
 
 1. `engine-dev` (or `renderer-specialist`) implements the feature, Lua bindings, tests, and demo updates in **one pass**
-2. **No intermediate builds** — write all code, then build and test once
-3. If build/tests fail, fix and rebuild (expect 0-1 fix cycles)
+2. **engine-dev does NOT build or run tests** — that is `build-engineer`'s job in Phase 5
+3. engine-dev reports what files were written/modified and stops
 
 `engine-dev` owns `tests/` and writes Catch2 tests alongside the implementation. There is no separate test-writing step.
 
-#### Phase 3 — Expert Panel (parallel — MUST be dispatched simultaneously)
+#### Phase 3 — Expert Panel (parallel — MUST be dispatched simultaneously, NO build)
 
-All three reviewers run in parallel with zero dependencies between them:
+All reviewers run in parallel with zero dependencies between them:
 
 - `performance-critic` (always)
 - `security-auditor` post-implementation review (only if the feature touches attack surface per Section 5)
@@ -260,10 +261,24 @@ All three reviewers run in parallel with zero dependencies between them:
 
 These are all read-only agents. **Sequential dispatch of Phase 3 agents is a process violation.** They have no dependencies on each other and must run simultaneously.
 
-#### Phase 4 — Remediation (if needed)
+#### Phase 4 — Remediation (write only, NO build)
 
-- **BLOCK or CRITICAL findings:** `engine-dev` fixes, rebuilds, reviewers re-check
-- **All PASS or MINOR ISSUES:** commit
+- **BLOCK or CRITICAL findings:** `engine-dev` fixes the code. Does NOT build.
+- **All PASS or MINOR ISSUES:** skip to Phase 5
+
+Any feedback from api-designer (`.context.md` updates, doc fixes) is also addressed here — before any build step.
+
+#### Phase 5 — Build + Test (`build-engineer`)
+
+`build-engineer` is invoked **once** after all code writing and review feedback is complete:
+
+1. Build on Clang-18 + run all tests
+2. Build on GCC-13 + run all tests
+3. Report results (test count, warnings, pass/fail, exact errors if any)
+
+If build fails: `engine-dev` fixes -> `build-engineer` rebuilds (expect 0-1 fix cycles). `build-engineer` does NOT fix code — it only reports errors.
+
+After Phase 5 passes: **commit.**
 
 ### game-dev-tester: Conditional Only
 
@@ -275,16 +290,17 @@ If `game-dev-tester` is not invoked, document the skip in the devlog.
 
 ### Build Cycle Rules
 
-- **Build once** after all Phase 2 code is written
-- **Build once** after Phase 4 fixes (if needed)
-- **Never build** during design (Phase 1) or read-only reviews (Phase 3)
+- **Never build** during implementation (Phase 2), reviews (Phase 3), or remediation (Phase 4)
+- **Build once** in Phase 5 after ALL code and review feedback is addressed
+- **Rebuild once** in Phase 5 if the first build fails (after engine-dev fixes)
+- `build-engineer` is the only agent that runs build/test commands
 
 ### Multi-Feature Sessions
 
 When a session includes multiple features:
 - Parallelize Phase 2 if features touch different directories with no shared headers
-- **One build** after all implementation completes
 - Phase 3 reviews everything in **one pass** (reviewers see all changes at once)
+- **One Phase 5** after all implementation and remediation completes
 
 ### Shift-Left Security Review
 

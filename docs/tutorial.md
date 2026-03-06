@@ -273,14 +273,14 @@ The built-in font is 8x8 pixels per character. Multiply by the scale factor to c
 Trigger screen shake for impact moments:
 
 ```lua
--- Small shake on hit (4 pixels, 0.12 seconds)
-ffe.cameraShake(4, 0.12)
+-- Small shake on brick hit (0.3 intensity, 0.04 seconds)
+ffe.cameraShake(0.3, 0.04)
 
--- Big shake on explosion (12 pixels, 0.3 seconds)
-ffe.cameraShake(12, 0.3)
+-- Bigger shake on losing a life (1.2 intensity, 0.10 seconds)
+ffe.cameraShake(1.2, 0.10)
 ```
 
-The shake decays exponentially (punchy start, smooth fade). A new shake replaces any active one.
+The `intensity` parameter sets the base pixel offset (clamped to [0, 100] on input). The shake decays exponentially (punchy start, smooth fade), and the **effective on-screen offset is hard-capped at 3 pixels** regardless of the intensity value. This keeps the effect readable on all screen sizes. In practice, values between 0.2 and 2.0 cover the useful range. A new shake replaces any active one.
 
 ---
 

@@ -2111,3 +2111,77 @@ Particle API follows established patterns (addComponent, start/stop, config tabl
 - P2: Save/load system (serialise game state to disk)
 
 ---
+
+
+## 2026-03-06 -- Session 33: Camera Shake + Particle Remediation (Retroactive Log)
+
+### Summary
+Expert panel remediation from Session 32. Camera shake algorithm rewrite and particle system hardening.
+
+### Camera Shake Rewrite (`701ed09`)
+- Replaced linear decay with **exponential decay** (smoother falloff)
+- Lowered shake frequency (less jittery)
+- Removed `std::round` pixel-snapping (was causing stutter at low intensities)
+- Added **3px max offset cap** — shake is now subtle and never overwhelming
+- Fixes user feedback from Session 27 that shake "looked like a visual bug"
+
+### Particle System Remediation (`f8ab683`)
+- Added `sortOrder` Lua binding (was missing — particles rendered at default layer)
+- Added `std::isfinite()` guards on all float config values from Lua (reject NaN/Inf)
+- Lifetime clamping to prevent zero or negative lifetimes
+
+### Build Results
+- 435 tests passing on both Clang-18 and GCC-13, zero warnings
+
+### Next Session Should Start With
+- Camera shake HUD fix (life indicator entities affected by shake)
+- UI sizing review across demos
+
+---
+
+
+## 2026-03-06 -- Session 34: Process Change + Camera Shake HUD Fix + UI Sizing
+
+### Process Changes
+- **New agent: `build-engineer`** — dedicated agent for build/compile/test execution, separated from design and implementation agents
+- **CLAUDE.md Section 7 rewrite**: replaced 3-phase development flow with **5-phase flow**:
+  - Phase 1 (Design), Phase 2 (Implementation), Phase 3 (Expert Panel), Phase 4 (Remediation), Phase 5 (Build — deferred to end of session)
+  - Build is now deferred to the end of a session rather than running mid-flow, reducing wasted build cycles
+- **engine-dev.md updated** to reflect new flow and build-engineer handoff
+
+### Camera Shake HUD Fix
+- **Problem**: Breakout life indicator entities were world-space sprites, meaning they moved with camera shake — looked broken
+- **Fix**: Removed life indicator entities entirely; lives now displayed only via `ffe.drawText()` HUD (screen-space, immune to camera shake)
+- This is the correct pattern going forward: all HUD elements should use `drawText`/`drawRect`, never world-space entities
+
+### Shake Intensity Reductions
+- Reduced `cameraShake()` intensity values across all 3 demos:
+  - `breakout.lua` — lowered shake on brick break and ball loss
+  - `pong.lua` — lowered shake on score events
+  - `lua_demo/game.lua` — lowered shake on collisions
+
+### UI Sizing Fix
+- Breakout HUD text reduced from scale 3 to scale 2 (was too large)
+- Lives display right-aligned using `ffe.getScreenWidth()` (no longer hardcoded position)
+- All HUD elements verified to fit within 1280x720 viewport
+
+### Documentation Updates
+- `docs/tutorial.md`: updated camera shake section to document 3px render cap
+- `engine/scripting/.context.md`: updated cameraShake docs with render cap behaviour
+
+### Expert Panel
+- **performance-critic**: PASS
+- **security-auditor**: not triggered (no new attack surface)
+
+### game-dev-tester: SKIPPED
+No new API paradigm — changes are config adjustments and removal of incorrect entity-based HUD pattern.
+
+### Build Results
+- 435 tests passing on both Clang-18 and GCC-13, zero warnings
+
+### Next Session Should Start With
+- P0: Gamepad input (needs dependency decision: GLFW gamepad API vs SDL)
+- P1: TTF font rendering (stb_truetype, scalable text)
+- P2: Save/load system (serialise game state to disk)
+
+---

@@ -82,9 +82,6 @@ local trail          = {}
 local paddleFlashTimer = 0
 local paddleBaseColor  = {0.9, 0.9, 0.9}
 
--- Life indicator entities
-local lifeIndicators = {}
-
 -- ---------------------------------------------------------------------------
 -- Brick colors by row (top to bottom: red, orange, yellow, green, cyan, blue)
 -- ---------------------------------------------------------------------------
@@ -216,22 +213,6 @@ local function updateTrail(bx, by, dt)
 end
 
 -- ---------------------------------------------------------------------------
--- Life indicators
--- ---------------------------------------------------------------------------
-local function createLifeIndicators()
-    for i = 1, #lifeIndicators do
-        ffe.destroyEntity(lifeIndicators[i])
-    end
-    lifeIndicators = {}
-    for i = 1, lives do
-        local x = -HALF_W + 20 + (i - 1) * 18
-        local y = -HALF_H + 20
-        local id = createRect(x, y, 12, 12, 1, 0.4, 0.4, 5)
-        lifeIndicators[i] = id
-    end
-end
-
--- ---------------------------------------------------------------------------
 -- Helper: create all bricks
 -- ---------------------------------------------------------------------------
 local function createBricks()
@@ -292,13 +273,7 @@ end
 local function loseLife()
     lives = lives - 1
     if sfxLose then ffe.playSound(sfxLose, 0.5) end
-    ffe.cameraShake(2.5, 0.12)
-
-    -- Remove a life indicator
-    if #lifeIndicators > 0 then
-        ffe.destroyEntity(lifeIndicators[#lifeIndicators])
-        lifeIndicators[#lifeIndicators] = nil
-    end
+    ffe.cameraShake(1.2, 0.10)
 
     if lives <= 0 then
         gameOver = true
@@ -332,7 +307,6 @@ local function restartGame()
     ballSpeed  = BALL_SPEED
 
     createBricks()
-    createLifeIndicators()
     resetBall()
     updateHud()
 end
@@ -370,7 +344,6 @@ createRect(HALF_W - 2, 0, 4, HALF_H * 2, 0.3, 0.3, 0.3, 0)    -- right
 math.randomseed(42)
 createBricks()
 initTrail()
-createLifeIndicators()
 
 ffe.setBackgroundColor(0.06, 0.04, 0.08)
 ffe.log("Breakout ready! Press SPACE to launch.")
@@ -417,7 +390,9 @@ function update(entityId, dt)
 
         local alpha = 0.5 + 0.5 * math.sin(gameTime * 3)
         ffe.drawText("PRESS SPACE TO START", sw / 2 - 160, 400, 2, 1, 1, 1, alpha)
-        ffe.drawText("A/D or LEFT/RIGHT to move | M music | ESC quit", sw / 2 - 188 * 2, 500, 2, 0.4, 0.4, 0.5, 0.6)
+        local ctrlStr = "A/D or LEFT/RIGHT to move | M music | ESC quit"
+        local ctrlW = #ctrlStr * 16
+        ffe.drawText(ctrlStr, sw / 2 - ctrlW / 2, 500, 2, 0.4, 0.4, 0.5, 0.6)
 
         if ffe.isKeyPressed(ffe.KEY_SPACE) then
             gameState = "playing"
@@ -558,7 +533,7 @@ function update(entityId, dt)
 
                 -- Spawn particles and screen shake
                 spawnParticles(brick.x, brick.y, brick.r, brick.g, brick.b, 5)
-                ffe.cameraShake(1, 0.06)
+                ffe.cameraShake(0.3, 0.04)
 
                 -- Speed up ball slightly
                 ballSpeed = math.min(BALL_MAX_SPEED, ballSpeed + 3)
@@ -614,29 +589,39 @@ function update(entityId, dt)
     end
 
     -- HUD: score and lives
+    local sw = ffe.getScreenWidth()
     local scoreStr = "SCORE: " .. tostring(score)
-    ffe.drawRect(10, 10, #scoreStr * 24 + 20, 38, 0, 0, 0, 0.5)
-    ffe.drawText(scoreStr, 20, 16, 3, 1, 1, 1, 1)
+    local scoreW = #scoreStr * 16 + 20
+    ffe.drawRect(10, 10, scoreW, 30, 0, 0, 0, 0.5)
+    ffe.drawText(scoreStr, 20, 14, 2, 1, 1, 1, 1)
     local livesStr = "LIVES: "
     for i = 1, lives do livesStr = livesStr .. "<3 " end
-    ffe.drawRect(1000, 10, #livesStr * 24 + 20, 38, 0, 0, 0, 0.5)
-    ffe.drawText(livesStr, 1010, 16, 3, 1, 0.3, 0.3, 1)
+    local livesW = #livesStr * 16 + 20
+    local livesX = sw - livesW - 10
+    ffe.drawRect(livesX, 10, livesW, 30, 0, 0, 0, 0.5)
+    ffe.drawText(livesStr, livesX + 10, 14, 2, 1, 0.3, 0.3, 1)
 
     if not ballLaunched and not gameOver then
-        ffe.drawRect(430, 490, 420, 36, 0, 0, 0, 0.5)
-        ffe.drawText("SPACE TO LAUNCH", 460, 494, 3, 0.7, 0.7, 0.8, 0.6 + 0.4 * math.sin(gameTime * 4))
+        local launchStr = "SPACE TO LAUNCH"
+        local launchW = #launchStr * 16 + 20
+        local launchX = (sw - launchW) / 2
+        ffe.drawRect(launchX, 490, launchW, 30, 0, 0, 0, 0.5)
+        ffe.drawText(launchStr, launchX + 10, 494, 2, 0.7, 0.7, 0.8, 0.6 + 0.4 * math.sin(gameTime * 4))
     end
     if gameOver then
-        ffe.drawRect(390, 310, 500, 130, 0, 0, 0, 0.6)
+        ffe.drawRect(390, 310, 500, 110, 0, 0, 0, 0.6)
         if gameWon then
-            ffe.drawText("YOU WIN!", 460, 316, 5, 0.3, 1, 0.3, 1)
+            ffe.drawText("YOU WIN!", 460, 316, 4, 0.3, 1, 0.3, 1)
         else
-            ffe.drawText("GAME OVER", 430, 316, 5, 1, 0.3, 0.3, 1)
+            ffe.drawText("GAME OVER", 430, 316, 4, 1, 0.3, 0.3, 1)
         end
-        ffe.drawText("SPACE TO RESTART", 430, 414, 3, 0.7, 0.7, 0.8, 0.6 + 0.4 * math.sin(gameTime * 4))
+        ffe.drawText("SPACE TO RESTART", 450, 390, 2, 0.7, 0.7, 0.8, 0.6 + 0.4 * math.sin(gameTime * 4))
     end
-    ffe.drawRect(250, 682, 780, 28, 0, 0, 0, 0.4)
-    ffe.drawText("A/D move | SPACE launch | M music | ESC quit", 280, 686, 2, 0.4, 0.4, 0.5, 0.6)
+    local barStr = "A/D move | SPACE launch | M music | ESC quit"
+    local barW = #barStr * 16 + 20
+    local barX = (sw - barW) / 2
+    ffe.drawRect(barX, 682, barW, 28, 0, 0, 0, 0.4)
+    ffe.drawText(barStr, barX + 10, 686, 2, 0.4, 0.4, 0.5, 0.6)
 end
 
 -- ---------------------------------------------------------------------------
