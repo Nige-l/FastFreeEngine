@@ -140,7 +140,7 @@ void pongSystem(ffe::World& world, const float dt)
 int main()
 {
     ffe::ApplicationConfig config;
-    config.windowTitle  = "FFE - Pong (W/S, Up/Down, Space serve, F1 editor, ESC quit)";
+    config.windowTitle  = "FFE - Pong (W/S, Up/Down, Space, M music, F1 editor, ESC quit)";
     config.windowWidth  = 1280;
     config.windowHeight = 720;
     config.headless     = false;

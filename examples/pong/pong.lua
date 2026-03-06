@@ -3,7 +3,7 @@
 -- Two-player Pong: left paddle (W/S), right paddle (UP/DOWN).
 -- Press SPACE to serve. First to 5 wins.
 --
--- Exercises: input, collision, entity lifecycle, HUD, audio, transforms.
+-- Exercises: input, collision, entity lifecycle, HUD, audio (music + SFX), transforms.
 --
 -- Coordinate system: centered origin, x: -640..640, y: -360..360.
 -- Window: 1280x720.
@@ -30,7 +30,11 @@ local leftPaddle     = nil
 local rightPaddle    = nil
 local ball           = nil
 local whiteTex       = nil
-local sfxHandle      = nil
+local sfxPaddle      = nil
+local sfxWall        = nil
+local sfxScore       = nil
+local musicHandle    = nil
+local musicPlaying   = false
 
 local scoreLeft      = 0
 local scoreRight     = 0
@@ -50,13 +54,13 @@ local function updateHud()
     if gameOver then
         local winner = scoreLeft >= WIN_SCORE and "LEFT" or "RIGHT"
         ffe.setHudText(winner .. " WINS!  " .. scoreLeft .. " - " .. scoreRight ..
-                       "  |  Press SPACE to restart  |  ESC quit")
+                       "  |  SPACE restart  |  M music  |  ESC quit")
     elseif serving then
         ffe.setHudText(scoreLeft .. " - " .. scoreRight ..
-                       "  |  Press SPACE to serve  |  W/S  Up/Down  |  ESC quit")
+                       "  |  SPACE serve  |  W/S  Up/Down  |  M music  |  ESC quit")
     else
         ffe.setHudText(scoreLeft .. " - " .. scoreRight ..
-                       "  |  W/S  Up/Down  |  ESC quit")
+                       "  |  W/S  Up/Down  |  M music  |  ESC quit")
     end
 end
 
@@ -108,7 +112,7 @@ local function scorePoint(side)
         scoreRight = scoreRight + 1
     end
 
-    if sfxHandle then ffe.playSound(sfxHandle, 0.6) end
+    if sfxScore then ffe.playSound(sfxScore, 0.6) end
 
     if scoreLeft >= WIN_SCORE or scoreRight >= WIN_SCORE then
         gameOver = true
@@ -137,8 +141,19 @@ end
 -- ---------------------------------------------------------------------------
 
 -- Load assets
-whiteTex  = ffe.loadTexture("white.png")
-sfxHandle = ffe.loadSound("sfx.wav")
+whiteTex    = ffe.loadTexture("white.png")
+sfxPaddle   = ffe.loadSound("sfx_pong_paddle.wav")
+sfxWall     = ffe.loadSound("sfx_pong_wall.wav")
+sfxScore    = ffe.loadSound("sfx_pong_score.wav")
+musicHandle = ffe.loadSound("music_pixelcrown.ogg")
+
+-- Start background music
+if musicHandle then
+    ffe.playMusic(musicHandle, true)
+    ffe.setMusicVolume(0.2)
+    musicPlaying = true
+    ffe.log("Music started (vol=0.2, M to toggle)")
+end
 
 -- Create paddles
 leftPaddle  = createRect(-PADDLE_X, 0, PADDLE_W, PADDLE_H, 0.4, 0.7, 1.0, 2)
@@ -169,6 +184,17 @@ function update(entityId, dt)
     if ffe.isKeyPressed(ffe.KEY_ESCAPE) then
         ffe.requestShutdown()
         return
+    end
+
+    -- M to toggle music
+    if musicHandle and ffe.isKeyPressed(ffe.KEY_M) then
+        if musicPlaying then
+            ffe.stopMusic()
+            musicPlaying = false
+        else
+            ffe.playMusic(musicHandle, true)
+            musicPlaying = true
+        end
     end
 
     -- SPACE to serve or restart
@@ -213,9 +239,11 @@ function update(entityId, dt)
         if by > HALF_H - halfBall - 4 then
             by = HALF_H - halfBall - 4
             ballVy = -ballVy
+            if sfxWall then ffe.playSound(sfxWall, 0.3) end
         elseif by < -(HALF_H - halfBall - 4) then
             by = -(HALF_H - halfBall - 4)
             ballVy = -ballVy
+            if sfxWall then ffe.playSound(sfxWall, 0.3) end
         end
 
         -- Check paddle collisions (manual AABB since paddles don't use collision system)
@@ -237,7 +265,7 @@ function update(entityId, dt)
                     ballSpeed = math.min(MAX_BALL_SPEED, ballSpeed + BALL_SPEED_INC)
                     ballVx = math.cos(angle) * ballSpeed
                     ballVy = math.sin(angle) * ballSpeed
-                    if sfxHandle then ffe.playSound(sfxHandle, 0.4) end
+                    if sfxPaddle then ffe.playSound(sfxPaddle, 0.5) end
                 end
             end
         end
@@ -256,7 +284,7 @@ function update(entityId, dt)
                     ballSpeed = math.min(MAX_BALL_SPEED, ballSpeed + BALL_SPEED_INC)
                     ballVx = -math.cos(angle) * ballSpeed
                     ballVy = math.sin(angle) * ballSpeed
-                    if sfxHandle then ffe.playSound(sfxHandle, 0.4) end
+                    if sfxPaddle then ffe.playSound(sfxPaddle, 0.5) end
                 end
             end
         end
@@ -280,11 +308,19 @@ end
 function shutdown()
     ffe.log("Pong final score: " .. scoreLeft .. " - " .. scoreRight)
 
-    if sfxHandle then
-        ffe.unloadSound(sfxHandle)
-        sfxHandle = nil
+    -- Stop music
+    if musicHandle then
+        if ffe.isMusicPlaying() then ffe.stopMusic() end
+        ffe.unloadSound(musicHandle)
+        musicHandle = nil
     end
 
+    -- Unload SFX
+    if sfxPaddle then ffe.unloadSound(sfxPaddle); sfxPaddle = nil end
+    if sfxWall   then ffe.unloadSound(sfxWall);   sfxWall   = nil end
+    if sfxScore  then ffe.unloadSound(sfxScore);  sfxScore  = nil end
+
+    -- Unload texture
     if whiteTex then
         ffe.unloadTexture(whiteTex)
         whiteTex = nil

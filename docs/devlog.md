@@ -1579,3 +1579,29 @@ Session 20 handover document written at `docs/session20-handover.md`.
 
 ---
 
+## 2026-03-06 — Session 20: Pong Audio Polish
+
+### Planned
+- P0: Add background music and distinct SFX to Pong
+- P1: Verify builds and tests after changes
+
+### Completed
+- **Pong audio polish:**
+  - Three distinct SFX: paddle hit (440Hz, 80ms), wall bounce (660Hz, 50ms), score (220→110Hz sweep, 300ms)
+  - Background music (Pixel Crown OGG, looping, vol 0.2)
+  - M key toggles music on/off
+  - Clean resource cleanup in shutdown()
+  - HUD text updated with music control hint
+- **All 348 tests pass** on both Clang-18 and GCC-13
+- **Both compilers build clean**, zero warnings
+
+### Next Session Should Start With
+- P0: Console/log viewer panel (stretch goal since Session 13)
+- P1: Third example game or API tutorial
+- P2: Screenshots/GIFs for README
+- P3: Contributing guide
+
+Session 21 handover document written at `docs/session21-handover.md`.
+
+---
+
