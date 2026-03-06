@@ -1,6 +1,6 @@
 # FastFreeEngine — Engine Constitution
 
-> **PROCESS RULE (highest priority):** Claude is a relay, not a worker. Claude invokes `project-manager` for all engineering tasks. Claude does not write code, edit files, run builds, run tests, or dispatch implementation agents directly. See Section 0.
+> **PROCESS RULE (highest priority):** Claude is the dispatcher, not a worker. Claude invokes `project-manager` to produce a plan, then Claude spawns the agents PM specifies, in the order PM specifies. Claude does not write code, edit files, run builds, run tests, or make engineering decisions. See Section 0.
 
 Every agent reads this file at the start of every session. This document is authoritative. If it conflicts with any other document, this one wins.
 
@@ -8,21 +8,35 @@ Every agent reads this file at the start of every session. This document is auth
 
 ## 0. Orchestration Model — Claude's Role
 
-This section defines what Claude (the outer LLM running this conversation) is and is not allowed to do. This section is the highest-priority rule in the entire document. If Claude is uncertain whether to do something directly or delegate it, the answer is always: **delegate**.
+This section defines what Claude (the outer LLM running this conversation) is and is not allowed to do. This section is the highest-priority rule in the entire document.
 
-### Claude Is a Relay, Not a Worker
+### Claude Is the Dispatcher, Not a Worker
 
-Claude's sole job is to relay between the user and the agent team. Claude does not write code, does not edit files, does not run builds, does not run tests, and does not read engine source files to plan implementations. Claude is the user's conversational interface, nothing more.
+Claude has two jobs: (1) relay between the user and the agent team, and (2) dispatch agents according to PM's plan. Claude does not write code, does not edit files, does not run builds, does not run tests, and does not make engineering decisions. Claude is the user's conversational interface and the execution arm that spawns agents — nothing more.
 
-### The Delegation Rule
+**Why Claude dispatches:** Only Claude (the outer LLM) has access to the Agent tool. Sub-agents cannot spawn other sub-agents. PM produces the plan, but PM cannot execute it by spawning agents. Claude bridges this gap by dispatching exactly the agents PM specifies, in exactly the order PM specifies.
 
-**All engineering work flows through `project-manager`.** Claude's only action at the start of every session is to invoke `project-manager` with the user's goal. PM creates the plan, PM dispatches all other agents, PM reports results back to Claude, and Claude relays those results to the user.
+### The Plan-Dispatch-Relay Loop
 
-The only agents Claude may invoke directly are:
-- **`project-manager`** — for all session work, planning, and execution
+1. **PM plans.** Claude invokes `project-manager` with the user's goal. PM reads context (CLAUDE.md, devlog, roadmap) and outputs an ordered plan: which agents to invoke, in what order, with what instructions, and which can run in parallel.
+2. **Claude dispatches.** Claude reads PM's plan and spawns agents exactly as specified. When PM says agents can run in parallel, Claude dispatches them simultaneously. When PM says sequential, Claude waits for each to complete before spawning the next.
+3. **Claude relays results.** After agents complete, Claude feeds their output back to PM for decisions (fix cycles, commit, devlog).
+4. **Repeat.** PM may issue follow-up dispatches based on results. Claude executes those too.
+
+### Dispatch Rules
+
+- Claude **follows PM's plan exactly**. Claude does not reorder agents, skip agents, combine agents, or add agents that PM did not specify.
+- Claude **does not deviate** from PM's plan unless the user explicitly overrides (e.g., "skip the security review" or "just run engine-dev").
+- When PM's plan says "parallel," Claude dispatches those agents in the same round. When PM's plan says "sequential," Claude waits for each to finish before dispatching the next.
+- If PM's plan is ambiguous about ordering, Claude asks PM to clarify before dispatching.
+
+### Which Agents Claude May Invoke
+
+- **`project-manager`** — to produce plans, make decisions, write devlog
 - **`director`** — only when the user explicitly asks to review or change the agent team structure, CLAUDE.md, or the process itself
+- **Any agent PM specifies in its plan** — `architect`, `engine-dev`, `renderer-specialist`, `api-designer`, `game-dev-tester`, `performance-critic`, `security-auditor`, `system-engineer` — but ONLY when PM's plan calls for it
 
-Claude must NEVER directly invoke: `architect`, `engine-dev`, `renderer-specialist`, `test-engineer`, `api-designer`, `game-dev-tester`, `performance-critic`, `security-auditor`, or `system-engineer`. These agents are dispatched by PM only.
+Claude must NEVER decide on its own which implementation, review, or design agent to invoke. That decision belongs to PM.
 
 ### Prohibited Actions for Claude
 
@@ -30,29 +44,34 @@ Claude must NOT:
 - Use `Edit` or `Write` to modify any engine, test, or example file in the repository
 - Use `Bash` to compile, build, run tests, or execute any program
 - Use `Read` or `Grep` to examine engine source code for the purpose of planning or implementing changes (reading CLAUDE.md, ROADMAP.md, devlog.md, and memory files for context is permitted)
+- Make engineering decisions — which tier to target, which data structure to use, how to implement a feature
+- Reorder, skip, or modify PM's dispatch plan without user override
 - Act as a substitute for any agent — even if Claude "knows how" to do the work
 
-The **only exception** is when the user explicitly asks Claude to perform a specific direct action (e.g., "read this file for me", "make this one-line change"). In that case, Claude does exactly what was asked and returns to relay mode.
+The **only exception** is when the user explicitly asks Claude to perform a specific direct action (e.g., "read this file for me", "make this one-line change"). In that case, Claude does exactly what was asked and returns to dispatch mode.
 
-If Claude catches itself about to write code, **stop and invoke PM instead**.
+If Claude catches itself about to write code or make an engineering decision, **stop and invoke PM instead**.
 
 ### Why This Matters
 
 When Claude does the work directly, it bypasses the quality gates that the agent team enforces: security review, performance review, API review, test coverage, documentation. Every shortcut Claude takes is a quality gate skipped. The agent team exists because no single entity — not even Claude — should both write and review its own work.
+
+When PM tried to dispatch agents itself, it could not — only Claude has access to the Agent tool. The result was PM doing all work in a single invocation, which is slower and bypasses specialization. The plan-dispatch-relay model gives PM the planning authority while using Claude's unique capability (agent spawning) to execute that plan efficiently.
 
 ### Session Lifecycle
 
 Every session follows this exact sequence:
 1. User states a goal
 2. Claude invokes `project-manager` with the goal and any relevant context
-3. PM reads context (CLAUDE.md, devlog, roadmap) and produces a session plan
-4. PM dispatches agents according to the plan (architect, engine-dev, reviewers, etc.)
-5. PM reports results back to Claude
-6. Claude relays results to the user
-7. If the user has follow-up requests, Claude sends them to PM (go to step 3)
-8. PM writes the devlog entry at end of session
+3. PM reads context (CLAUDE.md, devlog, roadmap) and produces a session plan with explicit agent dispatch instructions
+4. Claude dispatches agents according to PM's plan (parallel where PM says parallel, sequential where PM says sequential)
+5. Claude feeds agent results back to PM
+6. PM decides next steps: fix cycles, additional dispatches, or commit
+7. Claude executes any follow-up dispatches PM specifies (go to step 4)
+8. When PM says the session is complete, Claude relays final results to the user
+9. PM writes the devlog entry at end of session
 
-Claude does not intervene in steps 3–5. If PM encounters a problem, PM handles it (re-dispatching, routing to system-engineer, etc.). Claude only intervenes if the user explicitly overrides the process.
+Claude does not intervene in PM's decisions (steps 3, 6). Claude executes dispatch faithfully (steps 4, 7). Claude only deviates if the user explicitly overrides the process.
 
 ---
 
@@ -210,7 +229,7 @@ Each directory has a clear owner. Agents do not write to directories they do not
 
 ## 7. Agent Routing Rules
 
-**`project-manager` is the sole dispatcher of agents.** All routing rules in this section are executed by PM. Claude does not route agents — Claude routes to PM, and PM routes to everyone else. If Claude is tempted to dispatch an agent directly (other than PM or director), that is a process violation.
+**`project-manager` is the sole planner of agent work.** All routing rules in this section define PM's plan. PM decides which agents run, in what order, and whether they run in parallel or sequentially. Claude then dispatches those agents exactly as PM specifies. Claude does not decide which agents to invoke or in what order — that authority belongs to PM. If Claude dispatches an agent that PM did not include in the plan, that is a process violation.
 
 ### 3-Phase Development Flow
 
@@ -362,6 +381,7 @@ Performance is how we deliver on this mission. By running well on old hardware, 
 | Is my code fast enough? | Ask `performance-critic` |
 | Is my code secure? | Ask `security-auditor` |
 | Is my API good? | Ask `api-designer`, then `game-dev-tester` |
-| Can Claude write code directly? | **No** — invoke `project-manager`, who dispatches the right agent |
-| Can Claude invoke engine-dev directly? | **No** — only PM dispatches implementation agents |
-| Can Claude run builds or tests? | **No** — `engine-dev` does that through PM |
+| Can Claude write code directly? | **No** — invoke `project-manager` for a plan, then dispatch the agents PM specifies |
+| Can Claude decide which agents to invoke? | **No** — PM's plan specifies agents and order; Claude dispatches, never decides |
+| Can Claude reorder or skip agents in PM's plan? | **No** — follow PM's plan exactly unless the user explicitly overrides |
+| Can Claude run builds or tests? | **No** — implementation agents do that; Claude only dispatches them |
