@@ -148,6 +148,8 @@ void interactiveDemoSystem(ffe::World& world, const float dt)
             auto& t = world.addComponent<ffe::Transform>(bg);
             t.position = {BG_POSITIONS[i][0], BG_POSITIONS[i][1], 0.0f};
 
+            // Background sprites are static — omit PreviousTransform so
+            // renderPrepareSystem renders them without lerp (no interpolation needed).
             auto& s  = world.addComponent<ffe::Sprite>(bg);
             s.texture = s_bgTex;
             s.size    = {BG_SPRITE_SIZE, BG_SPRITE_SIZE};
@@ -163,6 +165,12 @@ void interactiveDemoSystem(ffe::World& world, const float dt)
 
         auto& pt = world.addComponent<ffe::Transform>(ctx->player);
         pt.position = {0.0f, 0.0f, 0.0f};
+
+        // Opt in to render interpolation so the player moves smoothly at any frame rate.
+        auto& ppt = world.addComponent<ffe::PreviousTransform>(ctx->player);
+        ppt.position = pt.position;
+        ppt.scale    = pt.scale;
+        ppt.rotation = pt.rotation;
 
         auto& ps  = world.addComponent<ffe::Sprite>(ctx->player);
         ps.texture = s_playerTex;

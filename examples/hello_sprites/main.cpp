@@ -68,6 +68,13 @@ void helloSpritesSystem(ffe::World& world, const float dt) {
                 0.0f
             };
 
+            // Opt in to render interpolation — CopyTransformSystem will snapshot
+            // this component each tick so renderPrepareSystem can lerp positions.
+            auto& prevTransform = world.addComponent<ffe::PreviousTransform>(entity);
+            prevTransform.position = transform.position;
+            prevTransform.scale    = transform.scale;
+            prevTransform.rotation = transform.rotation;
+
             const ColorEntry& c = PALETTE[i % PALETTE_SIZE];
             auto& sprite  = world.addComponent<ffe::Sprite>(entity);
             sprite.texture = tex;

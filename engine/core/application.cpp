@@ -79,7 +79,8 @@ int32_t Application::run() {
             accumulator = fixedDt;
         }
 
-        // Reset render queue before tick — renderPrepareSystem populates it during tick
+        // Reset render queue before the render call — renderPrepareSystem now runs
+        // during render(), not during tick(), so the queue is populated at render time.
         m_renderQueue.clear();
 
         // --- Fixed-rate update ---
@@ -281,11 +282,18 @@ Result Application::startup() {
         [](World& /*world*/, float /*dt*/) { updateInput(); },
         0   // Priority 0 -- runs before all gameplay systems
     ));
+    // CopyTransformSystem runs at priority 5, before all gameplay systems (>= 100).
+    // It snapshots Transform into PreviousTransform so that renderPrepareSystem can
+    // lerp between the previous and current positions when building DrawCommands.
     m_world.registerSystem(FFE_SYSTEM(
-        "RenderPrepare",
-        renderer::renderPrepareSystem,
-        renderer::RENDER_PREPARE_PRIORITY
+        "CopyTransform",
+        renderer::copyTransformSystem,
+        renderer::COPY_TRANSFORM_PRIORITY
     ));
+    // renderPrepareSystem is NOT registered in the system list — it is called
+    // explicitly from Application::render() with the interpolation alpha.
+    // This ensures it has access to alpha (computed after the tick loop) and
+    // runs outside the fixed-rate tick for correct interpolation.
 
     // 8. Sort system list by priority
     m_world.sortSystems();
@@ -348,11 +356,14 @@ void Application::tick(const float dt) {
 }
 
 void Application::render(const float alpha) {
-    (void)alpha; // Interpolation not yet implemented
+    // Populate the render queue with interpolated DrawCommands.
+    // renderPrepareSystem lerps between PreviousTransform and Transform using alpha.
+    // Called before sortRenderQueue() so the queue is populated before sorting.
+    renderer::renderPrepareSystem(m_world, alpha);
 
     if (m_config.headless) return;
 
-    // Sort the render queue (renderPrepareSystem already populated it during tick)
+    // Sort the render queue now that renderPrepareSystem has populated it.
     renderer::sortRenderQueue(m_renderQueue);
 
     // Begin frame

@@ -5,21 +5,15 @@
 // loads game.lua, and registers a system that calls the Lua update()
 // function each tick.
 //
-// FRICTION NOTE (documented in usage report):
-//   ScriptEngine does not expose getLuaState() or a callFunction() helper.
-//   The Lua state is stored as void* intentionally to prevent raw C API access
-//   from outside the scripting subsystem. As a consequence, per-frame Lua
-//   function calls must go through doString(), which reconstructs a short call
-//   string each tick. The function body (update) is compiled once at load time;
-//   only the call site string is rebuilt per frame. This is suboptimal --
-//   a dedicated ScriptEngine::callFunction(name, args...) API is needed.
+// Per-frame calls use ScriptEngine::callFunction(), which uses lua_getglobal +
+// lua_pcall directly and avoids the string compilation cost of doString().
+// ESC to quit is handled from Lua via ffe.requestShutdown().
 //
 // Coordinate system: centered origin, x: -640..640, y: -360..360.
 // Window: 1280x720.
 
 #include "core/application.h"
 #include "core/ecs.h"
-#include "core/input.h"
 #include "core/logging.h"
 #include "renderer/render_system.h"
 #include "renderer/rhi.h"
@@ -27,7 +21,6 @@
 #include "renderer/texture_loader.h"
 #include "scripting/script_engine.h"
 
-#include <cstdio>    // snprintf
 #include <cstdint>
 
 // ---------------------------------------------------------------------------
@@ -117,6 +110,12 @@ void luaDemoSystem(ffe::World& world, const float dt)
         auto& tf    = world.addComponent<ffe::Transform>(ctx->player);
         tf.position = {0.0f, 0.0f, 0.0f};
 
+        // Opt in to render interpolation so the player moves smoothly at any frame rate.
+        auto& prevTf    = world.addComponent<ffe::PreviousTransform>(ctx->player);
+        prevTf.position = tf.position;
+        prevTf.scale    = tf.scale;
+        prevTf.rotation = tf.rotation;
+
         auto& sp  = world.addComponent<ffe::Sprite>(ctx->player);
         sp.texture = s_playerTex;
         sp.size    = {PLAYER_SIZE, PLAYER_SIZE};
@@ -153,43 +152,26 @@ void luaDemoSystem(ffe::World& world, const float dt)
     }
 
     // -----------------------------------------------------------------------
-    // Per-frame: call the Lua update() function.
+    // Per-frame: call the Lua update() function via callFunction().
     //
-    // FRICTION: ScriptEngine has no callFunction() helper and getLuaState()
-    // is not exposed (void* is intentional -- see header comment). We use
-    // doString() with a pre-formatted call string. The function body is
-    // compiled once (by doFile above); only this 40-byte call string is
-    // re-evaluated per tick. The per-tick cost is:
-    //   - luaL_loadstring on ~40 chars (trivial parse of a function call)
-    //   - lua_pcall to invoke the already-compiled update() closure
-    // This is measurably worse than a direct lua_getglobal + lua_pcall.
-    // A ScriptEngine::callFunction(name, ...) API would eliminate this cost.
+    // callFunction() uses lua_getglobal + lua_pcall directly, avoiding the
+    // per-tick string compilation cost of the previous doString() approach.
+    // The function body (update) is compiled once at load time by doFile();
+    // callFunction() just looks it up by name and invokes it with typed args.
     // -----------------------------------------------------------------------
     if (ctx->startupDone && ctx->player != ffe::NULL_ENTITY &&
         ctx->scripts != nullptr && ctx->scripts->isInitialised())
     {
-        // Build: "update(PLAYERID, DT)"
-        // The entity ID is a u32; dt is a float. Both fit easily in 64 chars.
-        char callBuf[64];
-        const int written = std::snprintf(
-            callBuf, sizeof(callBuf),
-            "update(%u, %.6f)", ctx->player, static_cast<double>(dt));
-
-        if (written > 0 && written < static_cast<int>(sizeof(callBuf))) {
-            ctx->scripts->doString(callBuf);
-        }
+        ctx->scripts->callFunction("update",
+                                   static_cast<ffe::i64>(ctx->player),
+                                   static_cast<double>(dt));
     }
 
     // -----------------------------------------------------------------------
-    // ESC to quit -- ShutdownSignal in ECS context.
-    // ESC is not accessible from Lua in the current API: the ShutdownSignal
-    // lives in the ECS registry context with no Lua binding.
-    // The recommended solution is ffe.requestShutdown() binding.
+    // ESC handling is now delegated to Lua via ffe.requestShutdown().
+    // The C++ host no longer needs to check for ESC directly -- game.lua
+    // calls ffe.requestShutdown() when ESC is pressed.
     // -----------------------------------------------------------------------
-    if (ffe::isKeyPressed(ffe::Key::ESCAPE)) {
-        FFE_LOG_INFO("LuaDemo", "ESC pressed -- requesting shutdown");
-        world.registry().ctx().get<ffe::ShutdownSignal>().requested = true;
-    }
 }
 
 } // anonymous namespace

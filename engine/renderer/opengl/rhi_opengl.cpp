@@ -359,7 +359,8 @@ RhiResult updateBuffer(const BufferHandle handle, const void* data, const u32 si
     }
 
     const GlBuffer& buf = s_buffers[handle.id];
-    if (offset + sizeBytes > buf.sizeBytes) {
+    // M-7: cast to u64 before addition to prevent u32 overflow
+    if (static_cast<u64>(offset) + static_cast<u64>(sizeBytes) > static_cast<u64>(buf.sizeBytes)) {
         FFE_LOG_ERROR("Renderer", "Buffer update exceeds buffer size");
         return RhiResult::ERROR_INVALID_HANDLE;
     }

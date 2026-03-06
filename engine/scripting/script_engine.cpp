@@ -246,6 +246,30 @@ bool ScriptEngine::doFile(const char* path, const char* assetRoot) {
     return true;
 }
 
+bool ScriptEngine::callFunction(const char* funcName, ffe::i64 entityId, double dt) {
+    if (!m_initialised || !m_luaState) return false;
+    auto* L = static_cast<lua_State*>(m_luaState);
+
+    lua_getglobal(L, funcName);
+    if (!lua_isfunction(L, -1)) {
+        lua_pop(L, 1);
+        // Don't log here — function not existing is not an error (may be optional)
+        return false;
+    }
+
+    lua_pushinteger(L, static_cast<lua_Integer>(entityId));
+    lua_pushnumber(L, static_cast<lua_Number>(dt));
+
+    if (lua_pcall(L, 2, 0, 0) != 0) {
+        const char* err = lua_tostring(L, -1);
+        FFE_LOG_ERROR("ScriptEngine", "callFunction(%s) error: %s",
+                      funcName, err != nullptr ? err : "unknown error");
+        lua_pop(L, 1);
+        return false;
+    }
+    return true;
+}
+
 bool ScriptEngine::isInitialised() const {
     return m_initialised;
 }
@@ -510,6 +534,28 @@ void ScriptEngine::registerEcsBindings() {
         return 0;
     });
     lua_setfield(L, -2, "setTransform");
+
+    // ----------------------------------------------------------------
+    // ffe.requestShutdown() — request engine shutdown from a Lua script.
+    // Sets ShutdownSignal.requested in the ECS registry context so that
+    // the application loop exits cleanly on the next tick.
+    // No-op if no World is registered.
+    // ----------------------------------------------------------------
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            return 0; // no-op if no world registered
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+        if (world != nullptr) {
+            world->registry().ctx().get<ffe::ShutdownSignal>().requested = true;
+        }
+        return 0;
+    });
+    lua_setfield(L, -2, "requestShutdown");
 
     // Set the 'ffe' table as a global.
     lua_setglobal(L, "ffe");

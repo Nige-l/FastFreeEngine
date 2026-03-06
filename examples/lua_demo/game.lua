@@ -6,10 +6,8 @@
 -- Coordinate system: centered origin, -640..640 (x), -360..360 (y).
 -- The player entity is created in C++ and its ID is passed to update().
 --
--- NOTE: ESC handling is not possible from Lua in the current API.
--- The ShutdownSignal lives in the ECS registry context, which has no Lua
--- binding. ESC is handled in the C++ host instead.
--- See the usage report for the recommended API addition.
+-- ESC handling uses ffe.requestShutdown(), which signals the engine to exit
+-- cleanly. No C++ changes are needed to add new shutdown triggers.
 
 local SPEED = 150.0
 
@@ -21,7 +19,7 @@ local HALF_H = 360.0
 local HALF_SPRITE = 24.0
 
 ffe.log("lua_demo: Lua script loaded successfully!")
-ffe.log("lua_demo: Use WASD to move the player. Press ESC to quit (handled in C++).")
+ffe.log("lua_demo: Use WASD to move the player. Press ESC to quit.")
 
 -- update(entityId, dt) -- called by the C++ LuaScriptSystem every tick.
 -- entityId: raw u32 entity ID (Lua integer)
@@ -51,4 +49,9 @@ function update(entityId, dt)
     if ny >  yLimit then ny =  yLimit end
 
     ffe.setTransform(entityId, nx, ny, t.rotation, t.scaleX, t.scaleY)
+
+    -- ESC to quit: requestShutdown() signals the engine to exit on the next tick.
+    if ffe.isKeyPressed(ffe.KEY_ESCAPE) then
+        ffe.requestShutdown()
+    end
 end

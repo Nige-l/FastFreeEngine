@@ -361,6 +361,9 @@ TEST_CASE("renderPrepareSystem populates render queue with one entry per sprite 
     // In headless mode the ShaderLibrary handles are non-zero (the headless
     // path in the RHI returns monotonically-increasing IDs), so the shader
     // handles are valid and the system can run.
+    //
+    // Entities without PreviousTransform are static — they use the raw current
+    // Transform position (Pass 2 / entt::exclude<PreviousTransform> view).
 
     RhiConfig rhiCfg;
     rhiCfg.headless = true;
@@ -377,7 +380,7 @@ TEST_CASE("renderPrepareSystem populates render queue with one entry per sprite 
     world.registry().ctx().emplace<RenderQueue*>(&queue);
     world.registry().ctx().emplace<ShaderLibrary>(shaderLib);
 
-    // Create 3 entities, each with Transform + Sprite
+    // Create 3 entities, each with Transform + Sprite (no PreviousTransform — static path)
     for (int i = 0; i < 3; ++i) {
         const ffe::EntityId e = world.createEntity();
         ffe::Transform& t = world.addComponent<ffe::Transform>(e);
@@ -392,10 +395,186 @@ TEST_CASE("renderPrepareSystem populates render queue with one entry per sprite 
         s.color   = {1.0f, 1.0f, 1.0f, 1.0f};
     }
 
-    // Run the system
+    // Run the system (alpha is unused by static entities)
     ffe::renderer::renderPrepareSystem(world, 0.0f);
 
     REQUIRE(queue.count == 3);
+
+    destroyRenderQueue(queue);
+    shutdownShaderLibrary(shaderLib);
+    shutdown();
+}
+
+// =============================================================================
+// Interpolation lerp correctness — PreviousTransform path
+// =============================================================================
+
+TEST_CASE("renderPrepareSystem lerp: alpha=0 yields previous position", "[renderer][rendersystem][interp]") {
+    RhiConfig rhiCfg;
+    rhiCfg.headless = true;
+    REQUIRE(init(rhiCfg) == RhiResult::OK);
+
+    ShaderLibrary shaderLib;
+    REQUIRE(initShaderLibrary(shaderLib));
+
+    RenderQueue queue;
+    initRenderQueue(queue, 8);
+
+    ffe::World world;
+    world.registry().ctx().emplace<RenderQueue*>(&queue);
+    world.registry().ctx().emplace<ShaderLibrary>(shaderLib);
+
+    const ffe::EntityId e = world.createEntity();
+
+    ffe::Transform& curr = world.addComponent<ffe::Transform>(e);
+    curr.position = {100.0f, 200.0f, 0.0f};
+    curr.scale    = {1.0f, 1.0f, 1.0f};
+
+    ffe::PreviousTransform& prev = world.addComponent<ffe::PreviousTransform>(e);
+    prev.position = {0.0f, 0.0f, 0.0f};
+    prev.scale    = {1.0f, 1.0f, 1.0f};
+
+    ffe::Sprite& s = world.addComponent<ffe::Sprite>(e);
+    s.size    = {32.0f, 32.0f};
+    s.layer   = 0;
+    s.texture = rhi::TextureHandle{1};
+    s.color   = {1.0f, 1.0f, 1.0f, 1.0f};
+
+    // alpha=0 → lerped position = prev + (curr - prev) * 0 = prev
+    ffe::renderer::renderPrepareSystem(world, 0.0f);
+
+    REQUIRE(queue.count == 1);
+    REQUIRE(queue.commands[0].posX == Catch::Approx(0.0f));
+    REQUIRE(queue.commands[0].posY == Catch::Approx(0.0f));
+
+    destroyRenderQueue(queue);
+    shutdownShaderLibrary(shaderLib);
+    shutdown();
+}
+
+TEST_CASE("renderPrepareSystem lerp: alpha=1 yields current position", "[renderer][rendersystem][interp]") {
+    RhiConfig rhiCfg;
+    rhiCfg.headless = true;
+    REQUIRE(init(rhiCfg) == RhiResult::OK);
+
+    ShaderLibrary shaderLib;
+    REQUIRE(initShaderLibrary(shaderLib));
+
+    RenderQueue queue;
+    initRenderQueue(queue, 8);
+
+    ffe::World world;
+    world.registry().ctx().emplace<RenderQueue*>(&queue);
+    world.registry().ctx().emplace<ShaderLibrary>(shaderLib);
+
+    const ffe::EntityId e = world.createEntity();
+
+    ffe::Transform& curr = world.addComponent<ffe::Transform>(e);
+    curr.position = {100.0f, 200.0f, 0.0f};
+    curr.scale    = {1.0f, 1.0f, 1.0f};
+
+    ffe::PreviousTransform& prev = world.addComponent<ffe::PreviousTransform>(e);
+    prev.position = {0.0f, 0.0f, 0.0f};
+    prev.scale    = {1.0f, 1.0f, 1.0f};
+
+    ffe::Sprite& s = world.addComponent<ffe::Sprite>(e);
+    s.size    = {32.0f, 32.0f};
+    s.layer   = 0;
+    s.texture = rhi::TextureHandle{1};
+    s.color   = {1.0f, 1.0f, 1.0f, 1.0f};
+
+    // alpha=1 → lerped position = prev + (curr - prev) * 1 = curr
+    ffe::renderer::renderPrepareSystem(world, 1.0f);
+
+    REQUIRE(queue.count == 1);
+    REQUIRE(queue.commands[0].posX == Catch::Approx(100.0f));
+    REQUIRE(queue.commands[0].posY == Catch::Approx(200.0f));
+
+    destroyRenderQueue(queue);
+    shutdownShaderLibrary(shaderLib);
+    shutdown();
+}
+
+TEST_CASE("renderPrepareSystem lerp: alpha=0.5 yields midpoint position", "[renderer][rendersystem][interp]") {
+    RhiConfig rhiCfg;
+    rhiCfg.headless = true;
+    REQUIRE(init(rhiCfg) == RhiResult::OK);
+
+    ShaderLibrary shaderLib;
+    REQUIRE(initShaderLibrary(shaderLib));
+
+    RenderQueue queue;
+    initRenderQueue(queue, 8);
+
+    ffe::World world;
+    world.registry().ctx().emplace<RenderQueue*>(&queue);
+    world.registry().ctx().emplace<ShaderLibrary>(shaderLib);
+
+    const ffe::EntityId e = world.createEntity();
+
+    ffe::Transform& curr = world.addComponent<ffe::Transform>(e);
+    curr.position = {80.0f, 60.0f, 0.0f};
+    curr.scale    = {1.0f, 1.0f, 1.0f};
+
+    ffe::PreviousTransform& prev = world.addComponent<ffe::PreviousTransform>(e);
+    prev.position = {20.0f, 40.0f, 0.0f};
+    prev.scale    = {1.0f, 1.0f, 1.0f};
+
+    ffe::Sprite& s = world.addComponent<ffe::Sprite>(e);
+    s.size    = {32.0f, 32.0f};
+    s.layer   = 0;
+    s.texture = rhi::TextureHandle{1};
+    s.color   = {1.0f, 1.0f, 1.0f, 1.0f};
+
+    // alpha=0.5 → x = 20 + (80 - 20) * 0.5 = 50, y = 40 + (60 - 40) * 0.5 = 50
+    ffe::renderer::renderPrepareSystem(world, 0.5f);
+
+    REQUIRE(queue.count == 1);
+    REQUIRE(queue.commands[0].posX == Catch::Approx(50.0f));
+    REQUIRE(queue.commands[0].posY == Catch::Approx(50.0f));
+
+    destroyRenderQueue(queue);
+    shutdownShaderLibrary(shaderLib);
+    shutdown();
+}
+
+TEST_CASE("renderPrepareSystem: static entity without PreviousTransform uses raw position", "[renderer][rendersystem][interp]") {
+    // Entities without PreviousTransform bypass the lerp entirely.
+    // Their position in the DrawCommand must equal their Transform.position
+    // regardless of alpha.
+
+    RhiConfig rhiCfg;
+    rhiCfg.headless = true;
+    REQUIRE(init(rhiCfg) == RhiResult::OK);
+
+    ShaderLibrary shaderLib;
+    REQUIRE(initShaderLibrary(shaderLib));
+
+    RenderQueue queue;
+    initRenderQueue(queue, 8);
+
+    ffe::World world;
+    world.registry().ctx().emplace<RenderQueue*>(&queue);
+    world.registry().ctx().emplace<ShaderLibrary>(shaderLib);
+
+    const ffe::EntityId e = world.createEntity();
+
+    ffe::Transform& t = world.addComponent<ffe::Transform>(e);
+    t.position = {77.0f, -33.0f, 0.0f};
+    t.scale    = {1.0f, 1.0f, 1.0f};
+
+    // No PreviousTransform — static entity
+    ffe::Sprite& s = world.addComponent<ffe::Sprite>(e);
+    s.size    = {32.0f, 32.0f};
+    s.layer   = 0;
+    s.texture = rhi::TextureHandle{1};
+    s.color   = {1.0f, 1.0f, 1.0f, 1.0f};
+
+    ffe::renderer::renderPrepareSystem(world, 0.5f);
+
+    REQUIRE(queue.count == 1);
+    REQUIRE(queue.commands[0].posX == Catch::Approx(77.0f));
+    REQUIRE(queue.commands[0].posY == Catch::Approx(-33.0f));
 
     destroyRenderQueue(queue);
     shutdownShaderLibrary(shaderLib);

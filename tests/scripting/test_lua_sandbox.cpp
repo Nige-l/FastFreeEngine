@@ -533,3 +533,68 @@ TEST_CASE("ffe.isKeyHeld with negative key code returns false", "[scripting][inp
     REQUIRE(fix.engine.doString("local v = ffe.isKeyHeld(-1); assert(v == false)"));
     ffe::shutdownInput();
 }
+
+// =============================================================================
+// callFunction() — per-frame Lua dispatch
+// =============================================================================
+
+TEST_CASE("callFunction returns false when function does not exist", "[scripting][callfunction]") {
+    // No function defined — callFunction must return false without crashing.
+    ScriptFixture fix;
+    REQUIRE_FALSE(fix.engine.callFunction("nonexistent", 0, 0.016));
+}
+
+TEST_CASE("callFunction returns true when function exists and succeeds", "[scripting][callfunction]") {
+    // A valid no-op function — callFunction must return true.
+    ScriptFixture fix;
+    REQUIRE(fix.engine.doString("function ping(id, dt) return end"));
+    REQUIRE(fix.engine.callFunction("ping", 0, 0.016));
+}
+
+TEST_CASE("callFunction passes entityId correctly", "[scripting][callfunction]") {
+    // The function stores its first argument; we read it back via assert.
+    ScriptFixture fix;
+    REQUIRE(fix.engine.doString("function checkId(id, dt) lastId = id end"));
+    REQUIRE(fix.engine.callFunction("checkId", 42, 0.0));
+    // assert() is available via the base library whitelist.
+    REQUIRE(fix.engine.doString("assert(lastId == 42)"));
+}
+
+TEST_CASE("callFunction passes dt correctly", "[scripting][callfunction]") {
+    // The function stores its second argument; we verify it within float tolerance.
+    ScriptFixture fix;
+    REQUIRE(fix.engine.doString("function checkDt(id, dt) lastDt = dt end"));
+    REQUIRE(fix.engine.callFunction("checkDt", 0, 0.016));
+    REQUIRE(fix.engine.doString("assert(math.abs(lastDt - 0.016) < 0.0001)"));
+}
+
+TEST_CASE("callFunction returns false and does not crash when function errors", "[scripting][callfunction]") {
+    // A Lua error inside the function must be caught by lua_pcall and returned as false.
+    ScriptFixture fix;
+    REQUIRE(fix.engine.doString("function boom(id, dt) error('test') end"));
+    REQUIRE_FALSE(fix.engine.callFunction("boom", 0, 0.0));
+    // Engine must remain operational after the error.
+    REQUIRE(fix.engine.doString("local x = 1 + 1"));
+}
+
+// =============================================================================
+// ffe.requestShutdown() — ShutdownSignal via ECS context
+// =============================================================================
+
+TEST_CASE("ffe.requestShutdown with World sets ShutdownSignal.requested", "[scripting][shutdown]") {
+    // A World with ShutdownSignal registered in the context must have .requested
+    // set to true after ffe.requestShutdown() is called from Lua.
+    ScriptFixture fix;
+    ffe::World world;
+    world.registry().ctx().emplace<ffe::ShutdownSignal>();
+    fix.engine.setWorld(&world);
+
+    REQUIRE(fix.engine.doString("ffe.requestShutdown()"));
+    REQUIRE(world.registry().ctx().get<ffe::ShutdownSignal>().requested == true);
+}
+
+TEST_CASE("ffe.requestShutdown without World is a no-op", "[scripting][shutdown]") {
+    // No setWorld() call — ffe.requestShutdown() must not crash or error.
+    ScriptFixture fix;
+    REQUIRE(fix.engine.doString("ffe.requestShutdown()"));
+}

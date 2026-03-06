@@ -18,6 +18,19 @@ struct Transform {
     f32 rotation       = 0.0f; // Radians, z-axis rotation for 2D
 };
 
+// --- PreviousTransform component — used for render interpolation ---
+// Mirrors Transform exactly. Snapshotted by CopyTransformSystem at the
+// START of each tick (before gameplay systems update Transform).
+// renderPrepareSystem lerps between PreviousTransform and Transform using
+// the render alpha to eliminate fixed-timestep jitter.
+// Opt in by adding this component alongside Transform + Sprite.
+// Static entities (tilemaps, UI) can omit it — they render without lerp.
+struct PreviousTransform {
+    glm::vec3 position = {0.0f, 0.0f, 0.0f};
+    glm::vec3 scale    = {1.0f, 1.0f, 1.0f};
+    f32 rotation       = 0.0f;
+};
+
 // --- Sprite component ---
 struct Sprite {
     rhi::TextureHandle texture;
@@ -33,10 +46,18 @@ struct Sprite {
 
 namespace ffe::renderer {
 
-// The render preparation system. Registered as a SystemUpdateFn at priority 500.
-void renderPrepareSystem(World& world, float dt);
+// CopyTransformSystem — run at priority 5, before any gameplay system.
+// Snapshots Transform into PreviousTransform for all entities that have both.
+// Must run before gameplay systems modify Transform each tick.
+void copyTransformSystem(World& world, float dt);
 
-// Priority constant for registration.
-inline constexpr i32 RENDER_PREPARE_PRIORITY = 500;
+// Priority at which copyTransformSystem should be registered.
+// Must be lower than any gameplay system priority (gameplay typically >= 100).
+inline constexpr i32 COPY_TRANSFORM_PRIORITY = 5;
+
+// The render preparation system. Called explicitly from Application::render(),
+// NOT registered in the system list. Accepts alpha (interpolation factor [0,1))
+// and lerps between PreviousTransform and Transform when building DrawCommands.
+void renderPrepareSystem(World& world, float alpha);
 
 } // namespace ffe::renderer

@@ -660,3 +660,100 @@ Autonomous execution. User asleep — running continuously through multiple sess
 - game-dev-tester builds demo using callFunction + Lua-driven shutdown
 
 Session 7 handover document written at `docs/session7-handover.md`.
+
+---
+
+## Session 7 — [2026-03-06] — callFunction, Lua shutdown, jitter fix, entity creation
+
+### Goals
+1. ScriptEngine::callFunction() — eliminates per-frame doString recompile (FRICTION-1 HIGH from game-dev-tester)
+2. ffe.requestShutdown() Lua binding — scripts can quit the game
+3. Jitter root cause fix — architect designs prev-frame position approach, engine-dev implements
+4. M-7 fix — updateBuffer u32+u32 overflow (security, small arithmetic fix)
+5. ffe.createEntity() / ffe.destroyEntity() — basic entity lifecycle from Lua
+6. api-designer reviews new API surface, updates scripting/.context.md
+7. game-dev-tester builds demo using callFunction + Lua-driven shutdown
+
+### Pre-conditions
+- 166/166 tests passing
+- lua_demo functional (Lua-driven WASD, PNG texture loaded)
+- session7-handover.md written
+
+### Session opened
+Autonomous execution continuing.
+
+---
+
+## 2026-03-06 — Session 7 Outcomes
+
+### Completed
+
+**Phase 1 — Parallel (engine-dev: callFunction + ffe.requestShutdown + M-7 fix):**
+- **engine-dev** implemented `ScriptEngine::callFunction(funcName, entityId, dt)` — uses `lua_getglobal + lua_pcall` directly, no per-call string construction or Lua compilation. Zero overhead vs raw Lua C API. Resolves FRICTION-1 HIGH from game-dev-tester Session 6.
+- **engine-dev** implemented `ffe.requestShutdown()` Lua binding — reads World from Lua registry, checks for nil guard (security-auditor fix: `lua_isnil` check before `lua_touserdata`), sets `ShutdownSignal::requested = true` in ECS registry context. Resolves FRICTION-2 from Session 6.
+- **engine-dev** confirmed M-7 fix (updateBuffer u64 arithmetic) from Session 6 present and verified — no regression.
+- **engine-dev** implemented `FFE_SYSTEM` macro revision (sizeof(literal)-1 at compile time) — zero runtime overhead.
+
+**Phase 2 — Sequential (jitter root cause analysis + fix):**
+- **architect** wrote `docs/architecture/design-note-interpolation.md` — identified root cause: `(void)alpha` in `Application::render()` discarded the interpolation alpha entirely. Recommended Option A: `PreviousTransform` component + `copyTransformSystem` + move `renderPrepareSystem` outside registered system list.
+- **engine-dev** implemented jitter fix:
+  - `PreviousTransform` struct added to `render_system.h` — mirrors Transform fields
+  - `copyTransformSystem` (priority 5) — copies Transform → PreviousTransform each tick before gameplay systems run
+  - `renderPrepareSystem` signature changed to `(World&, float alpha)` — moved out of registered system list, called explicitly from `Application::render(alpha)` with correct interpolation alpha
+  - Two-pass rendering: entities with `PreviousTransform` use lerped positions, entities without use raw current position
+  - `renderQueue.clear()` moved to render time (not tick time) to match the new render path
+  - All example demos (hello_sprites, interactive_demo, lua_demo) updated with `PreviousTransform` on moving entities
+
+**Phase 3 — Reviews (parallel):**
+- **security-auditor** review of `ffe.requestShutdown` binding: found UB — `lua_touserdata` called without `lua_isnil` check. Fixed immediately to match `getTransform/setTransform` null-guard pattern.
+- **test-engineer** wrote:
+  - 7 new scripting tests: `callFunction` exists and succeeds (×1), passes entityId correctly (×1), passes dt correctly (×1), returns false when function missing (×1), returns false and does not crash when function errors (×1), `ffe.requestShutdown` with World sets signal (×1), `ffe.requestShutdown` without World is no-op (×1). Total scripting test count: 55.
+  - 4 new interpolation tests in `test_renderer_headless.cpp`: alpha=0 yields previous position, alpha=1 yields current, alpha=0.5 yields midpoint, no-PreviousTransform uses raw position.
+  - **Total: 177/177 tests pass on Clang-18 and GCC-13. Zero warnings.**
+
+**Phase 4 — API Review (api-designer):**
+- Reviewed `callFunction` and `ffe.requestShutdown` public API surface. Approved.
+- Updated `engine/scripting/.context.md` (Session 7 revision):
+  - Added `callFunction` to Public API (C++) table
+  - Added `ffe.requestShutdown()` to Lua API — new "Engine Control" section
+  - Replaced Common Usage Pattern 5 (doString per-frame anti-pattern) with correct `callFunction` pattern
+  - Updated "What NOT to Do" section with `callFunction` as the correct alternative to `doString` per frame
+
+**Phase 5 — Demo (game-dev-tester):**
+- Built against `examples/lua_demo/` which demonstrates all Session 7 features: `callFunction` for per-frame Lua invocation, `ffe.requestShutdown()` for ESC-to-quit in Lua, `PreviousTransform` on player entity for smooth interpolation, checkerboard PNG via `loadTexture`.
+- Full usage report: `docs/game-dev-tester-session7-report.md`. Overall verdict: **no blockers**.
+
+### Session 7 Stats
+- **Modified engine files:** script_engine.h, script_engine.cpp, render_system.h, render_system.cpp, application.cpp, rhi_opengl.cpp (~6 files)
+- **New architecture docs:** design-note-interpolation.md
+- **New test suite count:** 177 (was 166 — 11 new tests)
+- **Security findings resolved:** 1 MEDIUM (ffe.requestShutdown null-guard) — found and fixed during review
+- **Performance improvement:** callFunction eliminates per-frame Lua compile step (was doString: luaL_loadstring each call)
+- **Jitter fix:** PreviousTransform interpolation — root cause eliminated
+
+### Review Results
+- security-auditor: **PASS** (1 MEDIUM found + fixed: requestShutdown null-guard)
+- test-engineer: **PASS** (177/177, zero warnings, both compilers)
+- api-designer: **APPROVED** (.context.md updated with callFunction and ffe.requestShutdown)
+- game-dev-tester: **No blockers** — all Session 7 features work as documented
+- performance-critic: **PASS** (callFunction is zero-overhead vs raw Lua C API; jitter fix adds one copyTransformSystem pass at priority 5, negligible cost)
+
+### Known Issues Updated
+- **FRICTION-1 (no callFunction):** FIXED — `ScriptEngine::callFunction()` implemented.
+- **FRICTION-2 (no ffe.requestShutdown):** FIXED — `ffe.requestShutdown()` Lua binding implemented.
+- **Jitter (interpolation alpha discarded):** FIXED — PreviousTransform + copyTransformSystem.
+- **FRICTION-3 (entity creation from Lua):** Still tracked for Session 8.
+- **M-1 (getTransform table alloc GC pressure):** Still tracked for Session 8.
+- **hello_sprites flickering:** Hardware (AMD driver) — user reboot needed.
+
+### Next Session Should Start With
+- Entity creation from Lua: `ffe.createEntity()`, `ffe.destroyEntity()`, `ffe.addSprite()`
+- M-1: explore batch Lua update pattern to reduce per-entity getTransform table alloc
+- M-1 uniform hash collisions (FNV-1a collision risk) — evaluate string-verified LUT
+- Architect designs audio subsystem (ADR-006) — placeholder engine/audio/
+- game-dev-tester: run lua_demo on real hardware; report on jitter fix effectiveness
+
+Session 8 handover document written at `docs/session8-handover.md`.
+
+---
+

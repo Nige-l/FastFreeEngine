@@ -61,6 +61,14 @@ public:
     // Returns false and logs the error on failure.
     bool doFile(const char* path, const char* assetRoot);
 
+    // Call a global Lua function by name with (entityId, dt) arguments.
+    // Use this instead of doString() for per-frame Lua calls.
+    // Returns true if the function exists and executed without error.
+    // Returns false (and logs) if the function is not found or errors.
+    // Must call init() and setWorld() before use.
+    // entityId maps to lua_Integer; dt maps to lua_Number (double).
+    bool callFunction(const char* funcName, ffe::i64 entityId, double dt);
+
     // Returns true if init() has been called successfully.
     bool isInitialised() const;
 
