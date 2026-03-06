@@ -21,6 +21,12 @@ target_link_libraries(ffe_core
         glfw
 )
 
+# Windows requires explicit link against Winsock (ws2_32) and OpenGL (opengl32).
+# On Linux these are handled by the system linker and libGL from mesa.
+if(WIN32)
+    target_link_libraries(ffe_core PRIVATE ws2_32 opengl32)
+endif()
+
 # Enable test hooks when building tests
 if(FFE_BUILD_TESTS)
     target_compile_definitions(ffe_core PUBLIC FFE_TEST)

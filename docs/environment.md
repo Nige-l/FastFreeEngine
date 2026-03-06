@@ -19,6 +19,7 @@ The following packages were installed via `apt-get`:
 - sox, libsox-fmt-all (audio asset generation)
 - xvfb, pkg-config, curl, wget, unzip
 - libxinerama-dev, libxcursor-dev, xorg-dev, libglu1-mesa-dev (2026-03-06: required by vcpkg glfw3 build for imgui glfw-binding feature)
+- mingw-w64 (2026-03-06: MinGW-w64 cross-compilation toolchain for Windows builds)
 
 ## Toolchain
 
@@ -35,6 +36,8 @@ The following packages were installed via `apt-get`:
 | luajit | LuaJIT 2.1.1703358377 |
 | pkg-config | 1.8.1 |
 | sox | SoX v14.4.2 |
+| x86_64-w64-mingw32-g++ | GCC 13-win32 (mingw-w64 11.0.1-3build1) |
+| x86_64-w64-mingw32-windres | GNU Binutils 2.41.90.20240122 |
 
 ## vcpkg
 
@@ -114,3 +117,114 @@ The following libraries are declared in `vcpkg.json`:
 **Verification:**
 - `file` confirms: PNG image data, 128 x 64, 8-bit/color RGBA, non-interlaced
 - Pillow confirms: Size (128, 64), Mode RGBA
+
+### 2026-03-06: MinGW-w64 cross-compilation toolchain (Windows build prep — Session 39 Phase 1/2)
+
+**What changed:**
+- Installed system package `mingw-w64` (11.0.1-3build1) via `apt-get install mingw-w64`
+  - Provides `x86_64-w64-mingw32-gcc`, `x86_64-w64-mingw32-g++` (GCC 13-win32), `x86_64-w64-mingw32-windres`
+- Created `cmake/toolchains/mingw-w64-x86_64.cmake`: CMake toolchain file for cross-compiling to Windows x64
+- Modified `cmake/CompilerFlags.cmake`: wrapped `find_program(MOLD_LINKER mold)` and `-fuse-ld=mold` flags inside `if(NOT WIN32)` guard — mold is Linux-only and does not exist on Windows
+- Modified `engine/core/CMakeLists.txt`: added `if(WIN32) target_link_libraries(ffe_core PRIVATE ws2_32 opengl32) endif()` — Winsock (ws2_32) and OpenGL (opengl32) must be linked explicitly on Windows; on Linux the system linker resolves these automatically
+- Modified `engine/audio/CMakeLists.txt`: added `$<$<PLATFORM_ID:Windows>:winmm>` to `ffe_audio` link libraries — miniaudio on Windows uses DirectSound/WASAPI which requires winmm; the existing Linux-only dl/pthread/m entries were already guarded with `$<$<PLATFORM_ID:Linux>:...>` generator expressions so no change was needed there
+
+**Why:**
+- Phase 1/2 of Session 39: prepare the build system for Windows cross-compilation from Linux using the `x64-mingw-dynamic` vcpkg triplet
+- Without the mold guard, the Windows cross-build would fail immediately trying to invoke `-fuse-ld=mold` which does not exist in the MinGW-w64 toolchain
+- Without ws2_32/opengl32/winmm, the Windows link step would produce undefined reference errors for every Winsock, OpenGL, and multimedia call
+
+**POSIX audit results (for engine-dev to address — see below):**
+See Section "POSIX-Specific Calls Requiring Windows Guards" for the full list.
+
+**Verification:**
+- `x86_64-w64-mingw32-g++ --version` confirms GCC 13-win32 is on PATH
+- `x86_64-w64-mingw32-windres --version` confirms windres is on PATH
+- `cmake/CompilerFlags.cmake`: `grep -n "NOT WIN32"` confirms the mold guard is present at line 13
+- `engine/core/CMakeLists.txt`: `grep -n "WIN32"` confirms ws2_32/opengl32 block is present
+- `engine/audio/CMakeLists.txt`: `grep -n "Windows"` confirms winmm generator expression is present
+- Linux builds are unaffected: the `if(NOT WIN32)` guard leaves all existing Linux behaviour intact
+
+## POSIX-Specific Calls Requiring Windows Guards
+
+These are the calls engine-dev must wrap in `#ifdef`/`#else` guards before a Windows cross-build can succeed. None of these are in hot paths — they are all in load-time I/O functions.
+
+### `realpath()` — not available on MinGW/Windows
+
+Windows equivalent: `_fullpath(char* absPath, const char* relPath, size_t maxLength)` from `<stdlib.h>`.
+Signature difference: `_fullpath` takes a max-length argument; `realpath` uses `PATH_MAX` (4096).
+On failure: `_fullpath` returns `nullptr` just like `realpath`.
+
+**Files and lines:**
+
+`engine/scripting/script_engine.cpp`:
+- Line 498-502: `setSaveRoot` — `realpath(absolutePath, resolved)`
+- Line 3185-3186: `saveData` — `realpath(savesDir, resolvedDir)`
+- Line 3193-3194: `saveData` — `realpath(root, resolvedRoot)`
+- Line 3351-3352: `loadData` — `realpath(fullPath, resolvedPath)`
+- Line 3359-3360: `loadData` — `realpath(root, resolvedRoot)`
+- Line 3486: `loadTexture` Lua binding — `realpath(absPath, resolvedPath)`
+- Line 3493: `loadTexture` Lua binding — `realpath(assetRoot, resolvedRoot)`
+
+`engine/renderer/texture_loader.cpp`:
+- Line 178-179: `loadTexture` — `::realpath(fullPath, canonPath)`
+
+`engine/renderer/mesh_loader.cpp`:
+- Line 229-230: `loadMesh` — `::realpath(fullPath, canonPath)`
+
+`engine/audio/audio.cpp`:
+- Line 731-732: `loadSound` — `::realpath(fullPath, canonPath)`
+- Line 989-990: `loadMusic` — `::realpath(fullPath, canonPath)`
+
+**Recommended guard pattern:**
+```cpp
+// In a shared header (e.g., engine/core/platform.h):
+#ifdef _WIN32
+#  include <stdlib.h>
+inline char* ffe_realpath(const char* path, char* resolved) {
+    return _fullpath(resolved, path, PATH_MAX);
+}
+#else
+#  include <stdlib.h>
+inline char* ffe_realpath(const char* path, char* resolved) {
+    return ::realpath(path, resolved);
+}
+#endif
+```
+Then replace all `realpath(` and `::realpath(` call sites with `ffe_realpath(`.
+
+### `stat()` / `struct stat` — needs `_stat()` / `struct _stat` on MSVC; MinGW provides POSIX stat
+
+**MinGW note:** MinGW-w64 provides POSIX `stat()` and `struct stat` via `<sys/stat.h>` — these work as-is on MinGW. No change needed for the MinGW cross-compilation target. This would only be an issue if targeting MSVC.
+
+**Files (informational — no action needed for MinGW):**
+
+`engine/scripting/script_engine.cpp`:
+- Line 3212-3213: `struct stat st; stat(fullPath, &st)`
+- Line 3333-3334: `struct stat st; stat(fullPath, &st)`
+
+`engine/renderer/texture_loader.cpp`:
+- Line 132-133: `struct stat st{}; ::stat(absPath, &st)`
+- Line 205-206: `struct stat fileStat{}; ::stat(canonPath, &fileStat)`
+
+`engine/renderer/mesh_loader.cpp`:
+- Line 251-252: `struct stat fileStat{}; ::stat(canonPath, &fileStat)`
+
+`engine/audio/audio.cpp`:
+- Line 320-321: `struct stat st{}; ::stat(absPath, &st)`
+- Line 752-753: `struct stat fileStat{}; ::stat(canonPath, &fileStat)`
+- Line 1008-1009: `struct stat fileStat{}; ::stat(canonPath, &fileStat)`
+
+### `<sys/stat.h>` include
+
+`engine/scripting/script_engine.cpp` line 35, `engine/renderer/texture_loader.cpp` line 63, `engine/renderer/mesh_loader.cpp` line 67, `engine/audio/audio.cpp` line 144.
+MinGW provides `<sys/stat.h>` — no change needed for the MinGW target.
+
+### `dlopen` / `dlclose` / `dlsym`
+
+Not present in any engine source file directly. miniaudio uses `dlopen` internally on Linux to load ALSA/PulseAudio/JACK. This is handled inside the miniaudio single-header with its own platform `#ifdef`s — miniaudio already has full Windows support and will use DirectSound/WASAPI instead of dl-loading ALSA on Windows. The `$<$<PLATFORM_ID:Linux>:dl>` entry in `engine/audio/CMakeLists.txt` already guards this correctly.
+
+### Summary for engine-dev
+
+One change is required before a successful Windows cross-build:
+
+1. **`realpath()` in 5 files (11 call sites):** Replace all `realpath()` / `::realpath()` calls with a thin `ffe_realpath()` wrapper that calls `_fullpath()` on Windows. The wrapper belongs in a new `engine/core/platform.h` header (or similar). This is the only code change blocking a Windows build. All other POSIX calls are either MinGW-compatible or already platform-guarded.

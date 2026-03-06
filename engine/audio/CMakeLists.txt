@@ -25,4 +25,6 @@ target_link_libraries(ffe_audio
         $<$<PLATFORM_ID:Linux>:dl>
         $<$<PLATFORM_ID:Linux>:pthread>
         $<$<PLATFORM_ID:Linux>:m>
+        # miniaudio on Windows uses DirectSound/WASAPI via winmm
+        $<$<PLATFORM_ID:Windows>:winmm>
 )

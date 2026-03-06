@@ -4,19 +4,21 @@ add_compile_options(-Wall -Wextra -Wpedantic)
 # No RTTI, no exceptions in engine core (C++ only)
 add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-rtti> $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>)
 
-# Linker: use mold if available.
+# Linker: use mold if available (Linux only — mold is not available on Windows).
 # We set CMAKE_EXE_LINKER_FLAGS and CMAKE_SHARED_LINKER_FLAGS directly.
 # Note: CMake+Ninja may pass these flags during compilation too, producing
 # "unused during compilation" warnings on Clang. This is a known CMake issue
 # and does not affect code correctness or the zero-warnings guarantee for
 # engine source. Engine code compiles clean with -Wall -Wextra.
-find_program(MOLD_LINKER mold)
-if(MOLD_LINKER)
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=mold")
-    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fuse-ld=mold")
-    message(STATUS "Using mold linker: ${MOLD_LINKER}")
-else()
-    message(WARNING "mold linker not found — falling back to default linker")
+if(NOT WIN32)
+    find_program(MOLD_LINKER mold)
+    if(MOLD_LINKER)
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=mold")
+        set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fuse-ld=mold")
+        message(STATUS "Using mold linker: ${MOLD_LINKER}")
+    else()
+        message(WARNING "mold linker not found — falling back to default linker")
+    endif()
 endif()
 
 # ccache: detected automatically by CMake if CMAKE_<LANG>_COMPILER_LAUNCHER is set,
