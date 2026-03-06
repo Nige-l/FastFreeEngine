@@ -521,6 +521,36 @@ void ScriptEngine::registerEcsBindings() {
     lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::RIGHT));  lua_setfield(L, -2, "KEY_RIGHT");
 
     // ----------------------------------------------------------------
+    // Mouse button bindings — ffe.isMousePressed/Held/Released(button)
+    // Button constants: ffe.MOUSE_LEFT, ffe.MOUSE_RIGHT, ffe.MOUSE_MIDDLE
+    // ----------------------------------------------------------------
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const auto btn = static_cast<ffe::MouseButton>(luaL_checkinteger(state, 1));
+        lua_pushboolean(state, ffe::isMouseButtonPressed(btn) ? 1 : 0);
+        return 1;
+    });
+    lua_setfield(L, -2, "isMousePressed");
+
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const auto btn = static_cast<ffe::MouseButton>(luaL_checkinteger(state, 1));
+        lua_pushboolean(state, ffe::isMouseButtonHeld(btn) ? 1 : 0);
+        return 1;
+    });
+    lua_setfield(L, -2, "isMouseHeld");
+
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const auto btn = static_cast<ffe::MouseButton>(luaL_checkinteger(state, 1));
+        lua_pushboolean(state, ffe::isMouseButtonReleased(btn) ? 1 : 0);
+        return 1;
+    });
+    lua_setfield(L, -2, "isMouseReleased");
+
+    // Mouse button constants
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::MouseButton::LEFT));   lua_setfield(L, -2, "MOUSE_LEFT");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::MouseButton::RIGHT));  lua_setfield(L, -2, "MOUSE_RIGHT");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::MouseButton::MIDDLE)); lua_setfield(L, -2, "MOUSE_MIDDLE");
+
+    // ----------------------------------------------------------------
     // ECS component access — World pointer is stored in the Lua registry.
     // Scripts pass entity IDs as integers (the underlying u32 value of EntityId).
     // Invalid IDs return nil — scripts must check for nil before use.
