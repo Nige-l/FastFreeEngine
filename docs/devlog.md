@@ -1699,7 +1699,59 @@ Session 23 handover document written at `docs/session23-handover.md`.
 - P1: Review and polish all three demo games
 - P2: Performance benchmark documentation
 
-Session 24 handover document written at `docs/session24-handover.md`.
+Session 24 handover document written at `docs/archive/session24-handover.md`.
+
+---
+
+## 2026-03-06 — Session 25: Bug Fixes, Visual Polish, Repo Cleanup
+
+### Planned
+User-reported bugs: F1 editor toggle broken, no audio. After initial fix (Session 24), SFX works but music still doesn't play. Director review requested. Goal: "something to show people" next week.
+
+### Completed
+
+**Bug Fixes:**
+- **F1 editor toggle** — Moved `isKeyPressed(F1)` check from after the tick loop to inside it, immediately after `tick(fixedDt)`. With multiple ticks per frame, the post-loop check missed "pressed" state because the second tick's `updateInput()` converted it to "held".
+- **Music not playing** — Root cause: `loadSound()` fully decodes files to PCM and rejects anything over 10 MB. The music OGG decodes to ~30 MB. Added `loadMusic()` — a lightweight loader that validates the path and stores it for streaming without full PCM decode. New Lua binding: `ffe.loadMusic(path)`.
+
+**New Engine Features:**
+- `ffe.setSpriteColor(entityId, r, g, b, a)` — per-frame color modification without log spam
+- `ffe.setSpriteSize(entityId, w, h)` — per-frame size modification
+- `audio::loadMusic()` C++ API + `ffe.loadMusic()` Lua binding
+
+**Visual Polish (Breakout):**
+- Particle effects on brick destruction (5 particles, gravity, fade-out)
+- Ball trail (5 entities, alpha gradient)
+- Ball color shifts white→orange as speed increases (350→600 max)
+- Ball speed increases per brick hit
+- Paddle flash on ball hit
+- Ball pulsing while waiting to launch
+- Life indicators in bottom-left corner
+- Victory particle burst when all bricks cleared
+
+**Visual Polish (Pong):**
+- Ball trail (6 entities, alpha gradient)
+- Ball color shifts white→orange with rally speed
+- Paddle flash on ball hit (both sides)
+- Goal flash panel when point scored
+- Ball pulsing while waiting to serve
+
+**Repo Cleanup:**
+- Separated audio/texture assets: `assets/textures/` and `assets/audio/`
+- Asset root changed from `assets/textures/` to `assets/`
+- Archived 26 session handover + report docs to `docs/archive/`
+- README: added 15-line quick-start Lua example, updated demo descriptions
+- Updated all `.context.md` files for new APIs
+
+**Director Review Findings (Session 25):**
+- Project health: strong constitution compliance, all `.context.md` files exist
+- Audio files in textures/ was confusing → fixed
+- Session docs cluttering repo → archived
+- Top priorities: screenshots (needs real display), visual polish (done), asset cleanup (done)
+- Most impactful missing features: particle system (now done in Lua), text rendering, scene management
+
+### Test Results
+- **349 tests pass** on both Clang-18 and GCC-13, zero warnings
 
 ---
 
