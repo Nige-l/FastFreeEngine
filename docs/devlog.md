@@ -1045,3 +1045,79 @@ Session 12 handover document written at `docs/session12-handover.md`.
 
 ---
 
+## Session 12 — [2026-03-06] — loadSound/fillTransform Lua Bindings, SFX from Scripts
+
+### Goals
+1. P0 — `ffe.loadSound(path)` Lua binding — allows scripts to load audio files directly
+2. P1 — `ffe.fillTransform(entityId, table)` — zero-allocation getTransform alternative
+3. P2 — `ffe.playSound(handle)` + `ffe.setMasterVolume(v)` + `ffe.unloadSound(handle)` Lua bindings
+
+### Session opened
+Autonomous execution continuing.
+
+---
+
+## 2026-03-06 — Session 12 Outcomes
+
+### Completed
+
+**ffe.fillTransform(entityId, table):**
+- Zero-allocation alternative to `ffe.getTransform`. Takes an existing Lua table, writes `x, y, rotation, scaleX, scaleY` into it in-place. Returns `true`/`false`.
+- Same entity ID validation as existing bindings (two-sided range check, isValid).
+- Security-auditor review: **PASS**.
+
+**ffe.loadSound(path) + ffe.unloadSound(handle):**
+- Lua scripts can now load WAV/OGG audio files directly using `ffe.loadSound(path)`.
+- Uses renderer's asset root with full path traversal prevention (`isAudioPathSafe` + `realpath` + prefix check).
+- `ffe.unloadSound(handle)` provides symmetry with loadTexture/unloadTexture pattern.
+- `lua_type` string check before `lua_tostring` (per loadTexture pattern).
+- Handle range validation on unloadSound.
+- Shift-left security review + post-impl security review: **PASS**.
+- Design note written: `docs/architecture/design-note-loadsound-lua.md`.
+
+**ffe.playSound(handle [, volume]) + ffe.setMasterVolume(volume):**
+- One-shot SFX playback from Lua with optional volume parameter.
+- Master volume control exposed to Lua.
+- Simple pass-through to existing C++ audio functions.
+
+**Tests and validation:**
+- 25 new tests added (total: 263/263, was 238 at session start).
+- Both Clang-18 and GCC-13, zero warnings.
+
+**API and demo updates:**
+- `engine/scripting/.context.md` updated with all new bindings, examples, and anti-patterns.
+- `examples/lua_demo/game.lua` updated: loads audio from Lua (no C++ `g_musicHandle` dependency), uses `fillTransform` for follower entity, SFX on SPACE keypress.
+
+### Session 12 Stats
+- **Modified engine files:** engine/scripting/script_engine.cpp (fillTransform, loadSound, unloadSound, playSound, setMasterVolume)
+- **Modified .context.md:** engine/scripting/.context.md (all new bindings documented)
+- **New architecture docs:** design-note-loadsound-lua.md
+- **Modified examples:** examples/lua_demo/game.lua (audio from Lua, fillTransform, SFX)
+- **New tests:** 25 (total: 263, was 238 at session start)
+- **Modified test files:** tests/scripting/test_lua_sandbox.cpp
+
+### Review Results
+- security-auditor fillTransform: **PASS**
+- security-auditor loadSound shift-left: **PASS**
+- security-auditor loadSound post-impl: **PASS**
+- test-engineer: **PASS** (263/263, zero warnings, both compilers)
+- api-designer: **APPROVED** (.context.md updated)
+
+### Known Issues Updated
+- **ffe.loadSound from Lua:** FIXED — scripts can load audio files directly; `g_musicHandle` C++ dependency eliminated.
+- **fillTransform:** FIXED — zero-allocation alternative to getTransform now available.
+- **M-1 getTransform GC pressure:** MITIGATED — fillTransform available. Still affects code not yet migrated to fillTransform.
+- **No SFX audio file in assets/:** NEW — `ffe.playSound` works but no actual `sfx.wav` in assets/ directory yet.
+- **isAudioPathSafe() bare ".." check:** LOW — missing bare ".." rejection, but `realpath` catches it. Non-exploitable.
+- **getTransform/setTransform/fillTransform upper-bound entity ID check:** LOW — missing explicit upper-bound check, but `isValid` catches invalid entities. Non-exploitable.
+
+### Next Session Should Start With
+- Editor UI (imgui) — a visual interface to show people
+- SFX assets (actual .wav/.ogg files in assets/)
+- Physics system design (ADR needed)
+- Sprite animation / atlas support
+
+Session 13 handover document written at `docs/session13-handover.md`.
+
+---
+

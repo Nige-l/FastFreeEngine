@@ -1,4 +1,4 @@
--- game.lua -- player movement + entity lifecycle + audio music demo for FFE lua_demo
+-- game.lua -- player movement + entity lifecycle + audio demo for FFE lua_demo
 --
 -- This script is loaded once at startup via scriptEngine.doFile().
 -- It defines a global update() function that the C++ host calls each tick.
@@ -11,26 +11,30 @@
 --   - ffe.destroyEntity()         not demonstrated here (no pickup/death yet)
 --   - ffe.loadTexture(path)       load a GPU texture from the asset root (Session 9)
 --   - ffe.unloadTexture(handle)   release a GPU texture; called in shutdown() (Session 10)
+--   - ffe.loadSound(path)         load an audio file from the asset root (Session 12)
+--   - ffe.unloadSound(handle)     release a decoded audio buffer (Session 12)
+--   - ffe.playSound(handle [,vol])play a one-shot sound effect (Session 12)
 --   - ffe.playMusic(handle, loop) start looping background music (Session 11)
 --   - ffe.stopMusic()             stop music track (Session 11)
 --   - ffe.setMusicVolume(v)       adjust music volume (Session 11)
 --   - ffe.isMusicPlaying()        query music state (Session 11)
+--   - ffe.fillTransform(id, tbl)  zero-alloc transform read (Session 12)
 --
 -- Controls:
 --   WASD       move the player
---   SPACE      spawn a static marker at the player's position (up to 5)
---   M          toggle music on/off (if a music track was loaded from C++)
+--   SPACE      play SFX (if loaded) + spawn a static marker (up to 5)
+--   M          toggle music on/off (if a music track was loaded)
 --   +/-        increase/decrease music volume (UP/DOWN arrow keys)
 --   ESC        quit cleanly via ffe.requestShutdown()
 --
 -- Coordinate system: centered origin, -640..640 (x), -360..360 (y).
 -- Window: 1280x720.
 --
--- Music note (Session 11):
---   Music must be loaded from C++ via ffe::audio::loadSound() and the handle
---   integer passed as a global variable (g_musicHandle) before this script runs.
---   If g_musicHandle is nil or 0, music controls are silently skipped.
---   This is a temporary limitation until ffe.loadSound() Lua bindings are added.
+-- Audio note (Session 12):
+--   Music and SFX are loaded from Lua via ffe.loadSound(). The asset root is
+--   shared with textures (set from C++ via renderer::setAssetRoot). Audio files
+--   should be placed under that root (e.g. assets/textures/music.ogg). If no
+--   audio files exist, the loadSound calls return nil and playback is skipped.
 --
 -- Texture handle note (Session 9 + 10):
 --   On the first update tick, ffe.loadTexture("checkerboard.png") is called once.
@@ -46,7 +50,29 @@ local MARKER_TEX     = 1        -- stub texture handle (headless-safe fallback)
 local FOLLOWER_TEX   = 1        -- stub texture handle; replaced at first tick if loadTexture succeeds
 local MUSIC_VOL_STEP = 0.1      -- volume change per keypress
 
-ffe.log("lua_demo: script loaded. WASD=move, SPACE=marker, M=music, arrows=volume, ESC=quit")
+ffe.log("lua_demo: script loaded. WASD=move, SPACE=marker+sfx, M=music, arrows=volume, ESC=quit")
+
+-- ---------------------------------------------------------------------------
+-- Scene-init audio: load sounds from Lua (Session 12).
+-- ffe.loadSound uses the shared asset root set from C++ (renderer::setAssetRoot).
+-- Returns nil if the file does not exist or audio is unavailable (headless).
+-- ---------------------------------------------------------------------------
+local musicHandle = ffe.loadSound("music.ogg")
+if musicHandle then
+    ffe.log("lua_demo: music.ogg loaded from Lua (handle=" .. tostring(musicHandle) .. ")")
+else
+    ffe.log("lua_demo: music.ogg not found or audio unavailable -- music disabled")
+end
+
+-- SFX handle: will work once an SFX audio file (e.g. sfx.wav) is added to the
+-- asset root alongside the textures. Until then, loadSound returns nil and the
+-- playSound call in update() is gracefully skipped.
+local sfxHandle = ffe.loadSound("sfx.wav")
+if sfxHandle then
+    ffe.log("lua_demo: sfx.wav loaded from Lua (handle=" .. tostring(sfxHandle) .. ")")
+else
+    ffe.log("lua_demo: sfx.wav not found -- SFX on SPACE disabled (add assets/textures/sfx.wav to enable)")
+end
 
 -- ---------------------------------------------------------------------------
 -- Module-level state
@@ -68,9 +94,12 @@ local markerCount = 0
 local markers = {}
 
 -- musicStarted: true once we have called ffe.playMusic on the first tick.
--- g_musicHandle is a global set from C++ before game.lua is loaded.
--- If g_musicHandle is nil or 0, music features are silently disabled.
+-- musicHandle is loaded from Lua at script load time (above).
 local musicStarted = false
+
+-- Pre-allocated table for fillTransform (Session 12).
+-- Reused every frame for the follower entity to avoid per-frame table allocation.
+local followerTransformBuf = {}
 
 -- ---------------------------------------------------------------------------
 -- Internal: clamp a value into [lo, hi]
@@ -217,13 +246,14 @@ function update(entityId, dt)
 
     -- ------------------------------------------------------------------
     -- Follower: move toward the player
+    -- Uses fillTransform (Session 12) to avoid per-frame table allocation.
+    -- followerTransformBuf is pre-allocated once at module scope.
     -- ------------------------------------------------------------------
     if followerEntityId ~= nil then
-        local ft = ffe.getTransform(followerEntityId)
-        if ft ~= nil then
+        if ffe.fillTransform(followerEntityId, followerTransformBuf) then
             -- Direction vector from follower to player
-            local vx = nx - ft.x
-            local vy = ny - ft.y
+            local vx = nx - followerTransformBuf.x
+            local vy = ny - followerTransformBuf.y
             local dist = math.sqrt(vx * vx + vy * vy)
 
             if dist > 1.0 then
@@ -234,32 +264,38 @@ function update(entityId, dt)
                 local moveX = (vx / dist) * speed
                 local moveY = (vy / dist) * speed
                 ffe.setTransform(followerEntityId,
-                                 ft.x + moveX,
-                                 ft.y + moveY,
-                                 ft.rotation,
-                                 ft.scaleX,
-                                 ft.scaleY)
+                                 followerTransformBuf.x + moveX,
+                                 followerTransformBuf.y + moveY,
+                                 followerTransformBuf.rotation,
+                                 followerTransformBuf.scaleX,
+                                 followerTransformBuf.scaleY)
             end
         end
     end
 
     -- ------------------------------------------------------------------
-    -- SPACE: spawn a static marker at the player's current position
+    -- SPACE: play SFX + spawn a static marker at the player's position
     -- ------------------------------------------------------------------
     if ffe.isKeyPressed(ffe.KEY_SPACE) then
+        -- Play one-shot sound effect if loaded (Session 12).
+        -- sfxHandle is nil when no sfx.wav exists in the asset root — gracefully skipped.
+        if sfxHandle then
+            ffe.playSound(sfxHandle, 0.8)  -- 80% volume
+        end
         spawnMarker(nx, ny)
     end
 
     -- ------------------------------------------------------------------
-    -- Music: start looping on first tick if a handle was provided from C++.
-    -- g_musicHandle is set as a global from lua_demo/main.cpp before game.lua
-    -- is loaded. If absent or invalid, this block is silently skipped.
+    -- Music: start looping on first tick if a handle was loaded from Lua.
+    -- musicHandle is loaded at script init time via ffe.loadSound().
+    -- If musicHandle is nil (file not found / audio unavailable), music
+    -- controls are silently skipped.
     -- ------------------------------------------------------------------
-    if not musicStarted and g_musicHandle and g_musicHandle ~= 0 then
-        ffe.playMusic(g_musicHandle, true)
+    if not musicStarted and musicHandle then
+        ffe.playMusic(musicHandle, true)
         ffe.setMusicVolume(0.5)
         musicStarted = true
-        ffe.log("lua_demo: music started (handle=" .. tostring(g_musicHandle) .. ", vol=0.5)")
+        ffe.log("lua_demo: music started (handle=" .. tostring(musicHandle) .. ", vol=0.5)")
     end
 
     -- ------------------------------------------------------------------
@@ -272,7 +308,7 @@ function update(entityId, dt)
                 ffe.stopMusic()
                 ffe.log("lua_demo: music stopped")
             else
-                ffe.playMusic(g_musicHandle, true)
+                ffe.playMusic(musicHandle, true)
                 ffe.log("lua_demo: music resumed")
             end
         end
@@ -320,6 +356,18 @@ function shutdown()
     if musicStarted and ffe.isMusicPlaying() then
         ffe.stopMusic()
         ffe.log("lua_demo: music stopped on shutdown")
+    end
+
+    -- Release Lua-loaded audio handles (Session 12)
+    if musicHandle then
+        ffe.unloadSound(musicHandle)
+        ffe.log("lua_demo: ffe.unloadSound called for music handle=" .. tostring(musicHandle))
+        musicHandle = nil
+    end
+    if sfxHandle then
+        ffe.unloadSound(sfxHandle)
+        ffe.log("lua_demo: ffe.unloadSound called for sfx handle=" .. tostring(sfxHandle))
+        sfxHandle = nil
     end
 
     -- Release GPU texture

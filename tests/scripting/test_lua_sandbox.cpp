@@ -7,6 +7,7 @@
 #include "renderer/rhi.h"
 #include "renderer/rhi_types.h"
 #include "renderer/texture_loader.h"
+#include "audio/audio.h"
 
 #include <string>
 
@@ -1068,4 +1069,253 @@ TEST_CASE("ffe.loadTexture with valid file returns a non-nil integer handle", "[
     ));
 
     ffe::rhi::shutdown();
+}
+
+// =============================================================================
+// ffe.fillTransform — zero-allocation transform query
+// =============================================================================
+
+TEST_CASE("ffe.fillTransform returns true and fills table when entity has Transform", "[scripting][ecs][fillTransform]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    ffe::Transform& t = world.addComponent<ffe::Transform>(entity);
+    t.position = {3.0f, 7.0f, 0.0f};
+    t.rotation = 1.5f;
+    t.scale    = {2.0f, 4.0f, 1.0f};
+    fix.engine.setWorld(&world);
+
+    const std::string script =
+        "local buf = {}\n"
+        "local ok = ffe.fillTransform(" + std::to_string(entity) + ", buf)\n"
+        "assert(ok == true)\n"
+        "assert(math.abs(buf.x - 3.0) < 0.001)\n"
+        "assert(math.abs(buf.y - 7.0) < 0.001)\n"
+        "assert(math.abs(buf.rotation - 1.5) < 0.001)\n"
+        "assert(math.abs(buf.scaleX - 2.0) < 0.001)\n"
+        "assert(math.abs(buf.scaleY - 4.0) < 0.001)\n";
+    REQUIRE(fix.engine.doString(script.c_str()));
+}
+
+TEST_CASE("ffe.fillTransform returns false when entity is invalid", "[scripting][ecs][fillTransform]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    // 4294967295 is NULL_ENTITY — always invalid.
+    REQUIRE(fix.engine.doString(
+        "local buf = {}\n"
+        "local ok = ffe.fillTransform(4294967295, buf)\n"
+        "assert(ok == false)\n"
+    ));
+}
+
+TEST_CASE("ffe.fillTransform returns false when entity has no Transform", "[scripting][ecs][fillTransform]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    // No Transform added.
+    fix.engine.setWorld(&world);
+
+    const std::string script =
+        "local buf = {}\n"
+        "local ok = ffe.fillTransform(" + std::to_string(entity) + ", buf)\n"
+        "assert(ok == false)\n";
+    REQUIRE(fix.engine.doString(script.c_str()));
+}
+
+TEST_CASE("ffe.fillTransform returns false when no World is set", "[scripting][ecs][fillTransform]") {
+    ScriptFixture fix;
+    // No setWorld() call.
+    REQUIRE(fix.engine.doString(
+        "local buf = {}\n"
+        "local ok = ffe.fillTransform(0, buf)\n"
+        "assert(ok == false)\n"
+    ));
+}
+
+TEST_CASE("ffe.fillTransform with non-integer arg 1 raises Lua error", "[scripting][ecs][fillTransform]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    // Passing a string where an integer is expected — luaL_checkinteger raises a Lua error.
+    REQUIRE_FALSE(fix.engine.doString("ffe.fillTransform('hello', {})"));
+}
+
+TEST_CASE("ffe.fillTransform with non-table arg 2 raises Lua error", "[scripting][ecs][fillTransform]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    // Passing a number where a table is expected — luaL_checktype raises a Lua error.
+    REQUIRE_FALSE(fix.engine.doString("ffe.fillTransform(0, 42)"));
+}
+
+TEST_CASE("ffe.fillTransform with negative entity ID returns false", "[scripting][ecs][fillTransform]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    REQUIRE(fix.engine.doString(
+        "local buf = {}\n"
+        "local ok = ffe.fillTransform(-1, buf)\n"
+        "assert(ok == false)\n"
+    ));
+}
+
+TEST_CASE("ffe.fillTransform table values match C++ Transform component", "[scripting][ecs][fillTransform]") {
+    // Verify exact match between C++ component values and Lua table values.
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    ffe::Transform& t = world.addComponent<ffe::Transform>(entity);
+    t.position = {-10.5f, 200.25f, 0.0f};
+    t.rotation = -3.14f;
+    t.scale    = {0.5f, 0.75f, 1.0f};
+    fix.engine.setWorld(&world);
+
+    const std::string script =
+        "local buf = {}\n"
+        "local ok = ffe.fillTransform(" + std::to_string(entity) + ", buf)\n"
+        "assert(ok == true)\n"
+        "assert(math.abs(buf.x - (-10.5)) < 0.001)\n"
+        "assert(math.abs(buf.y - 200.25) < 0.001)\n"
+        "assert(math.abs(buf.rotation - (-3.14)) < 0.01)\n"
+        "assert(math.abs(buf.scaleX - 0.5) < 0.001)\n"
+        "assert(math.abs(buf.scaleY - 0.75) < 0.001)\n";
+    REQUIRE(fix.engine.doString(script.c_str()));
+}
+
+// =============================================================================
+// ffe.loadSound — type guard, path safety, and rejection tests
+// =============================================================================
+
+TEST_CASE("ffe.loadSound exists as a callable in the ffe table", "[scripting][audio]") {
+    ScriptFixture fix;
+    REQUIRE(fix.engine.doString("assert(type(ffe.loadSound) == 'function')"));
+}
+
+TEST_CASE("ffe.loadSound with non-string argument returns nil (type guard)", "[scripting][audio][security]") {
+    ScriptFixture fix;
+    // Number: lua_type check rejects before lua_tostring coercion.
+    REQUIRE(fix.engine.doString("local h = ffe.loadSound(42); assert(h == nil)"));
+    // Boolean:
+    REQUIRE(fix.engine.doString("local h = ffe.loadSound(true); assert(h == nil)"));
+    // nil (no argument):
+    REQUIRE(fix.engine.doString("local h = ffe.loadSound(nil); assert(h == nil)"));
+    // Table:
+    REQUIRE(fix.engine.doString("local h = ffe.loadSound({}); assert(h == nil)"));
+}
+
+TEST_CASE("ffe.loadSound with path traversal returns nil", "[scripting][audio][security]") {
+    ScriptFixture fix;
+    REQUIRE(fix.engine.doString("local h = ffe.loadSound('../evil.wav'); assert(h == nil)"));
+    REQUIRE(fix.engine.doString("local h = ffe.loadSound('../../etc/passwd'); assert(h == nil)"));
+}
+
+TEST_CASE("ffe.loadSound with absolute path returns nil", "[scripting][audio][security]") {
+    ScriptFixture fix;
+    REQUIRE(fix.engine.doString("local h = ffe.loadSound('/etc/passwd'); assert(h == nil)"));
+}
+
+TEST_CASE("ffe.loadSound with empty string returns nil", "[scripting][audio][security]") {
+    ScriptFixture fix;
+    REQUIRE(fix.engine.doString("local h = ffe.loadSound(''); assert(h == nil)"));
+}
+
+// =============================================================================
+// ffe.unloadSound — handle validation
+// =============================================================================
+
+TEST_CASE("ffe.unloadSound exists as a callable in the ffe table", "[scripting][audio]") {
+    ScriptFixture fix;
+    REQUIRE(fix.engine.doString("assert(type(ffe.unloadSound) == 'function')"));
+}
+
+TEST_CASE("ffe.unloadSound rejects handle <= 0", "[scripting][audio][security]") {
+    ScriptFixture fix;
+    // handle = 0: null sentinel — must be rejected (no-op).
+    REQUIRE(fix.engine.doString("ffe.unloadSound(0)"));
+    // handle = -1: negative — must be rejected (no-op).
+    REQUIRE(fix.engine.doString("ffe.unloadSound(-1)"));
+    // handle = -999: large negative — must be rejected (no-op).
+    REQUIRE(fix.engine.doString("ffe.unloadSound(-999)"));
+}
+
+TEST_CASE("ffe.unloadSound rejects handle > UINT32_MAX", "[scripting][audio][security]") {
+    ScriptFixture fix;
+    // 4294967296 == UINT32_MAX + 1 == 2^32. lua_Integer is 64-bit,
+    // so this value is representable and must be range-checked.
+    REQUIRE(fix.engine.doString("ffe.unloadSound(4294967296)"));
+}
+
+TEST_CASE("ffe.unloadSound with non-integer argument raises Lua error", "[scripting][audio]") {
+    ScriptFixture fix;
+    // luaL_checkinteger raises a Lua error for non-integer args.
+    REQUIRE_FALSE(fix.engine.doString("ffe.unloadSound('hello')"));
+}
+
+// =============================================================================
+// ffe.playSound — handle validation and optional volume
+// =============================================================================
+
+TEST_CASE("ffe.playSound exists as a callable in the ffe table", "[scripting][audio]") {
+    ScriptFixture fix;
+    REQUIRE(fix.engine.doString("assert(type(ffe.playSound) == 'function')"));
+}
+
+TEST_CASE("ffe.playSound rejects handle <= 0", "[scripting][audio][security]") {
+    ScriptFixture fix;
+    // handle = 0: null sentinel — rejected.
+    REQUIRE(fix.engine.doString("ffe.playSound(0)"));
+    // handle = -1: negative — rejected.
+    REQUIRE(fix.engine.doString("ffe.playSound(-1)"));
+}
+
+TEST_CASE("ffe.playSound with optional volume parameter does not crash", "[scripting][audio]") {
+    // Without audio init, playSound on a valid-range handle is a no-op,
+    // but it must not crash. We test that the volume path parses correctly.
+    ScriptFixture fix;
+    // Valid handle range (1) + explicit volume — must not crash or error.
+    REQUIRE(fix.engine.doString("ffe.playSound(1, 0.5)"));
+    // Valid handle range (1) + no volume (default 1.0) — must not crash.
+    REQUIRE(fix.engine.doString("ffe.playSound(1)"));
+}
+
+TEST_CASE("ffe.playSound with non-integer handle raises Lua error", "[scripting][audio]") {
+    ScriptFixture fix;
+    // luaL_checkinteger raises a Lua error for non-integer args.
+    REQUIRE_FALSE(fix.engine.doString("ffe.playSound('hello')"));
+}
+
+TEST_CASE("ffe.playSound rejects handle > UINT32_MAX", "[scripting][audio][security]") {
+    ScriptFixture fix;
+    // 4294967296 == 2^32 — must be rejected as out of range.
+    REQUIRE(fix.engine.doString("ffe.playSound(4294967296)"));
+}
+
+// =============================================================================
+// ffe.setMasterVolume — type validation
+// =============================================================================
+
+TEST_CASE("ffe.setMasterVolume exists as a callable in the ffe table", "[scripting][audio]") {
+    ScriptFixture fix;
+    REQUIRE(fix.engine.doString("assert(type(ffe.setMasterVolume) == 'function')"));
+}
+
+TEST_CASE("ffe.setMasterVolume accepts a number argument", "[scripting][audio]") {
+    ScriptFixture fix;
+    // Valid volume values — must not crash or error.
+    REQUIRE(fix.engine.doString("ffe.setMasterVolume(0.5)"));
+    REQUIRE(fix.engine.doString("ffe.setMasterVolume(0.0)"));
+    REQUIRE(fix.engine.doString("ffe.setMasterVolume(1.0)"));
+}
+
+TEST_CASE("ffe.setMasterVolume rejects non-number argument (Lua error)", "[scripting][audio]") {
+    ScriptFixture fix;
+    // luaL_checknumber raises a Lua error for non-number args.
+    REQUIRE_FALSE(fix.engine.doString("ffe.setMasterVolume('loud')"));
+    REQUIRE_FALSE(fix.engine.doString("ffe.setMasterVolume(true)"));
+    REQUIRE_FALSE(fix.engine.doString("ffe.setMasterVolume(nil)"));
 }

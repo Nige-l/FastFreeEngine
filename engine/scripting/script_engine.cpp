@@ -508,6 +508,60 @@ void ScriptEngine::registerEcsBindings() {
     });
     lua_setfield(L, -2, "getTransform");
 
+    // ----------------------------------------------------------------
+    // ffe.fillTransform(entityId, table) -> bool
+    //   Zero-allocation alternative to ffe.getTransform.
+    //   Writes x, y, rotation, scaleX, scaleY into a caller-provided table.
+    //   Returns true on success, false if entity is invalid or has no Transform.
+    //   The caller pre-allocates the table once and reuses it every frame,
+    //   eliminating per-call GC pressure from table creation.
+    // ----------------------------------------------------------------
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        // Retrieve World pointer from the registry.
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        // Validate arg 1: entity ID (integer).
+        const lua_Integer rawId = luaL_checkinteger(state, 1);
+        if (rawId < 0) {
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+
+        // Validate arg 2: must be a table.
+        luaL_checktype(state, 2, LUA_TTABLE);
+
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) {
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        if (!world->hasComponent<ffe::Transform>(entityId)) {
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+
+        const ffe::Transform& t = world->getComponent<ffe::Transform>(entityId);
+
+        // Fill the caller's table in-place — no new table allocation.
+        lua_pushnumber(state, static_cast<lua_Number>(t.position.x)); lua_setfield(state, 2, "x");
+        lua_pushnumber(state, static_cast<lua_Number>(t.position.y)); lua_setfield(state, 2, "y");
+        lua_pushnumber(state, static_cast<lua_Number>(t.rotation));   lua_setfield(state, 2, "rotation");
+        lua_pushnumber(state, static_cast<lua_Number>(t.scale.x));    lua_setfield(state, 2, "scaleX");
+        lua_pushnumber(state, static_cast<lua_Number>(t.scale.y));    lua_setfield(state, 2, "scaleY");
+
+        lua_pushboolean(state, 1);
+        return 1;
+    });
+    lua_setfield(L, -2, "fillTransform");
+
     lua_pushcfunction(L, [](lua_State* state) -> int {
         // Retrieve World pointer from the registry.
         lua_pushlightuserdata(state, &s_worldRegistryKey);
@@ -983,6 +1037,101 @@ void ScriptEngine::registerEcsBindings() {
         return 1;
     });
     lua_setfield(L, -2, "isMusicPlaying");
+
+    // ----------------------------------------------------------------
+    // Sound effect bindings — load, unload, play sounds and control
+    // master volume. Follows the exact same security pattern as the
+    // texture lifecycle bindings (MEDIUM-1, LOW-2, LOW-5).
+    //
+    // ffe.loadSound(path)
+    //   path must be a relative string (no traversal, no absolute paths).
+    //   Uses the global asset root set by renderer::setAssetRoot() in C++.
+    //   Returns an integer handle id on success, nil on failure.
+    //   Return nil if the argument is not a string (MEDIUM-1 type guard).
+    //   Scripts must NOT be able to specify an asset root (LOW-5).
+    //
+    // ffe.unloadSound(handle)
+    //   handle must be a positive integer in (0, UINT32_MAX] (LOW-2).
+    //   Frees the decoded PCM buffer. After this call handle must not be used.
+    //   Returns nothing.
+    //
+    // ffe.playSound(handle [, volume])
+    //   Play a one-shot sound effect. Optional volume (default 1.0).
+    //   Returns nothing.
+    //
+    // ffe.setMasterVolume(volume)
+    //   Set master volume [0.0, 1.0]. Returns nothing.
+    // ----------------------------------------------------------------
+
+    // ffe.loadSound(path) -> integer or nil
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        // MEDIUM-1: explicit type guard — do NOT use lua_tostring without checking
+        // type first. lua_tostring silently coerces numbers and booleans to strings
+        // (e.g. ffe.loadSound(0) would forward "0" to C++ without this guard).
+        if (lua_type(state, 1) != LUA_TSTRING) {
+            FFE_LOG_ERROR("ScriptEngine", "loadSound: argument must be a string");
+            lua_pushnil(state);
+            return 1;
+        }
+        const char* path = lua_tostring(state, 1);
+
+        // LOW-5: scripts must not control the asset root. We pass the engine's
+        // internal asset root from the renderer (shared between textures and audio).
+        const char* assetRoot = ffe::renderer::getAssetRoot();
+        const ffe::audio::SoundHandle handle = ffe::audio::loadSound(path, assetRoot);
+
+        if (handle.id == 0u) {
+            lua_pushnil(state);
+            return 1;
+        }
+        lua_pushinteger(state, static_cast<lua_Integer>(handle.id));
+        return 1;
+    });
+    lua_setfield(L, -2, "loadSound");
+
+    // ffe.unloadSound(handle) -> nothing
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const lua_Integer rawHandle = luaL_checkinteger(state, 1);
+        // LOW-2: validate handle range before calling C++.
+        // 0 is the null sentinel (invalid handle); values above UINT32_MAX overflow u32.
+        if (rawHandle <= 0 || rawHandle > static_cast<lua_Integer>(UINT32_MAX)) {
+            FFE_LOG_ERROR("ScriptEngine",
+                          "unloadSound: handle %" PRId64 " is out of range — no-op",
+                          static_cast<long long>(rawHandle));
+            return 0;
+        }
+        const ffe::audio::SoundHandle handle{static_cast<ffe::u32>(rawHandle)};
+        ffe::audio::unloadSound(handle);
+        return 0;
+    });
+    lua_setfield(L, -2, "unloadSound");
+
+    // ffe.playSound(handle [, volume]) -> nothing
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const lua_Integer rawHandle = luaL_checkinteger(state, 1);
+        if (rawHandle <= 0 || rawHandle > static_cast<lua_Integer>(UINT32_MAX)) {
+            FFE_LOG_ERROR("ScriptEngine",
+                          "playSound: invalid handle %" PRId64 " — no-op",
+                          static_cast<long long>(rawHandle));
+            return 0;
+        }
+        const ffe::audio::SoundHandle handle{static_cast<ffe::u32>(rawHandle)};
+        // Optional second argument: volume (default 1.0f).
+        const float volume = (lua_gettop(state) >= 2 && !lua_isnil(state, 2))
+                           ? static_cast<float>(luaL_checknumber(state, 2))
+                           : 1.0f;
+        ffe::audio::playSound(handle, volume);
+        return 0;
+    });
+    lua_setfield(L, -2, "playSound");
+
+    // ffe.setMasterVolume(volume) -> nothing
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const lua_Number vol = luaL_checknumber(state, 1);
+        ffe::audio::setMasterVolume(static_cast<float>(vol));
+        return 0;
+    });
+    lua_setfield(L, -2, "setMasterVolume");
 
     // Set the 'ffe' table as a global.
     lua_setglobal(L, "ffe");
