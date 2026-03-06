@@ -18,6 +18,34 @@ FFE is free and open source forever. MIT licensed. That is not up for debate.
 
 ---
 
+## Quick Start: Your First Game in 15 Lines
+
+Write game logic in Lua. The engine handles rendering, input, and audio:
+
+```lua
+-- my_game.lua
+local player = ffe.createEntity()
+ffe.addTransform(player, 0, 0, 0, 1, 1)
+ffe.addSprite(player, ffe.loadTexture("textures/white.png"), 32, 32, 0.2, 0.8, 1.0, 1, 1)
+ffe.addPreviousTransform(player)
+
+function update(entityId, dt)
+    local t = {}
+    ffe.fillTransform(player, t)
+    local speed = 200
+    if ffe.isKeyHeld(ffe.KEY_W) then t.y = t.y + speed * dt end
+    if ffe.isKeyHeld(ffe.KEY_S) then t.y = t.y - speed * dt end
+    if ffe.isKeyHeld(ffe.KEY_A) then t.x = t.x - speed * dt end
+    if ffe.isKeyHeld(ffe.KEY_D) then t.x = t.x + speed * dt end
+    ffe.setTransform(player, t.x, t.y, 0, 1, 1)
+    if ffe.isKeyPressed(ffe.KEY_ESCAPE) then ffe.requestShutdown() end
+end
+```
+
+See the [full tutorial](docs/tutorial.md) for audio, collisions, sprites, and more.
+
+---
+
 ## Features
 
 All subsystems below are implemented and working together in three demo games: "Collect the Stars", "Pong", and "Breakout".
@@ -152,7 +180,7 @@ The flagship demo -- a complete mini-game written entirely in Lua exercising eve
 
 ### Pong
 
-Classic two-player Pong -- demonstrates input, collision, entity lifecycle, HUD scoring, and audio.
+Classic two-player Pong with visual effects -- ball trail, paddle flash on hit, speed color shift, goal flash panels, and background music.
 
 ```bash
 ./build/examples/pong/ffe_pong
@@ -161,11 +189,11 @@ Classic two-player Pong -- demonstrates input, collision, entity lifecycle, HUD 
 - **W/S** left paddle, **UP/DOWN** right paddle
 - **SPACE** to serve the ball
 - First to 5 wins -- ball speeds up each rally
-- **F1** editor overlay, **ESC** to quit
+- **M** music toggle, **F1** editor, **ESC** to quit
 
 ### Breakout
 
-Classic brick-breaking game -- demonstrates mass entity destruction, paddle physics, and colorful brick layouts.
+Classic brick-breaking game with particle effects -- brick destruction particles, ball trail, speed-based color shifting, paddle flash, life indicators, and a victory particle burst.
 
 ```bash
 ./build/examples/breakout/ffe_breakout
@@ -173,9 +201,9 @@ Classic brick-breaking game -- demonstrates mass entity destruction, paddle phys
 
 - **A/D** or **LEFT/RIGHT** move paddle
 - **SPACE** to launch ball, restart after game over
-- 84 colorful bricks, 6 rows worth different points
-- 3 lives, ball speeds up on paddle angle
-- **M** music toggle, **F1** editor, **ESC** quit
+- 84 colorful bricks in 6 rows, ball speeds up per hit
+- Particle effects on brick destruction, ball pulsing before launch
+- 3 lives, **M** music toggle, **F1** editor, **ESC** quit
 
 ### Other Demos
 
@@ -205,7 +233,9 @@ engine/
 
 tests/          349 Catch2 tests (core, renderer, scripting, audio, physics)
 examples/       Demo games (lua_demo, pong, breakout, hello_sprites, interactive_demo, headless_test)
-assets/         Textures, spritesheets, audio files
+assets/
+  textures/     PNG textures and spritesheets
+  audio/        WAV sound effects and OGG music tracks
 docs/
   architecture/ ADR design documents for each subsystem
   devlog.md     Session-by-session development history
@@ -249,6 +279,8 @@ FastFreeEngine is licensed under the [MIT License](LICENSE). Free and open sourc
 
 ## Status
 
-Active development. The engine has a working game loop, 2D rendering, audio, physics, scripting, and an editor overlay -- all demonstrated in two playable demo games. See `docs/devlog.md` for the full session-by-session development history.
+Active development. The engine has a working game loop, 2D rendering, audio, physics, scripting, and an editor overlay -- all demonstrated in three playable demo games. See `docs/devlog.md` for the full session-by-session development history.
 
 **Getting started?** Read the [Quick-Start Tutorial](docs/tutorial.md) to build your first game in Lua.
+
+**Want to contribute?** See [CONTRIBUTING.md](CONTRIBUTING.md) for code style, commit format, and PR process.
