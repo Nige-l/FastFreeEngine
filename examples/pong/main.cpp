@@ -78,11 +78,11 @@ void pongSystem(ffe::World& world, const float dt)
     // and load the white texture for paddles/ball.
     if (!ctx->sceneReady) {
         static constexpr const char* ASSET_ROOT =
-            "/home/nigel/FastFreeEngine/assets/textures";
+            "/home/nigel/FastFreeEngine/assets";
         ffe::renderer::setAssetRoot(ASSET_ROOT);
 
         ffe::rhi::TextureHandle loaded =
-            ffe::renderer::loadTexture("white.png");
+            ffe::renderer::loadTexture("textures/white.png");
 
         if (ffe::rhi::isValid(loaded)) {
             s_whiteTex = loaded;

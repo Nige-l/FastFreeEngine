@@ -16,7 +16,7 @@ vcpkg_installed/
 
 # Large audio files (local-only, not for git)
 assets/audio/Pixel Crown.wav
-assets/textures/music.wav
+assets/audio/music.wav
 
 # OS
 .DS_Store

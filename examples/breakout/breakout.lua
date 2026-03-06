@@ -338,12 +338,12 @@ end
 -- ---------------------------------------------------------------------------
 -- Scene init
 -- ---------------------------------------------------------------------------
-whiteTex    = ffe.loadTexture("white.png")
-sfxBrick    = ffe.loadSound("sfx_pong_paddle.wav")
-sfxPaddle   = ffe.loadSound("sfx_pong_wall.wav")
-sfxWall     = ffe.loadSound("sfx_pong_wall.wav")
-sfxLose     = ffe.loadSound("sfx_pong_score.wav")
-musicHandle = ffe.loadMusic("music_pixelcrown.ogg")
+whiteTex    = ffe.loadTexture("textures/white.png")
+sfxBrick    = ffe.loadSound("audio/sfx_pong_paddle.wav")
+sfxPaddle   = ffe.loadSound("audio/sfx_pong_wall.wav")
+sfxWall     = ffe.loadSound("audio/sfx_pong_wall.wav")
+sfxLose     = ffe.loadSound("audio/sfx_pong_score.wav")
+musicHandle = ffe.loadMusic("audio/music_pixelcrown.ogg")
 
 -- Start background music
 if musicHandle then

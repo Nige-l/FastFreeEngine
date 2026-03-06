@@ -209,11 +209,11 @@ end
 -- ---------------------------------------------------------------------------
 
 -- Load assets
-whiteTex    = ffe.loadTexture("white.png")
-sfxPaddle   = ffe.loadSound("sfx_pong_paddle.wav")
-sfxWall     = ffe.loadSound("sfx_pong_wall.wav")
-sfxScore    = ffe.loadSound("sfx_pong_score.wav")
-musicHandle = ffe.loadMusic("music_pixelcrown.ogg")
+whiteTex    = ffe.loadTexture("textures/white.png")
+sfxPaddle   = ffe.loadSound("audio/sfx_pong_paddle.wav")
+sfxWall     = ffe.loadSound("audio/sfx_pong_wall.wav")
+sfxScore    = ffe.loadSound("audio/sfx_pong_score.wav")
+musicHandle = ffe.loadMusic("audio/music_pixelcrown.ogg")
 
 -- Start background music
 if musicHandle then

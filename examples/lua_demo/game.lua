@@ -109,10 +109,10 @@ end)
 -- ---------------------------------------------------------------------------
 
 -- Load assets
-spritesheetTex = ffe.loadTexture("spritesheet.png")
-playerTex      = ffe.loadTexture("checkerboard.png")
-musicHandle    = ffe.loadMusic("music_pixelcrown.ogg") or ffe.loadMusic("music.ogg")
-sfxHandle      = ffe.loadSound("sfx.wav")
+spritesheetTex = ffe.loadTexture("textures/spritesheet.png")
+playerTex      = ffe.loadTexture("textures/checkerboard.png")
+musicHandle    = ffe.loadMusic("audio/music_pixelcrown.ogg") or ffe.loadMusic("audio/music.ogg")
+sfxHandle      = ffe.loadSound("audio/sfx.wav")
 
 if spritesheetTex then
     ffe.log("spritesheet.png loaded (handle=" .. tostring(spritesheetTex) .. ")")
