@@ -1786,8 +1786,17 @@ User-reported bugs: F1 editor toggle broken, no audio. After initial fix (Sessio
 - Tutorial: added camera effects section (Section 10), updated section numbering, added breakout to "What's Next?"
 - Scripting .context.md: added ffe.cameraShake, setBackgroundColor, mouse button APIs
 
+**Portability Fix:**
+- Replaced all hardcoded `/home/nigel/FastFreeEngine` paths in demo executables with dynamic resolution via `/proc/self/exe`. New `examples/demo_paths.h` walks up from the binary to find the project root. Demos now work on any machine after building.
+
+**Additional Bindings:**
+- `ffe.getEntityCount()` — returns alive entity count from ECS
+
+**Bug Fix:**
+- Entity count calculation in editor and scripting was wrong: `size() - free_list()` should be just `free_list()`. EnTT stores alive entities at indices `< free_list()`.
+
 ### Test Results
-- **360 tests pass** on both Clang-18 and GCC-13, zero warnings (11 new tests)
+- **362 tests pass** on both Clang-18 and GCC-13, zero warnings (13 new tests)
 
 ---
 
