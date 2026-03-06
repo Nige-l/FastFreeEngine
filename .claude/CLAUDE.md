@@ -6,11 +6,27 @@ Every agent reads this file at the start of every session. This document is auth
 
 ## 1. Project Identity
 
-FastFreeEngine (FFE) is an open-source, MIT-licensed C++ game engine. It is performance-first, always. It targets older hardware by default so that indie developers, hobbyist developers, students, and people in lower-income situations can build real games without expensive hardware.
+FastFreeEngine (FFE) is an open-source, MIT-licensed C++ game engine built to compete with the mainstream engine providers. It is performance-first, always. It targets older hardware by default so that indie developers, hobbyist developers, students, and people in lower-income situations can build real games without expensive hardware.
 
-The engine ships with AI-native documentation. Every subsystem includes a `.context.md` file written for LLMs to consume, so that developers can use AI assistants to write correct game code against FFE immediately.
+FFE supports **both 2D and 3D** games, with **multiplayer networking**, a **standalone editor application** (not an in-game overlay), and **AI-native tooling** throughout. The engine is designed to be a complete game development platform — not just a renderer.
+
+The engine ships with AI-native documentation. Every subsystem includes a `.context.md` file written for LLMs to consume, so that developers can use AI assistants to write correct game code against FFE immediately. Developers can also integrate their own LLMs via the engine's plugin/extension API.
+
+FFE also ships a **documentation and training website** aimed at getting young people into engineering through game development. The engine is designed to be learned from, not just used.
 
 FFE is built by people who love games and believe everyone deserves to make them.
+
+### Product Vision
+
+FFE is more than an engine. It is a platform:
+
+1. **The Engine** — high-performance C++ runtime supporting 2D, 3D, audio, physics, networking, and scripting
+2. **The Editor** — a standalone application (like Unity or Unreal Editor) for scene editing, asset management, and game preview
+3. **The AI Layer** — `.context.md` files, LLM plugin hooks, and AI-assisted development workflows
+4. **The Website** — documentation, tutorials, and training content aimed at students and young developers
+5. **The Ecosystem** — asset store, community templates, and example games that teach engineering concepts
+
+See `docs/ROADMAP.md` for the phased delivery plan.
 
 ---
 
@@ -119,12 +135,16 @@ Each directory has a clear owner. Agents do not write to directories they do not
 | `engine/audio/` | `engine-dev` |
 | `engine/physics/` | `engine-dev` |
 | `engine/scripting/` | `engine-dev` + `api-designer` |
-| `engine/editor/` | `engine-dev` |
+| `engine/networking/` | `engine-dev` (future — multiplayer, client-server) |
+| `engine/scene/` | `engine-dev` (future — scene graph, serialisation) |
+| `editor/` | `engine-dev` (future — standalone editor application) |
+| `website/` | TBD (future — documentation and training site) |
 | `tests/` | `test-engineer` |
 | `docs/architecture/` | `architect` |
 | `docs/agents/` | `director` |
 | `docs/devlog.md` | `project-manager` |
 | `docs/environment.md` | `system-engineer` |
+| `docs/ROADMAP.md` | `project-manager` + `director` |
 | `.claude/agents/` | `director` |
 | `.context.md` files (all directories) | `api-designer` |
 
@@ -221,13 +241,24 @@ These files are as important as the code itself. `api-designer` owns them and ke
 
 ## 10. The Mission
 
-FFE exists to unlock creativity.
+FFE exists to unlock creativity and get young people into engineering.
 
 A student with a ten-year-old laptop should be able to build a game that runs beautifully and share it with the world. A kid who discovers FFE because they want to make games should come out the other side understanding systems programming, graphics, and architecture — because the engine was designed to be learned from, not just used.
+
+FFE is a **serious competitor to the mainstream engine providers** — not a toy, not a demo, not an educational-only tool. It must be capable enough to ship real games (2D and 3D, single-player and multiplayer) while remaining accessible enough that a teenager can pick it up and start creating. These goals are not in tension — the best tools are both powerful and learnable.
 
 We may build commercial games on FFE to sustain the project. The engine stays free and open source forever. MIT licensed. That is not up for debate.
 
 Performance is how we deliver on this mission. By running well on old hardware, we remove the barrier between someone's idea and their ability to build it. Every performance decision we make is an accessibility decision.
+
+### Strategic Principles
+
+- **Ship incrementally.** Every session should leave the engine more capable than it was. See `docs/ROADMAP.md` for the phased plan.
+- **2D first, 3D next.** The 2D foundation must be solid before 3D work begins. 3D is not a rewrite — it builds on the same ECS, input, audio, scripting, and networking layers.
+- **Editor is a separate application.** Not an in-game overlay. Think Unity/Unreal Editor: scene view, asset browser, inspector, build pipeline. This is Phase 3 work.
+- **Networking is not optional.** Multiplayer is expected in modern games. The architecture must account for it from the start, even if implementation comes in Phase 4.
+- **AI is a first-class citizen.** Every subsystem documents itself for LLMs. Developers should be able to connect their preferred AI assistant and get productive immediately. LLM integration hooks are part of the platform, not an afterthought.
+- **The website teaches.** Documentation is not just API reference — it is a learning path from "I want to make a game" to "I understand how a game engine works."
 
 ---
 
