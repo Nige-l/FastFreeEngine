@@ -2286,6 +2286,165 @@ No new API paradigm — all three features follow the established `ffe.*` bindin
 
 ---
 
+## 2026-03-06 — Session 38: Phase 2 Implementation — 3D Foundation
+
+### Goal
+
+Implement ADR-007 v1.1 in full: 3D mesh loading (cgltf, glTF .glb), Blinn-Phong rendering pass, ECS `Transform3D`/`Mesh`/`Material3D` components, 10 Lua bindings, a working 3D demo, and a full Catch2 test suite. All five phases of the development flow were completed this session.
+
+### Work Completed
+
+**Phase 2 — engine-dev (implementation, no build):**
+
+New files created:
+- `third_party/cgltf.h` — cgltf v1.14, vendored single-header glTF 2.0 parser (no new vcpkg dependency)
+- `engine/renderer/mesh_loader.h` / `mesh_loader.cpp` — glTF .glb mesh loading with all ADR-007 security constraints (SEC-M1 through SEC-M8): `.glb`-only extension check, path traversal prevention, 64 MB file size cap, 100-slot fixed asset pool (`MAX_MESH_ASSETS`), `buffer->data != nullptr` and `buffer->data_size >= buffer->size` validation, exclusive use of `cgltf_accessor_read_float()`/`cgltf_accessor_read_index()` safe accessor API, `new (std::nothrow)` heap fallback with null check, `glGetError()` after every `glBufferData` call with `GL_OUT_OF_MEMORY` detection, `cgltf_free()` on all exit paths
+- `engine/renderer/mesh_renderer.h` / `mesh_renderer.cpp` — ECS-driven Blinn-Phong 3D render pass, 3D-before-2D render order, depth test lifecycle management, `SceneLighting3D` context struct (lightDir, lightColor, ambientColor)
+- `tests/renderer/test_mesh_loader.cpp` — 21 Catch2 test cases covering path validation, struct layout assertions, asset pool limits, ECS integration
+
+Modified files:
+- `engine/renderer/render_system.h` — new ECS components: `Transform3D` (44 bytes, quaternion rotation, `glm::quat`), `Mesh` (8 bytes, `MeshHandle`), `Material3D` (24 bytes, diffuse color + texture + shader override)
+- `engine/renderer/shader_library.h` / `shader_library.cpp` — new `BuiltinShader::MESH_BLINN_PHONG` enum value, GLSL 330 core vertex + fragment shader compiled at startup
+- `engine/renderer/opengl/rhi_opengl.h` / `rhi_opengl.cpp` — `getGlBufferId()` added to expose underlying GL buffer ID for VAO binding
+- `engine/core/application.h` / `application.cpp` — `m_camera3d` member added, `GLFW_DEPTH_BITS 24` added to window creation hints, 3D render pass integrated into `Application::render()` between clear and 2D pass
+- `engine/renderer/CMakeLists.txt` — `mesh_loader.cpp`, `mesh_renderer.cpp` added to renderer library sources
+- `engine/scripting/script_engine.cpp` — 10 new Lua bindings registered
+- `tests/CMakeLists.txt` — `test_mesh_loader.cpp` added
+- `examples/CMakeLists.txt` — `3d_demo` target added
+- `engine/renderer/.context.md` — 3D mesh rendering section added (components, bindings, usage patterns, anti-patterns)
+
+New example:
+- `examples/3d_demo/main.cpp` — C++ entry point, standard Application bootstrap
+- `examples/3d_demo/game.lua` — full 3D demo: loads a .glb mesh, creates a rotating entity, sets perspective camera and scene lighting, demonstrates all 10 new bindings
+- `examples/3d_demo/CMakeLists.txt`
+
+Architecture documents (produced in Session 37, committed this session):
+- `docs/architecture/ADR-007-3d-foundation.md` (v1.1, approved)
+- `docs/architecture/ADR-007-security-review.md` (shift-left review)
+
+**New Lua bindings (10 total):**
+
+| Binding | Description |
+|---------|-------------|
+| `ffe.loadMesh(path)` | Load a .glb file, returns integer handle (0 = failure) |
+| `ffe.unloadMesh(handle)` | Release mesh GPU resources and asset pool slot |
+| `ffe.createEntity3D(meshHandle, x, y, z)` | Create entity with Transform3D + Mesh + default Material3D |
+| `ffe.setTransform3D(id, x, y, z, rx, ry, rz, sx, sy, sz)` | Euler YXZ degrees → quaternion, sets position + scale |
+| `ffe.fillTransform3D(id, t)` | Set Transform3D from a Lua table `{x,y,z,rx,ry,rz,sx,sy,sz}` |
+| `ffe.set3DCamera(x, y, z, tx, ty, tz)` | Set perspective camera position and look-at target |
+| `ffe.setMeshColor(id, r, g, b, a)` | Set Material3D diffuse color (0.0–1.0) |
+| `ffe.setLightDirection(x, y, z)` | Set directional light direction (zero-vector guard: rejects length < 0.0001) |
+| `ffe.setLightColor(r, g, b)` | Set directional light color |
+| `ffe.setAmbientColor(r, g, b)` | Set ambient light color |
+
+**Phase 3 — Expert panel (parallel):**
+
+*performance-critic* — PASS with minor issues noted for backlog:
+- VAO binding inside the render loop (minor — not per-entity, only per-mesh-change)
+- Uniform location lookups cached correctly via `MAX_CACHED_UNIFORMS` increase (16→32)
+- No heap allocations in the render pass hot path — PASS
+- No virtual dispatch — PASS
+
+*security-auditor* — PASS (post-implementation):
+- All SEC-M1 through SEC-M8 constraints verified implemented
+- `.glb`-only extension check present before any cgltf call
+- `buffer->data != nullptr` and `data_size >= size` verified
+- Safe accessor API used exclusively — no direct pointer arithmetic into buffer data
+- `new (std::nothrow)` + null check present
+- `glGetError()` after every `glBufferData` — present
+- `ffe.setLightDirection` zero-vector guard — present
+- No CRITICAL or HIGH findings
+
+*api-designer* — `engine/renderer/.context.md` updated with 3D section:
+- `Transform3D`, `Mesh`, `Material3D` component docs
+- All 10 Lua binding signatures with parameter descriptions
+- Common usage pattern: load mesh → create entity → configure lighting → update in game loop
+- Anti-patterns: calling `loadMesh` per frame, passing zero vector to `setLightDirection`, using 2D `setTransform` on 3D entities
+
+*game-dev-tester* — invoked (3D is a new API paradigm per CLAUDE.md Section 7):
+- Wrote a standalone test game using all 10 bindings from scratch
+- Found 2 issues: `fillTransform3D` was not in `.context.md`, `ffe.unloadMesh` was missing from the binding list in `.context.md`
+- Both fixed in api-designer remediation pass
+
+**Phase 4 — Remediation:**
+
+Two fix cycles required:
+
+*Fix cycle 1 (lua_pushcfunction macro conflict):*
+LuaJIT's `lua_pushcfunction` macro expanded in a way that conflicted with a local lambda used as a temporary in `script_engine.cpp`. engine-dev changed the affected registration blocks to use named static helper functions. Zero warnings after fix.
+
+*Fix cycle 2 (cgltf field name + MeshGpuRecord visibility):*
+- `cgltf_buffer.data_size` field name differed between cgltf v1.13 and v1.14 in the vendored header — `data_size` → `size` in older API; resolved by using the correct v1.14 field name.
+- `MeshGpuRecord` struct was defined in the `.cpp` translation unit but referenced from a test via a forward declaration that didn't match — moved to the header as a `private`-equivalent detail accessible via `getMeshRecord()` test accessor.
+
+**Phase 5 — build-engineer:**
+
+Both compilers, zero warnings, all tests passing:
+
+| Compiler | Tests | Warnings | Result |
+|----------|-------|----------|--------|
+| Clang-18 | 519/519 | 0 | PASS |
+| GCC-13 | 519/519 | 0 | PASS |
+
+21 new test cases added (test_mesh_loader.cpp). Total test count: 519.
+
+### Agents Dispatched
+
+1. `engine-dev` (Phase 2, sequential)
+2. `performance-critic` + `security-auditor` + `api-designer` + `game-dev-tester` (Phase 3, parallel)
+3. `engine-dev` (Phase 4 — fix cycle 1, sequential)
+4. `engine-dev` (Phase 4 — fix cycle 2, sequential)
+5. `build-engineer` (Phase 5, sequential)
+
+### Files Changed
+
+| File | Status |
+|------|--------|
+| `third_party/cgltf.h` | NEW |
+| `engine/renderer/mesh_loader.h` | NEW |
+| `engine/renderer/mesh_loader.cpp` | NEW |
+| `engine/renderer/mesh_renderer.h` | NEW |
+| `engine/renderer/mesh_renderer.cpp` | NEW |
+| `examples/3d_demo/main.cpp` | NEW |
+| `examples/3d_demo/game.lua` | NEW |
+| `examples/3d_demo/CMakeLists.txt` | NEW |
+| `tests/renderer/test_mesh_loader.cpp` | NEW |
+| `docs/architecture/ADR-007-3d-foundation.md` | NEW (committed this session) |
+| `docs/architecture/ADR-007-security-review.md` | NEW (committed this session) |
+| `engine/renderer/render_system.h` | MODIFIED |
+| `engine/renderer/shader_library.h` | MODIFIED |
+| `engine/renderer/shader_library.cpp` | MODIFIED |
+| `engine/renderer/opengl/rhi_opengl.h` | MODIFIED |
+| `engine/renderer/opengl/rhi_opengl.cpp` | MODIFIED |
+| `engine/renderer/CMakeLists.txt` | MODIFIED |
+| `engine/renderer/.context.md` | MODIFIED |
+| `engine/core/application.h` | MODIFIED |
+| `engine/core/application.cpp` | MODIFIED |
+| `engine/scripting/script_engine.cpp` | MODIFIED |
+| `engine/scripting/.context.md` | MODIFIED |
+| `tests/CMakeLists.txt` | MODIFIED |
+| `examples/CMakeLists.txt` | MODIFIED |
+
+### game-dev-tester: INVOKED
+
+3D rendering is a categorically new API paradigm. game-dev-tester found 2 `.context.md` gaps (`fillTransform3D` undocumented, `unloadMesh` missing from binding list). Both fixed before Phase 5.
+
+### Session 38 Stats
+
+- 11 new files
+- 13 modified files
+- 10 new Lua bindings (total ~80)
+- 21 new Catch2 test cases
+- 519 total tests passing
+- 2 fix cycles
+- Commit: `9cab5de feat(renderer): 3D mesh loading and rendering — cgltf, Blinn-Phong, Transform3D`
+
+### Next Session (39): Windows Build Support
+
+Port FFE to build cleanly on Windows using MinGW-w64 cross-compilation from Linux as the initial target (MSVC to follow). Goals: CMake/Ninja build succeeds, all 519+ tests pass, demos link and run on Windows. Primary agents: `system-engineer` (build system, CMake) + `engine-dev` (platform-specific code guards).
+
+---
+
 ## 2026-03-06 — Session 37: Phase 2 Architecture — 3D Foundation Design
 
 ### Goal
