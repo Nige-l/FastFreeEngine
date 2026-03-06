@@ -923,6 +923,70 @@ void ScriptEngine::registerEcsBindings() {
     });
     lua_setfield(L, -2, "addSprite");
 
+    // ffe.setSpriteColor(entityId, r, g, b, a) -> nothing
+    // Modifies an existing Sprite component's color without log-spam overwrite.
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = luaL_checkinteger(state, 1);
+        if (rawId < 0) { return 0; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) { return 0; }
+        if (!world->hasComponent<ffe::Sprite>(entityId)) { return 0; }
+
+        const lua_Number r = luaL_checknumber(state, 2);
+        const lua_Number g = luaL_checknumber(state, 3);
+        const lua_Number b = luaL_checknumber(state, 4);
+        const lua_Number a = luaL_checknumber(state, 5);
+
+        if (!std::isfinite(r) || !std::isfinite(g) ||
+            !std::isfinite(b) || !std::isfinite(a)) {
+            FFE_LOG_ERROR("ScriptEngine", "setSpriteColor: non-finite value rejected");
+            return 0;
+        }
+
+        ffe::Sprite& sp = world->getComponent<ffe::Sprite>(entityId);
+        sp.color.r = static_cast<ffe::f32>(r);
+        sp.color.g = static_cast<ffe::f32>(g);
+        sp.color.b = static_cast<ffe::f32>(b);
+        sp.color.a = static_cast<ffe::f32>(a);
+        return 0;
+    });
+    lua_setfield(L, -2, "setSpriteColor");
+
+    // ffe.setSpriteSize(entityId, width, height) -> nothing
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = luaL_checkinteger(state, 1);
+        if (rawId < 0) { return 0; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) { return 0; }
+        if (!world->hasComponent<ffe::Sprite>(entityId)) { return 0; }
+
+        const lua_Number w = luaL_checknumber(state, 2);
+        const lua_Number h = luaL_checknumber(state, 3);
+
+        if (!std::isfinite(w) || !std::isfinite(h) || w <= 0.0 || h <= 0.0) {
+            FFE_LOG_ERROR("ScriptEngine", "setSpriteSize: invalid size rejected");
+            return 0;
+        }
+
+        ffe::Sprite& sp = world->getComponent<ffe::Sprite>(entityId);
+        sp.size.x = static_cast<ffe::f32>(w);
+        sp.size.y = static_cast<ffe::f32>(h);
+        return 0;
+    });
+    lua_setfield(L, -2, "setSpriteSize");
+
     // ffe.addPreviousTransform(entityId) -> bool
     lua_pushcfunction(L, [](lua_State* state) -> int {
         lua_pushlightuserdata(state, &s_worldRegistryKey);

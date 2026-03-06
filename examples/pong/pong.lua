@@ -3,7 +3,8 @@
 -- Two-player Pong: left paddle (W/S), right paddle (UP/DOWN).
 -- Press SPACE to serve. First to 5 wins.
 --
--- Exercises: input, collision, entity lifecycle, HUD, audio (music + SFX), transforms.
+-- Exercises: input, collision, entity lifecycle, HUD, audio (music + SFX),
+-- transforms, visual effects (trail, flash, color shift).
 --
 -- Coordinate system: centered origin, x: -640..640, y: -360..360.
 -- Window: 1280x720.
@@ -22,6 +23,10 @@ local BALL_SPEED     = 400.0
 local BALL_SPEED_INC = 25.0      -- speed increase per rally hit
 local MAX_BALL_SPEED = 800.0
 local WIN_SCORE      = 5
+
+-- Trail
+local TRAIL_COUNT    = 6
+local TRAIL_SIZE     = 12
 
 -- ---------------------------------------------------------------------------
 -- State
@@ -44,8 +49,26 @@ local ballSpeed      = BALL_SPEED
 local serving        = true      -- waiting for SPACE
 local serveDir       = 1         -- 1 = serve right, -1 = serve left
 local gameOver       = false
+local gameTime       = 0
 
 local transformBuf   = {}        -- reusable table for fillTransform
+
+-- Trail pool
+local trail          = {}
+local trailIndex     = 1
+local trailTimer     = 0
+
+-- Paddle flash
+local leftFlashTimer  = 0
+local rightFlashTimer = 0
+local leftBaseColor   = {0.4, 0.7, 1.0}
+local rightBaseColor  = {1.0, 0.5, 0.4}
+
+-- Goal flash entities
+local goalFlashLeft  = nil
+local goalFlashRight = nil
+local goalFlashTimer = 0
+local goalFlashSide  = nil
 
 -- ---------------------------------------------------------------------------
 -- Helper: update HUD
@@ -77,16 +100,59 @@ local function createRect(x, y, w, h, r, g, b, layer)
 end
 
 -- ---------------------------------------------------------------------------
+-- Trail system
+-- ---------------------------------------------------------------------------
+local function initTrail()
+    for i = 1, TRAIL_COUNT do
+        local id = createRect(-9999, -9999, TRAIL_SIZE, TRAIL_SIZE, 1, 1, 1, 2)
+        trail[i] = { id = id, x = -9999, y = -9999 }
+    end
+end
+
+local function updateTrail(bx, by, dt)
+    trailTimer = trailTimer + dt
+    if trailTimer >= 0.016 then
+        trailTimer = 0
+        trail[trailIndex].x = bx
+        trail[trailIndex].y = by
+        trailIndex = (trailIndex % TRAIL_COUNT) + 1
+    end
+    local speedRatio = (ballSpeed - BALL_SPEED) / (MAX_BALL_SPEED - BALL_SPEED)
+    speedRatio = math.max(0, math.min(1, speedRatio))
+    for i = 1, TRAIL_COUNT do
+        local t = trail[i]
+        if t.id then
+            ffe.setTransform(t.id, t.x, t.y, 0, 1, 1)
+            local age = ((trailIndex - i - 1) % TRAIL_COUNT) / TRAIL_COUNT
+            local alpha = 0.1 + age * 0.25
+            ffe.setSpriteColor(t.id, 1, 1 - speedRatio * 0.5, 1 - speedRatio * 0.7, alpha)
+        end
+    end
+end
+
+local function hideTrail()
+    for i = 1, TRAIL_COUNT do
+        if trail[i] and trail[i].id then
+            ffe.setTransform(trail[i].id, -9999, -9999, 0, 1, 1)
+            trail[i].x = -9999
+            trail[i].y = -9999
+        end
+    end
+end
+
+-- ---------------------------------------------------------------------------
 -- Helper: reset ball to center, waiting for serve
 -- ---------------------------------------------------------------------------
 local function resetBall()
     if ball then
         ffe.setTransform(ball, 0, 0, 0, 1, 1)
+        ffe.setSpriteColor(ball, 1, 1, 1, 1)
     end
     ballVx   = 0
     ballVy   = 0
     ballSpeed = BALL_SPEED
     serving  = true
+    hideTrail()
     updateHud()
 end
 
@@ -94,7 +160,6 @@ end
 -- Helper: serve the ball
 -- ---------------------------------------------------------------------------
 local function serveBall()
-    -- Angle between -30 and +30 degrees
     local angle = (math.random() * 60 - 30) * math.pi / 180
     ballVx = math.cos(angle) * ballSpeed * serveDir
     ballVy = math.sin(angle) * ballSpeed
@@ -108,9 +173,12 @@ end
 local function scorePoint(side)
     if side == "left" then
         scoreLeft = scoreLeft + 1
+        goalFlashSide = "right"
     else
         scoreRight = scoreRight + 1
+        goalFlashSide = "left"
     end
+    goalFlashTimer = 0.3
 
     if sfxScore then ffe.playSound(sfxScore, 0.6) end
 
@@ -119,7 +187,7 @@ local function scorePoint(side)
         local winner = scoreLeft >= WIN_SCORE and "LEFT" or "RIGHT"
         ffe.log("Game over! " .. winner .. " wins " .. scoreLeft .. "-" .. scoreRight)
     else
-        serveDir = side == "left" and 1 or -1  -- loser serves
+        serveDir = side == "left" and 1 or -1
     end
 
     resetBall()
@@ -171,6 +239,14 @@ end
 createRect(0, HALF_H - 2, HALF_W * 2, 4, 0.2, 0.2, 0.2, 0)
 createRect(0, -(HALF_H - 2), HALF_W * 2, 4, 0.2, 0.2, 0.2, 0)
 
+-- Goal flash panels (tall rectangles at the edges, initially invisible)
+goalFlashLeft  = createRect(-HALF_W + 20, 0, 40, HALF_H * 2, 0.4, 0.7, 1.0, 0)
+goalFlashRight = createRect( HALF_W - 20, 0, 40, HALF_H * 2, 1.0, 0.5, 0.4, 0)
+if goalFlashLeft  then ffe.setSpriteColor(goalFlashLeft,  0.4, 0.7, 1.0, 0) end
+if goalFlashRight then ffe.setSpriteColor(goalFlashRight, 1.0, 0.5, 0.4, 0) end
+
+initTrail()
+
 ffe.log("Pong ready! Press SPACE to serve.")
 updateHud()
 
@@ -180,6 +256,8 @@ math.randomseed(12345)
 -- update(entityId, dt)
 -- ---------------------------------------------------------------------------
 function update(entityId, dt)
+    gameTime = gameTime + dt
+
     -- ESC to quit
     if ffe.isKeyPressed(ffe.KEY_ESCAPE) then
         ffe.requestShutdown()
@@ -206,12 +284,48 @@ function update(entityId, dt)
         end
     end
 
+    -- Goal flash decay
+    if goalFlashTimer > 0 then
+        goalFlashTimer = goalFlashTimer - dt
+        local alpha = math.max(0, goalFlashTimer / 0.3) * 0.4
+        if goalFlashSide == "left" and goalFlashLeft then
+            ffe.setSpriteColor(goalFlashLeft, 0.4, 0.7, 1.0, alpha)
+        elseif goalFlashSide == "right" and goalFlashRight then
+            ffe.setSpriteColor(goalFlashRight, 1.0, 0.5, 0.4, alpha)
+        end
+    end
+
+    -- Paddle flash decay
+    if leftFlashTimer > 0 then
+        leftFlashTimer = leftFlashTimer - dt
+        if leftFlashTimer <= 0 then
+            ffe.setSpriteColor(leftPaddle, leftBaseColor[1], leftBaseColor[2], leftBaseColor[3], 1)
+        else
+            local f = leftFlashTimer / 0.1
+            ffe.setSpriteColor(leftPaddle, 1, 1, 1, 0.7 + f * 0.3)
+        end
+    end
+    if rightFlashTimer > 0 then
+        rightFlashTimer = rightFlashTimer - dt
+        if rightFlashTimer <= 0 then
+            ffe.setSpriteColor(rightPaddle, rightBaseColor[1], rightBaseColor[2], rightBaseColor[3], 1)
+        else
+            local f = rightFlashTimer / 0.1
+            ffe.setSpriteColor(rightPaddle, 1, 1, 1, 0.7 + f * 0.3)
+        end
+    end
+
+    -- Ball pulsing while serving
+    if serving and not gameOver and ball then
+        local pulse = 0.9 + 0.1 * math.sin(gameTime * 6)
+        ffe.setTransform(ball, 0, 0, 0, pulse, pulse)
+    end
+
     -- Move left paddle (W/S)
     if ffe.fillTransform(leftPaddle, transformBuf) then
         local py = transformBuf.y
         if ffe.isKeyHeld(ffe.KEY_W) then py = py + PADDLE_SPEED * dt end
         if ffe.isKeyHeld(ffe.KEY_S) then py = py - PADDLE_SPEED * dt end
-        -- Clamp to screen
         local halfPad = PADDLE_H / 2
         py = math.max(-(HALF_H - halfPad - 4), math.min(HALF_H - halfPad - 4, py))
         ffe.setTransform(leftPaddle, transformBuf.x, py, 0, 1, 1)
@@ -246,7 +360,7 @@ function update(entityId, dt)
             if sfxWall then ffe.playSound(sfxWall, 0.3) end
         end
 
-        -- Check paddle collisions (manual AABB since paddles don't use collision system)
+        -- Check paddle collisions
         local halfPadW = PADDLE_W / 2
         local halfPadH = PADDLE_H / 2
 
@@ -258,14 +372,15 @@ function update(entityId, dt)
                    bx + halfBall > px - halfPadW and
                    by + halfBall > py - halfPadH and
                    by - halfBall < py + halfPadH then
-                    -- Hit! Reflect and adjust angle based on hit position
                     bx = px + halfPadW + halfBall
-                    local hitPos = (by - py) / halfPadH  -- -1 to 1
-                    local angle = hitPos * 60 * math.pi / 180  -- up to 60 degrees
+                    local hitPos = (by - py) / halfPadH
+                    local angle = hitPos * 60 * math.pi / 180
                     ballSpeed = math.min(MAX_BALL_SPEED, ballSpeed + BALL_SPEED_INC)
                     ballVx = math.cos(angle) * ballSpeed
                     ballVy = math.sin(angle) * ballSpeed
                     if sfxPaddle then ffe.playSound(sfxPaddle, 0.5) end
+                    leftFlashTimer = 0.1
+                    ffe.setSpriteColor(leftPaddle, 1, 1, 1, 1)
                 end
             end
         end
@@ -285,6 +400,8 @@ function update(entityId, dt)
                     ballVx = -math.cos(angle) * ballSpeed
                     ballVy = math.sin(angle) * ballSpeed
                     if sfxPaddle then ffe.playSound(sfxPaddle, 0.5) end
+                    rightFlashTimer = 0.1
+                    ffe.setSpriteColor(rightPaddle, 1, 1, 1, 1)
                 end
             end
         end
@@ -299,6 +416,14 @@ function update(entityId, dt)
         end
 
         ffe.setTransform(ball, bx, by, 0, 1, 1)
+
+        -- Ball color shift with speed
+        local speedRatio = (ballSpeed - BALL_SPEED) / (MAX_BALL_SPEED - BALL_SPEED)
+        speedRatio = math.max(0, math.min(1, speedRatio))
+        ffe.setSpriteColor(ball, 1, 1 - speedRatio * 0.5, 1 - speedRatio * 0.7, 1)
+
+        -- Update trail
+        updateTrail(bx, by, dt)
     end
 end
 
