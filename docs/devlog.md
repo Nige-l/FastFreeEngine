@@ -1623,7 +1623,7 @@ Session 21 handover document written at `docs/session21-handover.md`.
   - Auto-scrolls to newest messages
   - Shows `[LEVEL] [system] message` format
 - **4 new test sections** for ring buffer: empty after init, captures messages, wraps at capacity, filtered messages not captured
-- **Test count: 352** (349 + 3 new sections) — all pass on both compilers, zero warnings
+- **Test count: 349** — all pass on both compilers, zero warnings (1 new TEST_CASE with 4 sections)
 
 ### Architecture Notes
 - Ring buffer is pre-allocated at file scope (no heap allocation on write)
@@ -1666,6 +1666,40 @@ Session 22 handover document written at `docs/session22-handover.md`.
 - P2: Screenshots/GIFs for README
 
 Session 23 handover document written at `docs/session23-handover.md`.
+
+---
+
+## 2026-03-06 — Session 23: Breakout Demo + Contributing Guide
+
+### Planned
+- P0: Third example game (Breakout)
+- P1: Contributing guide (CONTRIBUTING.md)
+
+### Completed
+- **Breakout demo** (`examples/breakout/`):
+  - Classic brick-breaking game, all logic in Lua
+  - Paddle (A/D or LEFT/RIGHT), ball with angle-based deflection
+  - 84 bricks in 6 color-coded rows (red/orange/yellow/green/cyan/blue)
+  - Row-based scoring (top rows worth more)
+  - 3 lives, game over / win conditions
+  - Background music, 4 distinct SFX (brick, paddle, wall, lose)
+  - M key music toggle, clean shutdown
+  - Demonstrates mass entity destruction — key differentiator from other demos
+- **CONTRIBUTING.md** — code style, commit format, PR process, test requirements, performance rules
+- **README.md** updated with Breakout demo section, test count
+- **All 349 tests pass** on both compilers, zero warnings
+
+### Architecture Notes
+- Breakout stores brick metadata in a Lua table keyed by entity ID for O(1) lookup during collision
+- One brick destroyed per frame to avoid double-bounce artifacts
+- Ball bounce direction determined by overlap comparison (side vs top/bottom)
+
+### Next Session Should Start With
+- P0: Screenshots/GIFs for README (requires display capture)
+- P1: Review and polish all three demo games
+- P2: Performance benchmark documentation
+
+Session 24 handover document written at `docs/session24-handover.md`.
 
 ---
 

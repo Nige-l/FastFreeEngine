@@ -20,7 +20,7 @@ FFE is free and open source forever. MIT licensed. That is not up for debate.
 
 ## Features
 
-All subsystems below are implemented and working together in two demo games: "Collect the Stars" and "Pong".
+All subsystems below are implemented and working together in three demo games: "Collect the Stars", "Pong", and "Breakout".
 
 - **ECS** -- Entity Component System built on EnTT with a thin `World` wrapper and function-pointer system dispatch. No virtual calls in hot paths.
 - **2D Sprite Rendering** -- OpenGL 3.3 backend with batched draw calls (2048 sprites per batch), packed 64-bit sort keys, and render queue.
@@ -117,7 +117,7 @@ cmake --build build-gcc
 
 ### Running Tests
 
-348 Catch2 tests covering core, renderer, scripting, audio, physics, and texture loading:
+349 Catch2 tests covering core, renderer, scripting, audio, physics, and texture loading:
 
 ```bash
 ctest --test-dir build --output-on-failure
@@ -163,6 +163,20 @@ Classic two-player Pong -- demonstrates input, collision, entity lifecycle, HUD 
 - First to 5 wins -- ball speeds up each rally
 - **F1** editor overlay, **ESC** to quit
 
+### Breakout
+
+Classic brick-breaking game -- demonstrates mass entity destruction, paddle physics, and colorful brick layouts.
+
+```bash
+./build/examples/breakout/ffe_breakout
+```
+
+- **A/D** or **LEFT/RIGHT** move paddle
+- **SPACE** to launch ball, restart after game over
+- 84 colorful bricks, 6 rows worth different points
+- 3 lives, ball speeds up on paddle angle
+- **M** music toggle, **F1** editor, **ESC** quit
+
 ### Other Demos
 
 ```bash
@@ -189,8 +203,8 @@ engine/
   scripting/    Lua sandbox, ffe.* API bindings, instruction budget
   editor/       Dear ImGui overlay, entity inspector
 
-tests/          348 Catch2 tests (core, renderer, scripting, audio, physics)
-examples/       Demo games (lua_demo, pong, hello_sprites, interactive_demo, headless_test)
+tests/          349 Catch2 tests (core, renderer, scripting, audio, physics)
+examples/       Demo games (lua_demo, pong, breakout, hello_sprites, interactive_demo, headless_test)
 assets/         Textures, spritesheets, audio files
 docs/
   architecture/ ADR design documents for each subsystem
