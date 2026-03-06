@@ -36,13 +36,12 @@ static constexpr ffe::u32 BG_SPRITE_COUNT = 8;
 static constexpr float    BG_SPRITE_SIZE  = 60.0f;
 
 // ---------------------------------------------------------------------------
-// ECS context tags stored in the registry so systems can reach Application
-// and shared GPU resources without global state.
+// ECS context tags stored in the registry so systems can reach shared state
+// and the player entity ID without global variables.
 // ---------------------------------------------------------------------------
 struct DemoContext {
-    ffe::Application* app     = nullptr; // needed for requestShutdown()
-    ffe::EntityId     player  = ffe::NULL_ENTITY;
-    bool              started = false;
+    ffe::EntityId player  = ffe::NULL_ENTITY;
+    bool          started = false;
 };
 
 // ---------------------------------------------------------------------------
@@ -209,17 +208,13 @@ void interactiveDemoSystem(ffe::World& world, const float dt)
     }
 
     // -----------------------------------------------------------------------
-    // ESC to quit -- requestShutdown() is called on Application via context.
-    // DESIGN-1: Application is not reachable from inside a system through
-    // the World API alone. The workaround is to store an Application* in the
-    // ECS registry context (world.registry().ctx()).  This is an ergonomics
-    // gap -- see the usage report.
+    // ESC to quit -- set ShutdownSignal in ECS context.
+    // Application::run() checks this after every tick and exits the loop.
+    // No Application* needed -- the signal lives in the registry context.
     // -----------------------------------------------------------------------
     if (ffe::isKeyPressed(ffe::Key::ESCAPE)) {
         FFE_LOG_INFO("Demo", "ESC pressed -- requesting shutdown");
-        if (ctx->app != nullptr) {
-            ctx->app->requestShutdown();
-        }
+        world.registry().ctx().get<ffe::ShutdownSignal>().requested = true;
     }
 }
 
@@ -239,11 +234,11 @@ int main()
     ffe::Application app(config);
 
     // -----------------------------------------------------------------------
-    // Inject DemoContext into the ECS registry so the system can reach
-    // Application::requestShutdown() and share the player entity ID.
+    // Inject DemoContext into the ECS registry so the system can share
+    // the player entity ID without global state.
+    // ShutdownSignal is already emplaced by Application::startup().
     // -----------------------------------------------------------------------
     DemoContext ctx;
-    ctx.app = &app;
     app.world().registry().ctx().emplace<DemoContext>(ctx);
 
     // -----------------------------------------------------------------------
@@ -261,13 +256,11 @@ int main()
     // -----------------------------------------------------------------------
     // Register the demo system
     // -----------------------------------------------------------------------
-    const ffe::SystemDescriptor desc = {
+    app.world().registerSystem(FFE_SYSTEM(
         "InteractiveDemo",
-        15, // strlen("InteractiveDemo")
         interactiveDemoSystem,
         100  // Gameplay priority -- runs before render prepare (500)
-    };
-    app.world().registerSystem(desc);
+    ));
     app.world().sortSystems();
 
     // -----------------------------------------------------------------------

@@ -87,6 +87,14 @@ int32_t Application::run() {
             ZoneScopedN("FixedTick");
             tick(fixedDt);
             accumulator -= fixedDt;
+
+            // Check if a system requested shutdown via the ECS context signal.
+            // Break out of the tick loop immediately so we don't execute more
+            // ticks after a shutdown has been requested.
+            if (m_world.registry().ctx().get<ShutdownSignal>().requested) {
+                m_running.store(false, std::memory_order_relaxed);
+                break;
+            }
         }
 
         // --- Variable-rate render ---
@@ -244,6 +252,11 @@ Result Application::startup() {
         m_world.registry().ctx().emplace<rhi::TextureHandle>(m_defaultWhiteTexture);
     }
 
+    // 5cd. Emplace ShutdownSignal into ECS context so systems can request shutdown
+    // without holding an Application pointer.  Application::run() checks this
+    // after every tick and exits the loop if requested = true.
+    m_world.registry().ctx().emplace<ShutdownSignal>();
+
     // 5d. Setup camera for 2D (orthographic, pixel-space)
     m_camera.projType = renderer::ProjectionType::ORTHOGRAPHIC;
     m_camera.orthoLeft   = static_cast<f32>(-m_config.windowWidth)  / 2.0f;
@@ -263,21 +276,16 @@ Result Application::startup() {
     // 6. Initialize the scripting engine — not yet implemented
 
     // 7. Register built-in systems
-    const SystemDescriptor inputDesc = {
+    m_world.registerSystem(FFE_SYSTEM(
         "InputUpdate",
-        11, // strlen("InputUpdate")
         [](World& /*world*/, float /*dt*/) { updateInput(); },
         0   // Priority 0 -- runs before all gameplay systems
-    };
-    m_world.registerSystem(inputDesc);
-
-    const SystemDescriptor renderPrepDesc = {
+    ));
+    m_world.registerSystem(FFE_SYSTEM(
         "RenderPrepare",
-        13, // strlen("RenderPrepare")
         renderer::renderPrepareSystem,
         renderer::RENDER_PREPARE_PRIORITY
-    };
-    m_world.registerSystem(renderPrepDesc);
+    ));
 
     // 8. Sort system list by priority
     m_world.sortSystems();

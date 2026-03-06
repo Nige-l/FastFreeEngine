@@ -139,10 +139,12 @@ static bool validateAssetRoot(const char* const absPath) {
     return true;
 }
 
-// loadTextureImpl — shared implementation for both loadTexture() overloads.
+// loadTextureImpl — shared implementation for all loadTexture() overloads.
 // assetRoot is already validated by the caller.
+// params controls filter and wrap mode; the defaults match the original behaviour.
 static ffe::rhi::TextureHandle loadTextureImpl(const char* const path,
-                                               const char* const assetRoot) {
+                                               const char* const assetRoot,
+                                               const ffe::renderer::TextureLoadParams& params) {
     // SEC-1: path safety check is FIRST — before any syscall
     if (!isPathSafe(path)) {
         FFE_LOG_ERROR("texture_loader", "loadTexture: unsafe path rejected: \"%s\"",
@@ -270,12 +272,13 @@ static ffe::rhi::TextureHandle loadTextureImpl(const char* const path,
     }
 
     // Upload to GPU via the RHI. TextureFormat::RGBA8 matches our forced decode.
+    // filter and wrap come from caller-supplied params (default: LINEAR + CLAMP_TO_EDGE).
     const ffe::rhi::TextureDesc desc{
         static_cast<u32>(w),
         static_cast<u32>(h),
         ffe::rhi::TextureFormat::RGBA8,
-        ffe::rhi::TextureFilter::LINEAR,
-        ffe::rhi::TextureWrap::CLAMP_TO_EDGE,
+        params.filter,
+        params.wrap,
         false,    // generateMipmaps — caller can add mip support later
         pixels
     };
@@ -340,7 +343,7 @@ ffe::rhi::TextureHandle loadTexture(const char* const path) {
                       "loadTexture: called before setAssetRoot() — no asset root configured");
         return ffe::rhi::TextureHandle{0};
     }
-    return loadTextureImpl(path, s_state.root);
+    return loadTextureImpl(path, s_state.root, TextureLoadParams{});
 }
 
 ffe::rhi::TextureHandle loadTexture(const char* const path, const char* const assetRoot) {
@@ -350,7 +353,28 @@ ffe::rhi::TextureHandle loadTexture(const char* const path, const char* const as
                       assetRoot ? assetRoot : "(null)");
         return ffe::rhi::TextureHandle{0};
     }
-    return loadTextureImpl(path, assetRoot);
+    return loadTextureImpl(path, assetRoot, TextureLoadParams{});
+}
+
+ffe::rhi::TextureHandle loadTexture(const char* const path, const TextureLoadParams& params) {
+    // HIGH-3: reject if setAssetRoot() was never called — no cwd default.
+    if (!s_state.isSet || s_state.root[0] == '\0') {
+        FFE_LOG_ERROR("texture_loader",
+                      "loadTexture: called before setAssetRoot() — no asset root configured");
+        return ffe::rhi::TextureHandle{0};
+    }
+    return loadTextureImpl(path, s_state.root, params);
+}
+
+ffe::rhi::TextureHandle loadTexture(const char* const path, const char* const assetRoot,
+                                    const TextureLoadParams& params) {
+    if (!validateAssetRoot(assetRoot)) {
+        FFE_LOG_ERROR("texture_loader",
+                      "loadTexture: provided assetRoot is invalid: \"%s\"",
+                      assetRoot ? assetRoot : "(null)");
+        return ffe::rhi::TextureHandle{0};
+    }
+    return loadTextureImpl(path, assetRoot, params);
 }
 
 void unloadTexture(const ffe::rhi::TextureHandle handle) {

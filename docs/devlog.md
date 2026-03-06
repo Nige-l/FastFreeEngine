@@ -560,3 +560,27 @@ Autonomous execution underway. User is away. Will produce handover + summary at 
 - game-dev-tester builds a demo where game logic (movement, scoring) lives in Lua scripts
 
 Session 6 handover document written at `docs/session6-handover.md`.
+
+---
+
+## Session 6 — [2026-03-06] — Lua ECS Bindings + Housekeeping
+
+### Goals
+1. Lua ECS bindings — expose entity, getTransform, setTransform, isKeyHeld, isKeyPressed to Lua
+2. Add assets/textures/ with a sample PNG for end-to-end loadTexture testing
+3. Fix DESIGN-1 — requestShutdown() accessible from within systems
+4. Fix SystemDescriptor nameLength boilerplate — macro or factory helper
+5. Investigate hello_sprites flickering and jitter (software side — hardware reboot pending from user)
+6. Fix loadTexture LINEAR hardcoded filter — add filter param or TextureLoadParams
+7. Remove submitRenderQueue() dead code
+8. api-designer reviews Lua ECS API, updates scripting/.context.md
+9. game-dev-tester builds demo where game logic lives in a Lua script
+
+### Pre-conditions
+- 144/144 tests passing (Clang-18 + GCC-13)
+- Lua sandbox complete and security-reviewed
+- Texture loading complete and security-reviewed
+- session6-handover.md has full dispatch plan
+
+### Session opened
+Autonomous execution. User asleep — running continuously through multiple sessions.

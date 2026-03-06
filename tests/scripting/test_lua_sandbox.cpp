@@ -1,5 +1,11 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 #include "scripting/script_engine.h"
+#include "core/ecs.h"
+#include "core/input.h"
+#include "renderer/render_system.h"
+
+#include <string>
 
 // =============================================================================
 // Fixtures
@@ -230,4 +236,300 @@ TEST_CASE("string library is accessible", "[scripting][api]") {
 TEST_CASE("table library is accessible", "[scripting][api]") {
     ScriptFixture fix;
     REQUIRE(fix.engine.doString("local t = {3,1,2}; table.sort(t); assert(t[1] == 1)"));
+}
+
+// =============================================================================
+// Input API — key constants and query functions
+// =============================================================================
+
+TEST_CASE("ffe key constants are accessible as integers", "[scripting][input]") {
+    ScriptFixture fix;
+    REQUIRE(fix.engine.doString("assert(type(ffe.KEY_W) == 'number')"));
+    REQUIRE(fix.engine.doString("assert(type(ffe.KEY_A) == 'number')"));
+    REQUIRE(fix.engine.doString("assert(type(ffe.KEY_S) == 'number')"));
+    REQUIRE(fix.engine.doString("assert(type(ffe.KEY_D) == 'number')"));
+    REQUIRE(fix.engine.doString("assert(type(ffe.KEY_SPACE) == 'number')"));
+    REQUIRE(fix.engine.doString("assert(type(ffe.KEY_ESCAPE) == 'number')"));
+    REQUIRE(fix.engine.doString("assert(type(ffe.KEY_ENTER) == 'number')"));
+    REQUIRE(fix.engine.doString("assert(type(ffe.KEY_UP) == 'number')"));
+    REQUIRE(fix.engine.doString("assert(type(ffe.KEY_DOWN) == 'number')"));
+    REQUIRE(fix.engine.doString("assert(type(ffe.KEY_LEFT) == 'number')"));
+    REQUIRE(fix.engine.doString("assert(type(ffe.KEY_RIGHT) == 'number')"));
+}
+
+TEST_CASE("ffe key constants have correct GLFW values", "[scripting][input]") {
+    ScriptFixture fix;
+    // Values must match Key enum in input.h (which matches GLFW_KEY_*).
+    REQUIRE(fix.engine.doString("assert(ffe.KEY_W == 87)"));
+    REQUIRE(fix.engine.doString("assert(ffe.KEY_A == 65)"));
+    REQUIRE(fix.engine.doString("assert(ffe.KEY_S == 83)"));
+    REQUIRE(fix.engine.doString("assert(ffe.KEY_D == 68)"));
+    REQUIRE(fix.engine.doString("assert(ffe.KEY_SPACE == 32)"));
+    REQUIRE(fix.engine.doString("assert(ffe.KEY_ESCAPE == 256)"));
+    REQUIRE(fix.engine.doString("assert(ffe.KEY_ENTER == 257)"));
+    REQUIRE(fix.engine.doString("assert(ffe.KEY_UP == 265)"));
+    REQUIRE(fix.engine.doString("assert(ffe.KEY_DOWN == 264)"));
+    REQUIRE(fix.engine.doString("assert(ffe.KEY_LEFT == 263)"));
+    REQUIRE(fix.engine.doString("assert(ffe.KEY_RIGHT == 262)"));
+}
+
+TEST_CASE("ffe.isKeyHeld is callable and returns bool", "[scripting][input]") {
+    // Input not initialised in headless test — key state is all false.
+    ScriptFixture fix;
+    ffe::initInput(nullptr);  // headless — no GLFW window
+    REQUIRE(fix.engine.doString("local held = ffe.isKeyHeld(ffe.KEY_W); assert(type(held) == 'boolean')"));
+    ffe::shutdownInput();
+}
+
+TEST_CASE("ffe.isKeyPressed is callable and returns bool", "[scripting][input]") {
+    ScriptFixture fix;
+    ffe::initInput(nullptr);
+    REQUIRE(fix.engine.doString("local v = ffe.isKeyPressed(ffe.KEY_SPACE); assert(type(v) == 'boolean')"));
+    ffe::shutdownInput();
+}
+
+TEST_CASE("ffe.isKeyReleased is callable and returns bool", "[scripting][input]") {
+    ScriptFixture fix;
+    ffe::initInput(nullptr);
+    REQUIRE(fix.engine.doString("local v = ffe.isKeyReleased(ffe.KEY_ESCAPE); assert(type(v) == 'boolean')"));
+    ffe::shutdownInput();
+}
+
+TEST_CASE("ffe.isKeyHeld with out-of-range key code returns false", "[scripting][input]") {
+    ScriptFixture fix;
+    ffe::initInput(nullptr);
+    // Key code 9999 is well outside MAX_KEYS (512) — must return false, not crash.
+    REQUIRE(fix.engine.doString("local v = ffe.isKeyHeld(9999); assert(v == false)"));
+    ffe::shutdownInput();
+}
+
+TEST_CASE("ffe.getMouseX and getMouseY return numbers", "[scripting][input]") {
+    ScriptFixture fix;
+    ffe::initInput(nullptr);
+    REQUIRE(fix.engine.doString("local x = ffe.getMouseX(); assert(type(x) == 'number')"));
+    REQUIRE(fix.engine.doString("local y = ffe.getMouseY(); assert(type(y) == 'number')"));
+    ffe::shutdownInput();
+}
+
+// =============================================================================
+// ECS bindings — setWorld / getTransform / setTransform
+// =============================================================================
+
+TEST_CASE("setWorld can be called with a valid World", "[scripting][ecs]") {
+    ScriptFixture fix;
+    ffe::World world;
+    // Must not crash or error.
+    fix.engine.setWorld(&world);
+}
+
+TEST_CASE("setWorld can be called with nullptr to clear the World", "[scripting][ecs]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+    fix.engine.setWorld(nullptr);  // must not crash
+}
+
+TEST_CASE("ffe.getTransform returns nil when no World is registered", "[scripting][ecs]") {
+    ScriptFixture fix;
+    // No setWorld() call — getTransform must return nil, not crash.
+    REQUIRE(fix.engine.doString("local t = ffe.getTransform(0); assert(t == nil)"));
+}
+
+TEST_CASE("ffe.getTransform returns nil for invalid entity", "[scripting][ecs]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+    // Entity 0xFFFFFFFF is NULL_ENTITY — always invalid.
+    REQUIRE(fix.engine.doString("local t = ffe.getTransform(4294967295); assert(t == nil)"));
+}
+
+TEST_CASE("ffe.getTransform returns nil for entity without Transform", "[scripting][ecs]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    // No Transform added — getTransform must return nil.
+    fix.engine.setWorld(&world);
+    // Store entity id as a Lua global before running the query.
+    const bool ok = fix.engine.doString(
+        ("local t = ffe.getTransform(" + std::to_string(entity) + "); assert(t == nil)").c_str()
+    );
+    REQUIRE(ok);
+}
+
+TEST_CASE("ffe.getTransform returns a table with correct fields for valid entity", "[scripting][ecs]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    ffe::Transform& t = world.addComponent<ffe::Transform>(entity);
+    t.position = {3.0f, 7.0f, 0.0f};
+    t.scale    = {2.0f, 2.0f, 1.0f};
+    t.rotation = 1.5f;
+
+    fix.engine.setWorld(&world);
+
+    const std::string script =
+        "local t = ffe.getTransform(" + std::to_string(entity) + ")\n"
+        "assert(t ~= nil)\n"
+        "assert(type(t) == 'table')\n"
+        "assert(t.x ~= nil)\n"
+        "assert(t.y ~= nil)\n"
+        "assert(t.z ~= nil)\n"
+        "assert(t.scaleX ~= nil)\n"
+        "assert(t.scaleY ~= nil)\n"
+        "assert(t.rotation ~= nil)\n";
+
+    REQUIRE(fix.engine.doString(script.c_str()));
+}
+
+TEST_CASE("ffe.getTransform returns correct position values", "[scripting][ecs]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    ffe::Transform& t = world.addComponent<ffe::Transform>(entity);
+    t.position = {5.0f, 10.0f, 0.0f};
+    t.scale    = {1.0f, 1.0f, 1.0f};
+    t.rotation = 0.0f;
+
+    fix.engine.setWorld(&world);
+
+    const std::string script =
+        "local t = ffe.getTransform(" + std::to_string(entity) + ")\n"
+        "assert(t ~= nil)\n"
+        "assert(math.abs(t.x - 5.0) < 0.001)\n"
+        "assert(math.abs(t.y - 10.0) < 0.001)\n";
+
+    REQUIRE(fix.engine.doString(script.c_str()));
+}
+
+TEST_CASE("ffe.setTransform updates Transform component", "[scripting][ecs]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    world.addComponent<ffe::Transform>(entity);
+
+    fix.engine.setWorld(&world);
+
+    // Set x=4, y=8, rotation=0.5, scaleX=2, scaleY=3.
+    const std::string script =
+        "ffe.setTransform(" + std::to_string(entity) + ", 4, 8, 0.5, 2, 3)";
+
+    REQUIRE(fix.engine.doString(script.c_str()));
+
+    const ffe::Transform& t = world.getComponent<ffe::Transform>(entity);
+    REQUIRE(t.position.x == Catch::Approx(4.0f));
+    REQUIRE(t.position.y == Catch::Approx(8.0f));
+    REQUIRE(t.rotation   == Catch::Approx(0.5f));
+    REQUIRE(t.scale.x    == Catch::Approx(2.0f));
+    REQUIRE(t.scale.y    == Catch::Approx(3.0f));
+}
+
+TEST_CASE("ffe.setTransform on invalid entity is a no-op", "[scripting][ecs]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+    // Should not crash or return an error.
+    REQUIRE(fix.engine.doString("ffe.setTransform(4294967295, 1, 2, 3, 4, 5)"));
+}
+
+TEST_CASE("ffe.setTransform without World registered is a no-op", "[scripting][ecs]") {
+    ScriptFixture fix;
+    // No setWorld() — should not crash.
+    REQUIRE(fix.engine.doString("ffe.setTransform(0, 1, 2, 3, 4, 5)"));
+}
+
+TEST_CASE("ffe.getTransform and setTransform round-trip preserves values", "[scripting][ecs]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    world.addComponent<ffe::Transform>(entity);
+
+    fix.engine.setWorld(&world);
+
+    const std::string script =
+        "ffe.setTransform(" + std::to_string(entity) + ", 12, 34, 0.25, 1.5, 2.5)\n"
+        "local t = ffe.getTransform(" + std::to_string(entity) + ")\n"
+        "assert(t ~= nil)\n"
+        "assert(math.abs(t.x - 12) < 0.001)\n"
+        "assert(math.abs(t.y - 34) < 0.001)\n"
+        "assert(math.abs(t.rotation - 0.25) < 0.001)\n"
+        "assert(math.abs(t.scaleX - 1.5) < 0.001)\n"
+        "assert(math.abs(t.scaleY - 2.5) < 0.001)\n";
+
+    REQUIRE(fix.engine.doString(script.c_str()));
+}
+
+// =============================================================================
+// Security fix — NaN and Infinity rejection in setTransform
+// =============================================================================
+
+TEST_CASE("setTransform with NaN x is rejected without crash", "[scripting][ecs][security]") {
+    // NaN rejection only fires once entity validation passes, so we need a real entity
+    // with a Transform component. The binding must not crash or corrupt the component.
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    ffe::Transform& t = world.addComponent<ffe::Transform>(entity);
+    t.position = {1.0f, 2.0f, 0.0f};
+    t.scale    = {1.0f, 1.0f, 1.0f};
+    t.rotation = 0.0f;
+
+    fix.engine.setWorld(&world);
+
+    // 0/0 produces NaN in Lua. setTransform must reject it and not crash.
+    // The binding returns false (pushes boolean 0) on rejection, so doString succeeds
+    // (the script itself does not error — the C function returns a false value).
+    const std::string script =
+        "ffe.setTransform(" + std::to_string(entity) + ", 0/0, 0, 0, 1, 1)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+
+    // Original values must be unchanged — the rejection must be a no-write.
+    REQUIRE(t.position.x == Catch::Approx(1.0f));
+    REQUIRE(t.position.y == Catch::Approx(2.0f));
+}
+
+TEST_CASE("setTransform with Infinity is rejected without crash", "[scripting][ecs][security]") {
+    // math.huge is +Inf in Lua. The std::isfinite check must catch it.
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    ffe::Transform& t = world.addComponent<ffe::Transform>(entity);
+    t.position = {3.0f, 4.0f, 0.0f};
+    t.scale    = {1.0f, 1.0f, 1.0f};
+    t.rotation = 0.0f;
+
+    fix.engine.setWorld(&world);
+
+    // math.huge is accessible (math library is whitelisted). Must not crash.
+    const std::string script =
+        "ffe.setTransform(" + std::to_string(entity) + ", math.huge, 0, 0, 1, 1)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+
+    // Values must be unchanged.
+    REQUIRE(t.position.x == Catch::Approx(3.0f));
+    REQUIRE(t.position.y == Catch::Approx(4.0f));
+}
+
+// =============================================================================
+// ECS bindings — getTransform with negative entity ID
+// =============================================================================
+
+TEST_CASE("ffe.getTransform returns nil for negative entity ID", "[scripting][ecs]") {
+    // The binding rejects rawId < 0 before any World lookup, returning nil.
+    // This must not crash even when a World is registered.
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+    REQUIRE(fix.engine.doString("local t = ffe.getTransform(-1); assert(t == nil)"));
+}
+
+// =============================================================================
+// Input API — negative key code
+// =============================================================================
+
+TEST_CASE("ffe.isKeyHeld with negative key code returns false", "[scripting][input]") {
+    // The binding guards: code < 0 returns false immediately.
+    ScriptFixture fix;
+    ffe::initInput(nullptr);
+    REQUIRE(fix.engine.doString("local v = ffe.isKeyHeld(-1); assert(v == false)"));
+    ffe::shutdownInput();
 }

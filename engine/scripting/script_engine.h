@@ -8,6 +8,10 @@
 
 namespace ffe {
 
+// Forward declaration — World is in core/ecs.h.
+// Not included here to keep this header lightweight.
+class World;
+
 // ScriptEngine manages a sandboxed Lua state for game scripting.
 //
 // One ScriptEngine per game context. Not thread-safe — call from main thread only.
@@ -36,6 +40,15 @@ public:
     // Shut down the Lua state and free all resources.
     // Safe to call if init() was never called or failed.
     void shutdown();
+
+    // Register a World with the scripting engine so that Lua scripts can
+    // access ECS components via ffe.getTransform / ffe.setTransform.
+    //
+    // Must be called AFTER init() and BEFORE any scripts execute.
+    // Must NOT be called while scripts are running (not thread-safe).
+    // world must remain valid for the lifetime of this ScriptEngine.
+    // Passing nullptr clears the stored world pointer.
+    void setWorld(ffe::World* world);
 
     // Execute a Lua script from a null-terminated string.
     // Returns false and logs the error if the script fails.

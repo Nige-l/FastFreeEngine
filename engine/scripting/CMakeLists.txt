@@ -23,7 +23,8 @@ target_include_directories(ffe_scripting
 
 target_link_libraries(ffe_scripting
     PUBLIC
-        ffe_core                     # logging, types
+        ffe_core                     # logging, types, ECS, input
+        ffe_renderer                 # Transform and Sprite component types
     PRIVATE
         sol2::sol2                   # header-only sol2 — private, not exposed to users
         ${LUAJIT_LIBRARIES}          # -lluajit-5.1

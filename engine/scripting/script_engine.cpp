@@ -9,10 +9,23 @@ extern "C" {
 
 #include "scripting/script_engine.h"
 #include "core/logging.h"
+#include "core/ecs.h"
+#include "core/input.h"
+#include "renderer/render_system.h"
 
 #include <climits>    // PATH_MAX
+#include <cmath>      // std::isfinite
 #include <cstring>    // strnlen, strstr, strlen, memcpy
 #include <cstdlib>
+
+// ---------------------------------------------------------------------------
+// Registry key for the World pointer
+// ---------------------------------------------------------------------------
+
+// A file-static variable whose address is used as a unique key in the Lua
+// registry. Scripts never see this — it is never exposed to Lua.
+// The value stored at this key is a light userdata pointing to the World.
+static int s_worldRegistryKey = 0;
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -34,6 +47,10 @@ bool isPathSafe(const char* path) {
     }
     // Windows drive letter (e.g. C:)
     const std::size_t len = strnlen(path, PATH_MAX);
+    if (len >= PATH_MAX) return false;
+    // Note: embedded null bytes in 'path' are safe on POSIX — open() stops at the first '\0',
+    // so any ../ sequences after an embedded null are invisible to both this check AND the OS.
+    // The strnlen guard above ensures we read at most PATH_MAX bytes.
     if (len >= 2 && path[1] == ':') {
         return false;  // drive letter
     }
@@ -194,7 +211,7 @@ bool ScriptEngine::doFile(const char* path, const char* assetRoot) {
 
     // +2 for separator and null terminator
     if (rootLen + fileLen + 2u > PATH_BUF_SIZE) {
-        FFE_LOG_ERROR("ScriptEngine", "doFile() path too long: %s/%s", assetRoot, path);
+        FFE_LOG_ERROR("ScriptEngine", "doFile() path too long (relative path: %s)", path);
         return false;
     }
 
@@ -231,6 +248,27 @@ bool ScriptEngine::doFile(const char* path, const char* assetRoot) {
 
 bool ScriptEngine::isInitialised() const {
     return m_initialised;
+}
+
+void ScriptEngine::setWorld(ffe::World* world) {
+    if (!m_initialised || m_luaState == nullptr) {
+        FFE_LOG_ERROR("ScriptEngine", "setWorld() called before init()");
+        return;
+    }
+
+    lua_State* L = static_cast<lua_State*>(m_luaState);
+
+    // Store the World pointer in the Lua registry under s_worldRegistryKey.
+    // Scripts never hold the pointer directly — they use integer entity IDs
+    // and go through ffe.getTransform / ffe.setTransform which retrieve the
+    // pointer from the registry on each call.
+    lua_pushlightuserdata(L, &s_worldRegistryKey);  // key
+    if (world != nullptr) {
+        lua_pushlightuserdata(L, world);              // value: the World pointer
+    } else {
+        lua_pushnil(L);                               // value: clear it
+    }
+    lua_settable(L, LUA_REGISTRYINDEX);
 }
 
 // ---------------------------------------------------------------------------
@@ -283,14 +321,195 @@ void ScriptEngine::registerEcsBindings() {
     // Create the 'ffe' table and populate it.
     lua_newtable(L);
 
+    // ----------------------------------------------------------------
     // ffe.log(message) — safe logging from Lua scripts.
     // Messages go through the FFE logging system; scripts cannot access stderr/stdout.
+    // ----------------------------------------------------------------
     lua_pushcfunction(L, [](lua_State* state) -> int {
         const char* msg = lua_tostring(state, 1);
         FFE_LOG_INFO("Lua", "%s", msg != nullptr ? msg : "(nil)");
         return 0; // no return values
     });
     lua_setfield(L, -2, "log");
+
+    // ----------------------------------------------------------------
+    // Input queries — read-only, no mutation possible from scripts.
+    // Key codes are integers matching GLFW_KEY_* values (see input.h Key enum).
+    //
+    // ffe.isKeyHeld(keyCode)     -> bool
+    // ffe.isKeyPressed(keyCode)  -> bool
+    // ffe.isKeyReleased(keyCode) -> bool
+    // ffe.getMouseX()            -> number (f32)
+    // ffe.getMouseY()            -> number (f32)
+    // ----------------------------------------------------------------
+
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const int code = static_cast<int>(luaL_checkinteger(state, 1));
+        if (code < 0 || code >= static_cast<int>(ffe::MAX_KEYS)) {
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        const bool held = ffe::isKeyHeld(static_cast<ffe::Key>(code));
+        lua_pushboolean(state, held ? 1 : 0);
+        return 1;
+    });
+    lua_setfield(L, -2, "isKeyHeld");
+
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const int code = static_cast<int>(luaL_checkinteger(state, 1));
+        if (code < 0 || code >= static_cast<int>(ffe::MAX_KEYS)) {
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        const bool pressed = ffe::isKeyPressed(static_cast<ffe::Key>(code));
+        lua_pushboolean(state, pressed ? 1 : 0);
+        return 1;
+    });
+    lua_setfield(L, -2, "isKeyPressed");
+
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const int code = static_cast<int>(luaL_checkinteger(state, 1));
+        if (code < 0 || code >= static_cast<int>(ffe::MAX_KEYS)) {
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        const bool released = ffe::isKeyReleased(static_cast<ffe::Key>(code));
+        lua_pushboolean(state, released ? 1 : 0);
+        return 1;
+    });
+    lua_setfield(L, -2, "isKeyReleased");
+
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushnumber(state, static_cast<lua_Number>(ffe::mouseX()));
+        return 1;
+    });
+    lua_setfield(L, -2, "getMouseX");
+
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushnumber(state, static_cast<lua_Number>(ffe::mouseY()));
+        return 1;
+    });
+    lua_setfield(L, -2, "getMouseY");
+
+    // ----------------------------------------------------------------
+    // Key code constants — match Key enum values in input.h (= GLFW_KEY_*).
+    // Scripts use these to avoid magic numbers.
+    // ----------------------------------------------------------------
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::W));      lua_setfield(L, -2, "KEY_W");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::A));      lua_setfield(L, -2, "KEY_A");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::S));      lua_setfield(L, -2, "KEY_S");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::D));      lua_setfield(L, -2, "KEY_D");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::SPACE));  lua_setfield(L, -2, "KEY_SPACE");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::ESCAPE)); lua_setfield(L, -2, "KEY_ESCAPE");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::ENTER));  lua_setfield(L, -2, "KEY_ENTER");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::UP));     lua_setfield(L, -2, "KEY_UP");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::DOWN));   lua_setfield(L, -2, "KEY_DOWN");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::LEFT));   lua_setfield(L, -2, "KEY_LEFT");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::RIGHT));  lua_setfield(L, -2, "KEY_RIGHT");
+
+    // ----------------------------------------------------------------
+    // ECS component access — World pointer is stored in the Lua registry.
+    // Scripts pass entity IDs as integers (the underlying u32 value of EntityId).
+    // Invalid IDs return nil — scripts must check for nil before use.
+    //
+    // ffe.getTransform(entityId) -> table {x, y, z, scaleX, scaleY, scaleZ, rotation}
+    //                               or nil if entity is invalid or has no Transform.
+    //
+    // ffe.setTransform(entityId, x, y, rotation, scaleX, scaleY) -> nil
+    //                               No-op if entity is invalid or has no Transform.
+    // ----------------------------------------------------------------
+
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        // Retrieve World pointer from the registry.
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            lua_pushnil(state);
+            return 1; // no World registered — return nil
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        // Validate entity ID — all Lua input is untrusted.
+        const lua_Integer rawId = luaL_checkinteger(state, 1);
+        if (rawId < 0) {
+            lua_pushnil(state);
+            return 1;
+        }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) {
+            lua_pushnil(state);
+            return 1;
+        }
+        if (!world->hasComponent<ffe::Transform>(entityId)) {
+            lua_pushnil(state);
+            return 1;
+        }
+
+        const ffe::Transform& t = world->getComponent<ffe::Transform>(entityId);
+
+        // Return a table: {x, y, z, scaleX, scaleY, scaleZ, rotation}
+        lua_newtable(state);
+        lua_pushnumber(state, static_cast<lua_Number>(t.position.x)); lua_setfield(state, -2, "x");
+        lua_pushnumber(state, static_cast<lua_Number>(t.position.y)); lua_setfield(state, -2, "y");
+        lua_pushnumber(state, static_cast<lua_Number>(t.position.z)); lua_setfield(state, -2, "z");
+        lua_pushnumber(state, static_cast<lua_Number>(t.scale.x));    lua_setfield(state, -2, "scaleX");
+        lua_pushnumber(state, static_cast<lua_Number>(t.scale.y));    lua_setfield(state, -2, "scaleY");
+        lua_pushnumber(state, static_cast<lua_Number>(t.scale.z));    lua_setfield(state, -2, "scaleZ");
+        lua_pushnumber(state, static_cast<lua_Number>(t.rotation));   lua_setfield(state, -2, "rotation");
+        return 1;
+    });
+    lua_setfield(L, -2, "getTransform");
+
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        // Retrieve World pointer from the registry.
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            return 0; // no World registered — silently no-op
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        // Validate entity ID — all Lua input is untrusted.
+        const lua_Integer rawId = luaL_checkinteger(state, 1);
+        if (rawId < 0) {
+            return 0;
+        }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) {
+            return 0;
+        }
+        if (!world->hasComponent<ffe::Transform>(entityId)) {
+            return 0;
+        }
+
+        // Arguments: entityId, x, y, rotation, scaleX, scaleY
+        const lua_Number x        = luaL_checknumber(state, 2);
+        const lua_Number y        = luaL_checknumber(state, 3);
+        const lua_Number rotation = luaL_checknumber(state, 4);
+        const lua_Number scaleX   = luaL_checknumber(state, 5);
+        const lua_Number scaleY   = luaL_checknumber(state, 6);
+
+        // Reject non-finite values — NaN/Infinity would silently corrupt Transform.
+        if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(rotation) ||
+            !std::isfinite(scaleX) || !std::isfinite(scaleY)) {
+            FFE_LOG_ERROR("ScriptEngine", "setTransform: non-finite value rejected");
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+
+        ffe::Transform& t    = world->getComponent<ffe::Transform>(entityId);
+        t.position.x         = static_cast<ffe::f32>(x);
+        t.position.y         = static_cast<ffe::f32>(y);
+        t.rotation           = static_cast<ffe::f32>(rotation);
+        t.scale.x            = static_cast<ffe::f32>(scaleX);
+        t.scale.y            = static_cast<ffe::f32>(scaleY);
+        return 0;
+    });
+    lua_setfield(L, -2, "setTransform");
 
     // Set the 'ffe' table as a global.
     lua_setglobal(L, "ffe");

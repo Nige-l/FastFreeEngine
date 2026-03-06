@@ -1,3 +1,4 @@
 add_subdirectory(hello_sprites)
 add_subdirectory(headless_test)
 add_subdirectory(interactive_demo)
+add_subdirectory(lua_demo)

@@ -107,8 +107,7 @@ inline void pushDrawCommand(RenderQueue& queue, const DrawCommand& cmd) {
     }
 }
 
-// Sort and submit
+// Sort commands by sort key to minimise GPU state changes.
 void sortRenderQueue(RenderQueue& queue);
-void submitRenderQueue(const RenderQueue& queue);
 
 } // namespace ffe::renderer

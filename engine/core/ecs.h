@@ -9,6 +9,19 @@
 
 namespace ffe {
 
+// ---------------------------------------------------------------------------
+// ShutdownSignal — stored in the ECS registry context so any system can
+// request engine shutdown without holding a pointer to Application.
+//
+// Usage inside a system:
+//   world.registry().ctx().get<ffe::ShutdownSignal>().requested = true;
+//
+// Application checks this after every tick and stops the loop if set.
+// ---------------------------------------------------------------------------
+struct ShutdownSignal {
+    bool requested = false;
+};
+
 class World {
 public:
     World() { m_systems.reserve(32); }

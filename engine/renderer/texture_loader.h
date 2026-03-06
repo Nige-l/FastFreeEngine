@@ -29,6 +29,23 @@ static constexpr u64 MAX_TEXTURE_BYTES = 256ull * 1024ull * 1024ull;
 // Maximum file size accepted before calling stb_image. Pre-decode guard (MEDIUM-2).
 static constexpr u64 MAX_TEXTURE_FILE_BYTES = 64ull * 1024ull * 1024ull;
 
+// --- Load Parameters ---
+
+// Optional parameters for loadTexture(). All fields have defaults that match
+// the behaviour of the original zero-parameter overloads (LINEAR + CLAMP_TO_EDGE).
+//
+// filter: how the GPU samples the texture when it is scaled.
+//   NEAREST — hard pixels, no blurring. Use for pixel art.
+//   LINEAR  — smooth interpolation. Use for photographs and smooth art.
+//
+// wrap: what happens when UV coordinates fall outside [0, 1].
+//   CLAMP_TO_EDGE — UV is clamped to the edge texel. Default; no repetition.
+//   REPEAT        — UV wraps around; texture tiles.
+struct TextureLoadParams {
+    ffe::rhi::TextureFilter filter = ffe::rhi::TextureFilter::LINEAR;
+    ffe::rhi::TextureWrap   wrap   = ffe::rhi::TextureWrap::CLAMP_TO_EDGE;
+};
+
 // --- Asset Root ---
 
 // Set the root directory for all texture loads. Must be called before loadTexture().
@@ -71,6 +88,19 @@ ffe::rhi::TextureHandle loadTexture(const char* path);
 // assetRoot must be an absolute path to an existing directory.
 // All path validation rules apply to path.
 ffe::rhi::TextureHandle loadTexture(const char* path, const char* assetRoot);
+
+// Overloads with explicit TextureLoadParams.
+// These allow caller control over filter and wrap mode.
+// Examples:
+//   // Pixel-art sprite — no blurring
+//   auto tex = loadTexture("hero.png", {ffe::rhi::TextureFilter::NEAREST,
+//                                       ffe::rhi::TextureWrap::CLAMP_TO_EDGE});
+//   // Tiling terrain texture
+//   auto tex = loadTexture("grass.png", {ffe::rhi::TextureFilter::LINEAR,
+//                                        ffe::rhi::TextureWrap::REPEAT});
+ffe::rhi::TextureHandle loadTexture(const char* path, const TextureLoadParams& params);
+ffe::rhi::TextureHandle loadTexture(const char* path, const char* assetRoot,
+                                    const TextureLoadParams& params);
 
 // --- Texture Destruction ---
 
