@@ -67,6 +67,7 @@ local score          = 0
 local gameOver       = false
 local gameWon        = false
 local gameTime       = 0
+local gameState      = "title"  -- "title", "playing", "gameover"
 
 local transformBuf   = {}
 
@@ -397,6 +398,33 @@ function update(entityId, dt)
         end
     end
 
+    -- Title screen
+    if gameState == "title" then
+        local sw = ffe.getScreenWidth()
+        ffe.drawText("BREAKOUT", sw / 2 - 160, 180, 5, 1, 0.6, 0.2, 1)
+        ffe.drawText("A FastFreeEngine Demo", sw / 2 - 168, 260, 2, 0.6, 0.6, 0.7, 0.8)
+
+        -- Animated color row labels
+        local colors = {
+            {1.0, 0.3, 0.3}, {1.0, 0.6, 0.2}, {1.0, 1.0, 0.3},
+            {0.3, 1.0, 0.3}, {0.3, 0.7, 1.0}, {0.7, 0.3, 1.0}
+        }
+        for i, c in ipairs(colors) do
+            local bx = sw / 2 - 120 + (i - 1) * 40
+            local pulse = 0.7 + 0.3 * math.sin(gameTime * 3 + i * 0.8)
+            ffe.drawText("##", bx, 310, 3, c[1] * pulse, c[2] * pulse, c[3] * pulse, 1)
+        end
+
+        local alpha = 0.5 + 0.5 * math.sin(gameTime * 3)
+        ffe.drawText("PRESS SPACE TO START", sw / 2 - 160, 400, 2, 1, 1, 1, alpha)
+        ffe.drawText("A/D or LEFT/RIGHT to move | M music | ESC quit", sw / 2 - 188 * 2, 500, 2, 0.4, 0.4, 0.5, 0.6)
+
+        if ffe.isKeyPressed(ffe.KEY_SPACE) then
+            gameState = "playing"
+        end
+        return
+    end
+
     -- Update particles
     updateParticles(dt)
 
@@ -427,6 +455,7 @@ function update(entityId, dt)
     -- Restart
     if gameOver and ffe.isKeyPressed(ffe.KEY_SPACE) then
         restartGame()
+        gameState = "playing"
         return
     end
 

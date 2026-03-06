@@ -2203,3 +2203,28 @@ TEST_CASE("ffe.drawText clamps color values to [0,1]", "[scripting][text]") {
     std::free(tr.glyphs);
     tr.glyphs = nullptr;
 }
+
+// =============================================================================
+// Screen dimension queries
+// =============================================================================
+
+TEST_CASE("ffe.getScreenWidth returns 0 when no World is set", "[scripting][text]") {
+    ScriptFixture fix;
+    REQUIRE(fix.engine.doString("assert(ffe.getScreenWidth() == 0)"));
+}
+
+TEST_CASE("ffe.getScreenWidth/Height return TextRenderer dimensions", "[scripting][text]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    ffe::renderer::TextRenderer tr{};
+    tr.screenWidth  = 1280.0f;
+    tr.screenHeight = 720.0f;
+    tr.glyphCount   = 0;
+    tr.glyphs       = nullptr;
+    world.registry().ctx().emplace<ffe::renderer::TextRenderer*>(&tr);
+
+    REQUIRE(fix.engine.doString("assert(ffe.getScreenWidth() == 1280)"));
+    REQUIRE(fix.engine.doString("assert(ffe.getScreenHeight() == 720)"));
+}

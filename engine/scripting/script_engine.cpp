@@ -1000,6 +1000,49 @@ void ScriptEngine::registerEcsBindings() {
     });
     lua_setfield(L, -2, "drawText");
 
+    // ffe.getScreenWidth() -> number
+    // ffe.getScreenHeight() -> number
+    // Returns the screen dimensions in pixels. Useful for centering text.
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            lua_pushnumber(state, 0);
+            return 1;
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+        auto** trPtr = world->registry().ctx().find<ffe::renderer::TextRenderer*>();
+        if (trPtr == nullptr || *trPtr == nullptr) {
+            lua_pushnumber(state, 0);
+            return 1;
+        }
+        lua_pushnumber(state, static_cast<lua_Number>((*trPtr)->screenWidth));
+        return 1;
+    });
+    lua_setfield(L, -2, "getScreenWidth");
+
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            lua_pushnumber(state, 0);
+            return 1;
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+        auto** trPtr = world->registry().ctx().find<ffe::renderer::TextRenderer*>();
+        if (trPtr == nullptr || *trPtr == nullptr) {
+            lua_pushnumber(state, 0);
+            return 1;
+        }
+        lua_pushnumber(state, static_cast<lua_Number>((*trPtr)->screenHeight));
+        return 1;
+    });
+    lua_setfield(L, -2, "getScreenHeight");
+
     // ffe.addTransform(entityId, x, y, rotation, scaleX, scaleY) -> bool
     lua_pushcfunction(L, [](lua_State* state) -> int {
         lua_pushlightuserdata(state, &s_worldRegistryKey);
