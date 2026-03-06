@@ -908,3 +908,56 @@ Session 10 handover document written at `docs/session10-handover.md`.
 
 ---
 
+## Session 10 — [2026-03-06] — Lua Shutdown Callback + Performance Review
+
+### Goals
+1. P0 — Lua `shutdown()` callback in ScriptEngine::shutdown() (FRICTION-5)
+2. P1 — performance-critic reviews audio subsystem
+3. P2 — Audio streaming/music design (deferred — scope too large for remaining session budget)
+
+### Session opened
+Autonomous execution continuing.
+
+---
+
+## 2026-03-06 — Session 10 Outcomes
+
+### Completed
+
+**Phase 1 — Parallel:**
+- **engine-dev** implemented Lua `shutdown()` callback in `ScriptEngine::shutdown()`. Before `lua_close(L)`, checks if `shutdown` is a global function, calls it via `lua_pcall(L, 0, 0, 0)` with no arguments, logs any error, and continues shutdown regardless. Instruction budget hook remains active so infinite loops are caught. 4 new tests. Total: **228/228 tests pass on both compilers.**
+- **performance-critic** reviewed audio subsystem: **MINOR ISSUES** (3). M-1: mutex acquired twice per audio callback (command drain + mixing pass); M-2: `getActiveVoiceCount()` acquires mutex + linear scan — not safe to call per-frame without comment; M-3: redundant modulo in ring-full check. All INFO findings acceptable. No BLOCK. Pre-allocation confirmed — no per-frame heap allocations anywhere in hot paths.
+
+**Phase 2 — API review + demo:**
+- **api-designer** updated `engine/scripting/.context.md`: `shutdown()` C++ method description updated; new "Script Lifecycle Callbacks" subsection documenting both `update()` and `shutdown()` conventions; new Common Usage Pattern 7 (shutdown cleanup with ffe.unloadTexture); new "What NOT to Do" entry (don't use shutdown() for per-level cleanup).
+- **game-dev-tester** updated `lua_demo/game.lua`: added `shutdown()` function that calls `ffe.unloadTexture(textureHandle)` with `false`-sentinel guard + nil-after-unload to prevent double-free. Appended Session 10 addendum to session9 report: **9/10 discoverability** for shutdown callback.
+
+### Session 10 Stats
+- **Modified engine files:** script_engine.cpp (shutdown callback, +4 tests)
+- **New docs:** performance-review-audio.md
+- **New tests:** 4 (total: 228)
+- **Modified examples:** lua_demo/game.lua (shutdown cleanup)
+- **Modified docs:** scripting/.context.md (shutdown callback docs), game-dev-tester-session9-report.md (addendum)
+
+### Review Results
+- performance-critic: **MINOR ISSUES** (M-1 mutex double-lock in callback, M-2 getActiveVoiceCount mutex, M-3 redundant modulo — all tracked)
+- test-engineer: **PASS** (228/228, zero warnings, both compilers)
+- api-designer: **APPROVED** (shutdown callback fully documented)
+- game-dev-tester: **9/10** — shutdown callback is idiomatic and natural
+
+### Known Issues Updated
+- **FRICTION-5 (no Lua shutdown callback):** FIXED — `shutdown()` function called by ScriptEngine::shutdown().
+- **Audio M-1 (mutex double-lock):** NEW — tracked for Session 11 audio perf pass.
+- **Audio M-2 (getActiveVoiceCount mutex):** NEW — replace with atomic counter in Session 11.
+- **Audio streaming/music:** Still pending — needs architect design note for Session 11.
+- **M-1 getTransform GC pressure:** Still tracked.
+
+### Next Session Should Start With
+- Audio performance fixes: M-1 (reduce mutex acquisitions in callback), M-2 (atomic voice count)
+- Audio streaming/music: architect design + implementation
+- getTransform GC batching: architect design note
+
+Session 11 handover document written at `docs/session11-handover.md`.
+
+---
+

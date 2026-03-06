@@ -146,6 +146,23 @@ void ScriptEngine::shutdown() {
     }
 
     lua_State* L = static_cast<lua_State*>(m_luaState);
+
+    // Call the Lua global shutdown() function if it exists.
+    // This is best-effort: a Lua error must not prevent C++ shutdown from continuing.
+    // The instruction budget hook is already active (set during init()), so a misbehaving
+    // shutdown() function cannot loop forever.
+    lua_getglobal(L, "shutdown");
+    if (lua_isfunction(L, -1)) {
+        if (lua_pcall(L, 0, 0, 0) != 0) {
+            const char* err = lua_tostring(L, -1);
+            FFE_LOG_ERROR("ScriptEngine", "shutdown() Lua error: %s",
+                          err != nullptr ? err : "(no message)");
+            lua_pop(L, 1);
+        }
+    } else {
+        lua_pop(L, 1); // pop the non-function value
+    }
+
     lua_close(L);
     m_luaState   = nullptr;
     m_initialised = false;

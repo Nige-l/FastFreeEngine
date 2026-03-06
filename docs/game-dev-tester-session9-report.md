@@ -186,6 +186,31 @@ The load is called exactly once — the nil guard ensures it does not fire again
 **Recommended follow-up tasks for a future session:**
 
 1. `lua_demo/main.cpp`: call `renderer::setAssetRoot(ASSET_ROOT)` so that `ffe.loadTexture` works without the C++ two-argument workaround.
-2. ScriptEngine: add an optional `shutdown()` Lua function call in `ScriptEngine::shutdown()` before `lua_close`.
+2. ScriptEngine: add an optional `shutdown()` Lua function call in `ScriptEngine::shutdown()` before `lua_close`. *(Done — Session 10)*
 3. Audio Lua bindings: bind `ffe::audio::loadSound`, `ffe::audio::playSound`, `ffe::audio::setMasterVolume` to `ffe.*` for the next session.
 4. Document the no-loop/no-stop constraint in `engine/audio/.context.md`.
+
+---
+
+## Session 10 Addendum: Lua shutdown() Callback
+
+**Feature evaluated:** `ScriptEngine::shutdown()` now calls the Lua global `shutdown()` function (if it exists) before closing the Lua state.
+
+**Does it work naturally?** Yes. The pattern is immediately familiar to anyone who has written lifecycle callbacks in Lua (Corona SDK's `scene:hide`, LÖVE's `love.quit`, etc.). Defining a global `shutdown()` is the obvious thing to reach for — there is no ceremony, no registration call, no C++ plumbing visible to the script author. You define the function; the engine calls it. That is the right design.
+
+**Is it discoverable?** Reasonably. A developer who sees `update(entityId, dt)` in the existing game.lua comments will ask "what other lifecycle functions can I define?" — and the answer should be in the `.context.md` for `engine/scripting/`. As long as `shutdown()` is listed there alongside `update()`, discoverability is fine. Without that documentation it would be entirely invisible. Score held back for this dependency on documentation rather than self-description.
+
+**Adding shutdown() in game.lua — was it natural?**
+
+Very natural. The `textureHandle` variable was already a file-level local (added in Session 9 specifically for future cleanup use), so `shutdown()` could close over it without any refactoring. The sentinel value (`false` vs `nil`) required one line of extra guard logic (`textureHandle and textureHandle ~= false`), which is slightly non-obvious. A developer unfamiliar with the sentinel convention might write `if textureHandle ~= nil then` and accidentally pass `false` into `ffe.unloadTexture`. A comment in game.lua explains the convention, but it is mild friction.
+
+The log messages inside `shutdown()` confirm to the developer (via stdout or log output) that cleanup ran, which is useful during development.
+
+**Friction points:**
+
+- **Minor:** The `false` sentinel for "attempted but failed" is an internal game.lua convention that `shutdown()` must know about. This is a self-imposed pattern, not an engine API issue, but it is something a developer writing their first FFE Lua script might trip over if they copy the pattern without reading the comment.
+- **Minor:** There is no engine-side guarantee about *when* `shutdown()` is called relative to C++ subsystem teardown. If `ffe.unloadTexture` calls into the renderer, and the renderer has already been torn down before `ScriptEngine::shutdown()` is called, the call would be a use-after-free. The teardown order in C++ must be: `ScriptEngine::shutdown()` before `renderer::shutdown()`. This should be documented in the scripting `.context.md`.
+
+**API change score: 9/10**
+
+Clean, zero-friction for the common case. The only reasons it is not 10/10 are the undocumented teardown-order dependency and the minor sentinel convention issue. As a lifecycle hook it is exactly right: opt-in (engine checks `if it exists`), named by convention (no registration needed), and symmetric with the existing `update()` pattern. The feature closes Friction 2 from the Session 9 report cleanly.

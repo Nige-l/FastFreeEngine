@@ -957,6 +957,76 @@ TEST_CASE("ffe.unloadTexture with handle > UINT32_MAX is a no-op", "[scripting][
     REQUIRE(fix.engine.doString("ffe.unloadTexture(4294967296)"));
 }
 
+// =============================================================================
+// Lua shutdown() callback — called by ScriptEngine::shutdown() before lua_close
+// =============================================================================
+
+TEST_CASE("Lua shutdown() function is called when ScriptEngine::shutdown() is invoked", "[scripting][lifecycle][shutdown_cb]") {
+    // Verify the callback fires by having it set ShutdownSignal via ffe.requestShutdown().
+    // After engine.shutdown() returns the Lua state is gone, but the World is still alive
+    // in C++ — so we can read ShutdownSignal.requested from there.
+    ffe::ScriptEngine engine;
+    REQUIRE(engine.init());
+
+    ffe::World world;
+    world.registry().ctx().emplace<ffe::ShutdownSignal>();
+    engine.setWorld(&world);
+
+    // Define the Lua shutdown() callback: it calls ffe.requestShutdown().
+    REQUIRE(engine.doString("function shutdown() ffe.requestShutdown() end"));
+
+    // At this point the signal must be false — shutdown() hasn't been called yet.
+    REQUIRE_FALSE(world.registry().ctx().get<ffe::ShutdownSignal>().requested);
+
+    // Trigger the C++ shutdown — this must invoke the Lua shutdown() callback.
+    engine.shutdown();
+
+    // The callback must have run and set the signal to true.
+    REQUIRE(world.registry().ctx().get<ffe::ShutdownSignal>().requested == true);
+}
+
+TEST_CASE("Missing Lua shutdown() function is a silent no-op", "[scripting][lifecycle][shutdown_cb]") {
+    // No shutdown() function defined — ScriptEngine::shutdown() must complete normally
+    // without logging an error or crashing.
+    ffe::ScriptEngine engine;
+    REQUIRE(engine.init());
+    // No shutdown() function in Lua state — must be a silent no-op.
+    engine.shutdown();
+    REQUIRE_FALSE(engine.isInitialised());
+}
+
+TEST_CASE("Erroring Lua shutdown() function does not crash the engine", "[scripting][lifecycle][shutdown_cb]") {
+    // A Lua error inside shutdown() must be caught and logged (error is swallowed).
+    // The C++ engine must continue its own shutdown to completion.
+    ffe::ScriptEngine engine;
+    REQUIRE(engine.init());
+
+    // Define a shutdown() function that throws a Lua error.
+    REQUIRE(engine.doString("function shutdown() error('deliberate shutdown error') end"));
+
+    // Must not crash — error is caught by lua_pcall and logged.
+    engine.shutdown();
+
+    // Engine must have completed shutdown (isInitialised returns false after shutdown).
+    REQUIRE_FALSE(engine.isInitialised());
+}
+
+TEST_CASE("Lua shutdown() function can call ffe.log() — Lua state is valid during callback", "[scripting][lifecycle][shutdown_cb]") {
+    // Verifies that the ffe table and its functions are still accessible when
+    // ScriptEngine::shutdown() invokes the Lua shutdown() callback. The Lua state
+    // is fully valid at that point — lua_close has NOT been called yet.
+    ffe::ScriptEngine engine;
+    REQUIRE(engine.init());
+
+    // shutdown() calls ffe.log — if the ffe table is gone this will error.
+    REQUIRE(engine.doString("function shutdown() ffe.log('shutdown callback ran') end"));
+
+    // Must not crash or log a Lua error (ffe.log must succeed inside shutdown()).
+    engine.shutdown();
+
+    REQUIRE_FALSE(engine.isInitialised());
+}
+
 TEST_CASE("ffe.loadTexture with valid file returns a non-nil integer handle", "[scripting][texture][requires_rhi]") {
     // Full integration: headless RHI initialised, asset root set from C++,
     // then ffe.loadTexture("checkerboard.png") called from Lua.

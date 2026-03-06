@@ -10,8 +10,7 @@
 --   - ffe.addPreviousTransform()  opt entity into render interpolation
 --   - ffe.destroyEntity()         not demonstrated here (no pickup/death yet)
 --   - ffe.loadTexture(path)       load a GPU texture from the asset root (Session 9)
---   - ffe.unloadTexture(handle)   release a GPU texture (Session 9; no shutdown
---                                 callback exists yet, so not called in this demo)
+--   - ffe.unloadTexture(handle)   release a GPU texture; called in shutdown() (Session 10)
 --
 -- Controls:
 --   WASD       move the player
@@ -21,7 +20,7 @@
 -- Coordinate system: centered origin, -640..640 (x), -360..360 (y).
 -- Window: 1280x720.
 --
--- Texture handle note (Session 9 update):
+-- Texture handle note (Session 9 + 10 update):
 --   On the first update tick, ffe.loadTexture("checkerboard.png") is called once.
 --   If the load succeeds, the returned integer handle is used for the follower
 --   sprite instead of the hardcoded stub constant 1.
@@ -29,9 +28,10 @@
 --   C++ before this script runs), a warning is logged and the stub handle 1 is
 --   used as a fallback -- the demo continues to work in headless mode.
 --
---   NOTE: ffe.unloadTexture is NOT called at shutdown in this demo because the
---   ScriptEngine has no Lua-side shutdown callback. The texture is reclaimed when
---   the process exits. See the game-dev-tester session 9 report for details.
+--   shutdown() (Session 10): ScriptEngine::shutdown() now calls the Lua global
+--   shutdown() if it exists. This script defines shutdown() to call
+--   ffe.unloadTexture(textureHandle) when the handle was successfully loaded,
+--   ensuring the GPU texture is released cleanly before the Lua state closes.
 
 local SPEED        = 150.0      -- pixels per second
 local FOLLOWER_SPEED = 80.0     -- pixels per second, follower chases player
@@ -246,5 +246,27 @@ function update(entityId, dt)
     -- ------------------------------------------------------------------
     if ffe.isKeyPressed(ffe.KEY_ESCAPE) then
         ffe.requestShutdown()
+    end
+end
+
+-- ---------------------------------------------------------------------------
+-- shutdown() -- called by ScriptEngine::shutdown() before lua_close().
+--
+-- This is the place to release any Lua-owned resources. Currently that means
+-- the GPU texture loaded via ffe.loadTexture on the first update() tick.
+--
+-- textureHandle is a file-level local, so it is visible here.
+-- It is set to `false` (not nil) when a load was attempted but failed, so we
+-- guard with `textureHandle and textureHandle ~= false` to avoid passing the
+-- boolean sentinel or nil into ffe.unloadTexture.
+-- ---------------------------------------------------------------------------
+function shutdown()
+    ffe.log("lua_demo: Lua shutdown() called -- cleaning up textures")
+    if textureHandle and textureHandle ~= false then
+        ffe.unloadTexture(textureHandle)
+        ffe.log("lua_demo: ffe.unloadTexture called for handle=" .. tostring(textureHandle))
+        textureHandle = nil
+    else
+        ffe.log("lua_demo: no texture handle to unload (load failed or never attempted)")
     end
 end
