@@ -1792,7 +1792,7 @@ void ScriptEngine::registerEcsBindings() {
     //   already have a Transform. Optional config table sets emitter
     //   properties (emitRate, lifetimeMin, lifetimeMax, speedMin, speedMax,
     //   angleMin, angleMax, sizeStart, sizeEnd, gravityY, texture,
-    //   colorStartR/G/B/A, colorEndR/G/B/A, layer, offsetX, offsetY).
+    //   colorStartR/G/B/A, colorEndR/G/B/A, layer, sortOrder, offsetX, offsetY).
     //
     // ffe.setEmitterConfig(entityId, config) -> nothing
     //   Updates emitter properties from a config table.
@@ -1900,6 +1900,33 @@ void ScriptEngine::registerEcsBindings() {
                 em.layer = static_cast<ffe::i16>(lua_tointeger(state, -1));
             }
             lua_pop(state, 1);
+
+            lua_getfield(state, tbl, "sortOrder");
+            if (lua_isnumber(state, -1)) {
+                em.sortOrder = static_cast<ffe::i16>(lua_tointeger(state, -1));
+            }
+            lua_pop(state, 1);
+
+            // Guard against NaN/Inf in float config values.
+            auto guardFinite = [](ffe::f32& v, const ffe::f32 fallback) {
+                if (!std::isfinite(v)) { v = fallback; }
+            };
+            guardFinite(em.emitRate,    0.0f);
+            guardFinite(em.lifetimeMin, 0.5f);
+            guardFinite(em.lifetimeMax, 1.5f);
+            guardFinite(em.speedMin,    0.0f);
+            guardFinite(em.speedMax,    80.0f);
+            guardFinite(em.angleMin,    0.0f);
+            guardFinite(em.angleMax,    6.28318f);
+            guardFinite(em.sizeStart,   4.0f);
+            guardFinite(em.sizeEnd,     0.0f);
+            guardFinite(em.gravityY,    0.0f);
+            guardFinite(em.offset.x,    0.0f);
+            guardFinite(em.offset.y,    0.0f);
+
+            // Clamp lifetime to minimum 0.001f to prevent division by zero.
+            if (em.lifetimeMin < 0.001f) { em.lifetimeMin = 0.001f; }
+            if (em.lifetimeMax < 0.001f) { em.lifetimeMax = 0.001f; }
         }
 
         lua_pushboolean(state, 1);
@@ -1973,6 +2000,33 @@ void ScriptEngine::registerEcsBindings() {
             em.layer = static_cast<ffe::i16>(lua_tointeger(state, -1));
         }
         lua_pop(state, 1);
+
+        lua_getfield(state, tbl, "sortOrder");
+        if (lua_isnumber(state, -1)) {
+            em.sortOrder = static_cast<ffe::i16>(lua_tointeger(state, -1));
+        }
+        lua_pop(state, 1);
+
+        // Guard against NaN/Inf in float config values.
+        auto guardFinite = [](ffe::f32& v, const ffe::f32 fallback) {
+            if (!std::isfinite(v)) { v = fallback; }
+        };
+        guardFinite(em.emitRate,    0.0f);
+        guardFinite(em.lifetimeMin, 0.5f);
+        guardFinite(em.lifetimeMax, 1.5f);
+        guardFinite(em.speedMin,    0.0f);
+        guardFinite(em.speedMax,    80.0f);
+        guardFinite(em.angleMin,    0.0f);
+        guardFinite(em.angleMax,    6.28318f);
+        guardFinite(em.sizeStart,   4.0f);
+        guardFinite(em.sizeEnd,     0.0f);
+        guardFinite(em.gravityY,    0.0f);
+        guardFinite(em.offset.x,    0.0f);
+        guardFinite(em.offset.y,    0.0f);
+
+        // Clamp lifetime to minimum 0.001f to prevent division by zero.
+        if (em.lifetimeMin < 0.001f) { em.lifetimeMin = 0.001f; }
+        if (em.lifetimeMax < 0.001f) { em.lifetimeMax = 0.001f; }
 
         return 0;
     });

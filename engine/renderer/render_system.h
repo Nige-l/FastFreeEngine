@@ -139,7 +139,7 @@ struct ParticleEmitter {
     f32 speedMin     = 20.0f;
     f32 speedMax     = 80.0f;
     f32 angleMin     = 0.0f;    // Radians (0 = right, pi/2 = up)
-    f32 angleMax     = 6.2832f; // Full circle by default
+    f32 angleMax     = 6.28318f; // Full circle by default (2*PI)
     f32 sizeStart    = 4.0f;
     f32 sizeEnd      = 0.0f;
     f32 gravityY     = 0.0f;    // Applied to velocity.y each tick

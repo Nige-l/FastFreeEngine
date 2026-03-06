@@ -2865,3 +2865,71 @@ TEST_CASE("Particle bindings no-op on invalid entity", "[scripting][particles]")
     REQUIRE(fix.engine.doString("ffe.removeEmitter(999999)"));
     REQUIRE(fix.engine.doString("ffe.setEmitterConfig(999999, { emitRate = 1 })"));
 }
+
+TEST_CASE("ffe.addEmitter reads sortOrder from config", "[scripting][particles]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    const ffe::EntityId e = world.createEntity();
+    world.addComponent<ffe::Transform>(e);
+
+    const std::string script =
+        "ffe.addEmitter(" + std::to_string(e) + ", { sortOrder = 7, layer = 3 })";
+    REQUIRE(fix.engine.doString(script.c_str()));
+    REQUIRE(world.hasComponent<ffe::ParticleEmitter>(e));
+
+    const auto& em = world.getComponent<ffe::ParticleEmitter>(e);
+    REQUIRE(em.sortOrder == 7);
+    REQUIRE(em.layer == 3);
+}
+
+TEST_CASE("ffe.setEmitterConfig reads sortOrder", "[scripting][particles]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    const ffe::EntityId e = world.createEntity();
+    world.addComponent<ffe::Transform>(e);
+    REQUIRE(fix.engine.doString(("ffe.addEmitter(" + std::to_string(e) + ")").c_str()));
+
+    REQUIRE(fix.engine.doString(
+        ("ffe.setEmitterConfig(" + std::to_string(e) + ", { sortOrder = -2 })").c_str()));
+
+    const auto& em = world.getComponent<ffe::ParticleEmitter>(e);
+    REQUIRE(em.sortOrder == -2);
+}
+
+TEST_CASE("Particle config clamps zero lifetime to 0.001", "[scripting][particles]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    const ffe::EntityId e = world.createEntity();
+    world.addComponent<ffe::Transform>(e);
+
+    const std::string script =
+        "ffe.addEmitter(" + std::to_string(e) + ", { lifetimeMin = 0, lifetimeMax = 0 })";
+    REQUIRE(fix.engine.doString(script.c_str()));
+
+    const auto& em = world.getComponent<ffe::ParticleEmitter>(e);
+    REQUIRE(em.lifetimeMin >= 0.001f);
+    REQUIRE(em.lifetimeMax >= 0.001f);
+}
+
+TEST_CASE("Particle config guards NaN/Inf emitRate to 0", "[scripting][particles]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    const ffe::EntityId e = world.createEntity();
+    world.addComponent<ffe::Transform>(e);
+
+    // math.huge is Lua's infinity
+    const std::string script =
+        "ffe.addEmitter(" + std::to_string(e) + ", { emitRate = math.huge })";
+    REQUIRE(fix.engine.doString(script.c_str()));
+
+    const auto& em = world.getComponent<ffe::ParticleEmitter>(e);
+    REQUIRE(em.emitRate == 0.0f);
+}
