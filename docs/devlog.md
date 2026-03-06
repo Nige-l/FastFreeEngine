@@ -1412,3 +1412,61 @@ Session 17 handover document written at `docs/session17-handover.md`.
 
 ---
 
+## 2026-03-06 — Session 17: README, On-Screen Score HUD, Performance Review
+
+### Planned
+- P0: README.md update with build/run instructions and demo description
+- P1: Performance review of the full demo
+- P2: On-screen score display via ImGui HUD
+- P3: Additional demo polish
+
+### Completed
+
+- **README.md rewritten** — comprehensive project documentation including build instructions, feature list, demo description, hardware tier table, project structure overview, and contribution guidance
+- **On-screen score HUD** — new `ffe.setHudText(text)` Lua binding that renders text via ImGui at top-center of the screen
+  - Architecture: Lua scripting writes to `HudTextBuffer` (fixed 256-byte POD struct) stored in ECS registry context; editor overlay reads it each frame
+  - HUD is always visible, even when editor inspector panels are hidden (controlled by `m_showHud` flag)
+  - Pass `""` or `nil` to clear the HUD text
+  - Zero heap allocations — fixed-size char array with `strncpy`, no `std::string`
+- **Performance review: PASS** — zero per-frame heap allocations across all systems, all code clean. Spatial hash slightly oversized for 9 entities but architecturally correct.
+- **game.lua updated** — `ffe.setHudText("Score: " .. score)` on pickup and at init, score now visible on screen during gameplay
+
+### Implementation Details
+
+| File | Change |
+|------|--------|
+| `engine/core/ecs.h` | Added `HudTextBuffer` struct (256-byte fixed char array, POD) and `HUD_TEXT_BUFFER_SIZE` constant |
+| `engine/core/application.cpp` | Emplace `HudTextBuffer` into ECS registry context at startup |
+| `engine/scripting/script_engine.cpp` | Added `ffe.setHudText(text)` Lua binding — reads World from registry, writes to HudTextBuffer |
+| `engine/editor/editor.h` | Added `m_showHud` member and `setShowHud()` method |
+| `engine/editor/editor.cpp` | HUD rendering via ImGui — always drawn, top-center, semi-transparent background, auto-sized |
+| `examples/lua_demo/game.lua` | Added `ffe.setHudText` calls for score display |
+| `README.md` | Full rewrite with build instructions, features, tiers, demo description |
+
+### Session 17 Stats
+- **Modified files:** 7 (README.md, ecs.h, application.cpp, script_engine.cpp, editor.h, editor.cpp, game.lua)
+- **Lines changed:** +200 / -38
+- **Test count:** 341/341 pass on both Clang-18 and GCC-13, zero warnings
+- **No new tests added** — setHudText tests deferred to Session 18 P0
+
+### Review Results
+- **Performance-critic: PASS** — no per-frame heap allocations, HudTextBuffer is fixed-size POD
+- All 341 tests pass, both compilers, zero warnings
+
+### Known Issues Updated
+- **No tests for ffe.setHudText** — needs test coverage (Session 18 P0)
+- **.context.md files not updated** for HudTextBuffer or setHudText (Session 18 P1)
+- **Console/log viewer panel:** Still a stretch goal from Session 13
+- **M-1 getTransform GC pressure:** Mitigated by fillTransform() usage in demo
+- **isAudioPathSafe() bare ".." check:** LOW — still tracked, non-exploitable
+
+### Next Session Should Start With
+- P0: Test coverage for ffe.setHudText (test-engineer)
+- P1: Update .context.md files for setHudText and HudTextBuffer (api-designer)
+- P2: Demo polish — visual improvements, more game mechanics
+- P3: Consider additional examples or engine features for presentability
+
+Session 18 handover document written at `docs/session18-handover.md`.
+
+---
+

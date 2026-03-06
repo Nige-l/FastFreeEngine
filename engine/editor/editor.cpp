@@ -64,6 +64,24 @@ void EditorOverlay::render(World& world) {
         drawEntityInspector(world);
     }
 
+    // HUD is always drawn (even when inspector panels are hidden).
+    // Reads directly from the HudTextBuffer in ECS context.
+    if (m_showHud) {
+        const auto* hudBuf = world.registry().ctx().find<HudTextBuffer>();
+        if (hudBuf != nullptr && hudBuf->text[0] != '\0') {
+            ImGui::SetNextWindowPos(
+                ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f, 10.0f),
+                ImGuiCond_Always, ImVec2(0.5f, 0.0f));
+            ImGui::SetNextWindowBgAlpha(0.6f);
+            ImGui::Begin("##HUD", nullptr,
+                ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
+                ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoInputs);
+            ImGui::TextUnformatted(hudBuf->text);
+            ImGui::End();
+        }
+    }
+
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
@@ -74,6 +92,10 @@ void EditorOverlay::toggle() {
 
 bool EditorOverlay::isVisible() const {
     return m_visible;
+}
+
+void EditorOverlay::setShowHud(const bool show) {
+    m_showHud = show;
 }
 
 bool EditorOverlay::wantsMouse() const {

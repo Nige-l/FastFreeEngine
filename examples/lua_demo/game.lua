@@ -72,6 +72,7 @@ ffe.setCollisionCallback(function(entityA, entityB)
             -- Pickup!
             score = score + 1
             ffe.log("Score: " .. tostring(score))
+            ffe.setHudText("Score: " .. tostring(score))
 
             if sfxHandle then ffe.playSound(sfxHandle, 0.8) end
 
@@ -118,6 +119,7 @@ for i = 1, STAR_COUNT do
 end
 
 ffe.log("Collect the Stars! WASD to move, collect all stars. Score: 0")
+ffe.setHudText("Score: 0")
 
 -- ---------------------------------------------------------------------------
 -- update(entityId, dt) -- called per tick by the C++ host

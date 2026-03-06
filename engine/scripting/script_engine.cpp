@@ -1631,6 +1631,43 @@ void ScriptEngine::registerEcsBindings() {
     });
     lua_setfield(L, -2, "setMasterVolume");
 
+    // ffe.setHudText(text) -> nothing
+    // Sets the on-screen HUD text via HudTextBuffer in ECS context.
+    // Pass "" or nil to clear the HUD.
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        // Retrieve World* from Lua registry
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        if (world == nullptr) {
+            FFE_LOG_ERROR("ScriptEngine", "setHudText: World not set");
+            return 0;
+        }
+
+        auto* hudBuf = world->registry().ctx().find<ffe::HudTextBuffer>();
+        if (hudBuf == nullptr) {
+            return 0;
+        }
+
+        if (lua_isnil(state, 1) || lua_type(state, 1) != LUA_TSTRING) {
+            hudBuf->text[0] = '\0';
+            return 0;
+        }
+
+        const char* text = lua_tostring(state, 1);
+        if (text != nullptr) {
+            std::strncpy(hudBuf->text, text, ffe::HUD_TEXT_BUFFER_SIZE - 1);
+            hudBuf->text[ffe::HUD_TEXT_BUFFER_SIZE - 1] = '\0';
+        } else {
+            hudBuf->text[0] = '\0';
+        }
+
+        return 0;
+    });
+    lua_setfield(L, -2, "setHudText");
+
     // Set the 'ffe' table as a global.
     lua_setglobal(L, "ffe");
 }

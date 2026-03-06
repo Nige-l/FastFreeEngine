@@ -1,20 +1,44 @@
 # FastFreeEngine
 
-**A free, open-source C++ game engine that runs on the hardware you already have.**
+**A performance-first, open-source C++ game engine that runs on old hardware.**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ---
 
 ## What is FFE?
 
-FastFreeEngine exists to unlock creativity. A student with a ten-year-old laptop should be able to build a game that runs beautifully and share it with the world. FFE is designed to be learned from, not just used — if you came here because you want to make games, you are exactly who this engine is for.
+FastFreeEngine exists to unlock creativity. A student with a ten-year-old laptop should be able to build a game that runs beautifully and share it with the world. A kid who discovers FFE because they want to make games should come out the other side understanding systems programming, graphics, and architecture -- because the engine was designed to be learned from, not just used.
 
-The engine is free and open source forever, MIT licensed. Performance is how we deliver on that promise: by running well on old hardware, we remove the barrier between your idea and your ability to build it.
+FFE targets indie developers, students, hobbyists, and anyone working with older or lower-end hardware. The engine guarantees 60 fps on its declared minimum tier, or the feature does not ship. Every performance decision is an accessibility decision.
+
+The engine ships with **AI-native documentation**. Every subsystem includes a `.context.md` file written for LLMs to consume, so developers can use AI assistants to write correct game code against FFE immediately. Point your AI coding assistant at the project directory and it should generate idiomatic FFE code out of the box.
+
+FFE is free and open source forever. MIT licensed. That is not up for debate.
+
+---
+
+## Features
+
+All subsystems below are implemented and working together in the "Collect the Stars" demo game.
+
+- **ECS** -- Entity Component System built on EnTT with a thin `World` wrapper and function-pointer system dispatch. No virtual calls in hot paths.
+- **2D Sprite Rendering** -- OpenGL 3.3 backend with batched draw calls (2048 sprites per batch), packed 64-bit sort keys, and render queue.
+- **Sprite Animation** -- Grid-based atlas animation with configurable frame count, columns, frame duration, and looping.
+- **Lua Scripting** -- Sandboxed LuaJIT with instruction budget (1M ops), blocked globals, and a rich `ffe.*` API for input, transforms, entities, audio, textures, collisions, and shutdown.
+- **Audio** -- WAV and OGG support via miniaudio. One-shot SFX playback and streaming background music with volume control. Lock-free ring buffer for decoded audio.
+- **2D Collision Detection** -- Spatial hash broadphase with AABB and circle colliders. Lua collision callbacks for game logic.
+- **Input System** -- State-based keyboard and mouse input (pressed/held/released/up) with action mapping (64 actions, 4 bindings each).
+- **Editor Overlay** -- Dear ImGui debug overlay toggled with F1. Displays entity inspector, system timings, and engine state.
+- **Arena Allocator** -- Linear bump allocator with cache-line alignment and per-frame reset. Zero heap allocations in hot paths.
+- **Logging** -- printf-style logging with compile-time macro filtering and minimal lock scope.
+- **Texture Loading** -- stb_image-based loader with path traversal prevention, write-once asset root, and configurable filter/wrap modes (LINEAR or NEAREST for pixel art).
 
 ---
 
 ## Hardware Tiers
 
-Every FFE system declares which hardware tiers it supports. You pick the tier that matches your machine, and the engine guarantees 60 fps on that tier or the feature does not ship.
+Every FFE system declares which hardware tiers it supports. No feature may silently degrade performance on a lower tier.
 
 | Tier | Era | GPU API | Min VRAM | Threading | Default |
 |------|-----|---------|----------|-----------|---------|
@@ -23,13 +47,7 @@ Every FFE system declares which hardware tiers it supports. You pick the tier th
 | **STANDARD** | ~2016 | OpenGL 4.5 / Vulkan | 2 GB | Multi-threaded | No |
 | **MODERN** | ~2022 | Vulkan | 4 GB+ | Multi-threaded | No |
 
-**LEGACY is the default tier.** If you are unsure which to pick, use LEGACY. It targets hardware from around 2012 — most laptops and desktops from the last decade will run it comfortably.
-
----
-
-## Project Status
-
-Early development — core engine skeleton complete, renderer RHI in design. The project builds and tests pass, but there is no playable output yet. Now is a great time to explore the codebase, read the design docs, and follow along as systems come online.
+**LEGACY is the default tier.** If you are unsure which to pick, use LEGACY. It targets hardware from around 2012 -- most laptops and desktops from the last decade will run it comfortably.
 
 ---
 
@@ -37,7 +55,7 @@ Early development — core engine skeleton complete, renderer RHI in design. The
 
 ### Prerequisites
 
-**Ubuntu 24.04** is the recommended development platform. Install the following packages:
+**Linux (Ubuntu 22.04+)** is the development platform. Install the required packages:
 
 ```bash
 sudo apt-get install \
@@ -48,12 +66,13 @@ sudo apt-get install \
     libgl1-mesa-dev libvulkan-dev \
     libglfw3-dev libasound2-dev libpulse-dev \
     luajit libluajit-5.1-dev \
-    pkg-config curl unzip
+    pkg-config curl unzip \
+    sox  # optional -- used to generate audio test assets
 ```
 
 ### vcpkg Setup
 
-FFE uses [vcpkg](https://github.com/microsoft/vcpkg) for C++ dependency management. If you do not have it installed:
+FFE uses [vcpkg](https://github.com/microsoft/vcpkg) for C++ dependency management:
 
 ```bash
 cd ~
@@ -61,25 +80,27 @@ git clone https://github.com/microsoft/vcpkg.git
 ./vcpkg/bootstrap-vcpkg.sh
 ```
 
-Add these lines to your `~/.bashrc` (or equivalent):
+Add to your `~/.bashrc` (or equivalent):
 
 ```bash
 export VCPKG_ROOT="$HOME/vcpkg"
 export PATH="$VCPKG_ROOT:$PATH"
 ```
 
-Then reload your shell: `source ~/.bashrc`
+Then reload: `source ~/.bashrc`
 
 ### Configure and Build
-
-FFE uses CMake with the Ninja backend. The build system automatically picks up vcpkg, mold (linker), and ccache if they are available.
 
 **Build with Clang-18 (primary compiler):**
 
 ```bash
+git clone https://github.com/user/FastFreeEngine.git
+cd FastFreeEngine
+
 cmake -B build -G Ninja \
     -DCMAKE_CXX_COMPILER=clang++-18 \
-    -DCMAKE_BUILD_TYPE=Debug
+    -DCMAKE_BUILD_TYPE=Debug \
+    -DFFE_TIER=LEGACY
 
 cmake --build build
 ```
@@ -94,44 +115,102 @@ cmake -B build-gcc -G Ninja \
 cmake --build build-gcc
 ```
 
+### Running Tests
+
+341+ Catch2 tests covering core, renderer, scripting, audio, physics, and texture loading:
+
+```bash
+ctest --test-dir build --output-on-failure
+```
+
 ### Selecting a Hardware Tier
 
 Pass `-DFFE_TIER=<TIER>` during configuration. The default is `LEGACY`.
 
 ```bash
-# Target older hardware
 cmake -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++-18 -DFFE_TIER=RETRO
-
-# Target modern GPUs with Vulkan
 cmake -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++-18 -DFFE_TIER=MODERN
 ```
 
-### Running Tests
+---
 
-Tests are built by default. After building, run them with CTest:
+## Running the Demos
+
+### Collect the Stars (lua_demo)
+
+The flagship demo -- a complete mini-game written entirely in Lua exercising every engine subsystem.
 
 ```bash
-cd build
-ctest --output-on-failure
+./build/examples/lua_demo/ffe_lua_demo
 ```
 
-Or to disable tests entirely, configure with `-DFFE_BUILD_TESTS=OFF`.
+- **WASD** to move the player
+- Collect animated spinning stars for points
+- **F1** to toggle the editor overlay
+- **ESC** to quit
+- Background music and pickup sound effects
+
+### Other Demos
+
+```bash
+# Bouncing sprites demo
+./build/examples/hello_sprites/ffe_hello_sprites
+
+# Interactive WASD movement demo
+./build/examples/interactive_demo/ffe_interactive_demo
+
+# Headless test (CI-safe, no display required)
+./build/examples/headless_test/ffe_headless_test
+```
 
 ---
 
-## Architecture
+## Project Structure
 
-Design documents for every engine subsystem live in `docs/architecture/`. If you want to understand how a system works or why it was designed a certain way, start there.
+```
+engine/
+  core/         ECS, types, arena allocator, logging, input, application loop
+  renderer/     OpenGL 3.3 backend, sprite batching, textures, sprite animation
+  audio/        miniaudio integration, WAV/OGG, SFX + streaming music
+  physics/      2D collision detection, spatial hash, AABB/circle colliders
+  scripting/    Lua sandbox, ffe.* API bindings, instruction budget
+  editor/       Dear ImGui overlay, entity inspector
+
+tests/          341+ Catch2 tests (core, renderer, scripting, audio, physics)
+examples/       Demo games (lua_demo, hello_sprites, interactive_demo, headless_test)
+assets/         Textures, spritesheets, audio files
+docs/
+  architecture/ ADR design documents for each subsystem
+  devlog.md     Session-by-session development history
+```
+
+Every engine subdirectory contains a `.context.md` file with API documentation, usage patterns, and anti-patterns -- written for both humans and AI assistants.
 
 ---
 
-## AI-Native Documentation
+## Dependencies
 
-FFE ships with machine-readable documentation designed for AI assistants. Every engine subsystem includes a `.context.md` file in its directory. These files describe the public API, common usage patterns, anti-patterns to avoid, and which hardware tiers are supported.
+Managed via vcpkg (see `vcpkg.json`):
 
-The idea is simple: point your AI coding assistant at your FFE project directory and it should be able to help you write correct game code immediately. If it cannot, the `.context.md` file is the thing we fix.
+| Dependency | Purpose |
+|------------|---------|
+| [EnTT](https://github.com/skypjack/entt) | Entity Component System |
+| [GLM](https://github.com/g-truc/glm) | Math library |
+| [Dear ImGui](https://github.com/ocornut/imgui) | Editor overlay (with GLFW + OpenGL3 bindings) |
+| [sol2](https://github.com/ThePhD/sol2) | Lua C++ bindings |
+| [Tracy](https://github.com/wolfpld/tracy) | Frame profiler |
+| [Catch2](https://github.com/catchorg/Catch2) | Test framework |
+| [nlohmann-json](https://github.com/nlohmann/json) | JSON parsing |
 
-If you use an LLM to help you code (and we encourage it), these files are there to make that experience great.
+System packages:
+
+| Dependency | Purpose |
+|------------|---------|
+| LuaJIT | Lua scripting runtime |
+| GLFW | Window and input management |
+| glad | OpenGL function loading (vendored in `third_party/`) |
+| stb_image | Texture loading (vendored in `third_party/`) |
+| miniaudio | Audio playback (vendored in `third_party/`) |
 
 ---
 
@@ -141,6 +220,6 @@ FastFreeEngine is licensed under the [MIT License](LICENSE). Free and open sourc
 
 ---
 
-## Contributing
+## Status
 
-FFE is in early development. The architecture is still taking shape, and things will change. If you are interested in contributing, the best way to start is to read the design docs in `docs/architecture/`, build the project, and explore the codebase. We are glad you are here.
+Active development. The engine has a working game loop, 2D rendering, audio, physics, scripting, and an editor overlay -- all demonstrated in a playable mini-game. See `docs/devlog.md` for the full session-by-session development history.

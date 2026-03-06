@@ -269,16 +269,20 @@ Result Application::startup() {
         m_world.registry().ctx().emplace<rhi::TextureHandle>(m_defaultWhiteTexture);
     }
 
-    // 5cd. Emplace ShutdownSignal into ECS context so systems can request shutdown
+    // 5cd. Emplace HudTextBuffer into ECS context so Lua/systems can set HUD text
+    // without a direct pointer to the editor overlay.
+    m_world.registry().ctx().emplace<HudTextBuffer>();
+
+    // 5ce. Emplace ShutdownSignal into ECS context so systems can request shutdown
     // without holding an Application pointer.  Application::run() checks this
     // after every tick and exits the loop if requested = true.
     m_world.registry().ctx().emplace<ShutdownSignal>();
 
-    // 5ce. Emplace frame arena pointer into ECS context so systems (e.g. collision)
+    // 5cf. Emplace frame arena pointer into ECS context so systems (e.g. collision)
     // can use per-frame arena allocation without holding an Application pointer.
     m_world.registry().ctx().emplace<ArenaAllocator*>(&m_frameAllocator);
 
-    // 5cf. Emplace collision event list and callback ref into ECS context.
+    // 5cg. Emplace collision event list and callback ref into ECS context.
     m_world.registry().ctx().emplace<CollisionEventList>();
     m_world.registry().ctx().emplace<CollisionCallbackRef>();
 

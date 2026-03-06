@@ -22,6 +22,10 @@ public:
     bool wantsMouse() const;
     bool wantsKeyboard() const;
 
+    // HUD text — always rendered, even when inspector panels are hidden.
+    // Reads from HudTextBuffer in ECS context each frame.
+    void setShowHud(bool show);
+
 private:
     void drawPerformancePanel(World& world);
     void drawEntityInspector(World& world);
@@ -34,6 +38,7 @@ private:
     float m_displayFrameTime = 0.0f;
     u32 m_selectedEntity = 0;
     bool m_hasSelection = false;
+    bool m_showHud = true;
 };
 
 } // namespace ffe::editor

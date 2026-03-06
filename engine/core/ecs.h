@@ -22,6 +22,19 @@ struct ShutdownSignal {
     bool requested = false;
 };
 
+// ---------------------------------------------------------------------------
+// HudTextBuffer — stored in the ECS registry context so Lua scripts (or any
+// system) can set HUD text without a direct pointer to the editor overlay.
+//
+// The editor overlay reads this buffer each frame to display on-screen text.
+// The buffer is a fixed-size char array (no heap allocation).
+// ---------------------------------------------------------------------------
+static constexpr u32 HUD_TEXT_BUFFER_SIZE = 256;
+
+struct HudTextBuffer {
+    char text[HUD_TEXT_BUFFER_SIZE] = "";
+};
+
 class World {
 public:
     World() { m_systems.reserve(32); }
