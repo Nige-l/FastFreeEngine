@@ -2256,3 +2256,56 @@ TEST_CASE("ffe.drawRect queues a glyph quad", "[scripting][text]") {
     std::free(tr.glyphs);
     tr.glyphs = nullptr;
 }
+
+// =============================================================================
+// ffe.setSpriteFlip
+// =============================================================================
+
+TEST_CASE("ffe.setSpriteFlip sets flipX and flipY on Sprite component", "[scripting][ecs][sprite]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    // Create entity with Transform + Sprite
+    const std::string setup =
+        "ffe.addTransform(" + std::to_string(entity) + ", 0, 0, 0, 1, 1)\n"
+        "ffe.addSprite(" + std::to_string(entity) + ", 1, 32, 32, 1, 1, 1, 1, 0)\n";
+    REQUIRE(fix.engine.doString(setup.c_str()));
+
+    // Set flipX=true, flipY=false
+    const std::string flipScript =
+        "ffe.setSpriteFlip(" + std::to_string(entity) + ", true, false)\n";
+    REQUIRE(fix.engine.doString(flipScript.c_str()));
+
+    const ffe::Sprite& s = world.getComponent<ffe::Sprite>(entity);
+    REQUIRE(s.flipX == true);
+    REQUIRE(s.flipY == false);
+
+    // Set flipY=true too
+    const std::string flipBoth =
+        "ffe.setSpriteFlip(" + std::to_string(entity) + ", true, true)\n";
+    REQUIRE(fix.engine.doString(flipBoth.c_str()));
+
+    const ffe::Sprite& s2 = world.getComponent<ffe::Sprite>(entity);
+    REQUIRE(s2.flipX == true);
+    REQUIRE(s2.flipY == true);
+
+    // Unflip both
+    const std::string unflip =
+        "ffe.setSpriteFlip(" + std::to_string(entity) + ", false, false)\n";
+    REQUIRE(fix.engine.doString(unflip.c_str()));
+
+    const ffe::Sprite& s3 = world.getComponent<ffe::Sprite>(entity);
+    REQUIRE(s3.flipX == false);
+    REQUIRE(s3.flipY == false);
+}
+
+TEST_CASE("ffe.setSpriteFlip on invalid entity is a no-op", "[scripting][ecs][sprite]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    // Invalid entity ID — should not crash
+    REQUIRE(fix.engine.doString("ffe.setSpriteFlip(999999, true, false)"));
+}

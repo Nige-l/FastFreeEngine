@@ -36,6 +36,9 @@ struct DrawCommand {
     f32 uvMaxX = 1.0f;
     f32 uvMaxY = 1.0f;
 
+    // --- Rotation (4 bytes) ---
+    f32 rotation = 0.0f;  // Radians, z-axis rotation for 2D
+
     // --- Sprite color (packed RGBA8) ---
     u8 colorR = 255;
     u8 colorG = 255;
@@ -44,7 +47,7 @@ struct DrawCommand {
 
     // --- Pipeline state + padding to 80 bytes ---
     u8 pipelineBits = 0;
-    u8 reserved[7] = {};
+    u8 reserved[3] = {};
 };
 
 static_assert(sizeof(DrawCommand) == 80, "DrawCommand must be 80 bytes");

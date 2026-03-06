@@ -231,15 +231,40 @@ The spritesheet should be a grid. The engine calculates UV coordinates automatic
 
 ---
 
-## 9. Displaying Score / HUD Text
+## 9. Drawing HUD Text and Rectangles
 
-Show text on screen (top-center, always visible):
+Draw text anywhere on screen using `ffe.drawText()`. Coordinates are in screen pixels (top-left is 0,0):
 
 ```lua
-ffe.setHudText("Score: " .. score .. "  |  WASD to move")
+function update(entityId, dt)
+    -- Draw white text at position (10, 10)
+    ffe.drawText("Score: " .. score, 10, 10)
+
+    -- Draw colored text with custom scale
+    -- drawText(text, x, y [, scale, r, g, b, a])
+    ffe.drawText("GAME OVER", 500, 300, 3.0, 1, 0, 0, 1)  -- big red text
+
+    -- Center text using screen dimensions
+    local sw = ffe.getScreenWidth()
+    local sh = ffe.getScreenHeight()
+    local title = "MY GAME"
+    local titleWidth = #title * 8 * 2  -- 8px per char * scale
+    ffe.drawText(title, (sw - titleWidth) / 2, sh / 2, 2.0)
+end
 ```
 
-Call this whenever the text should change. Pass `""` to clear it.
+Draw filled rectangles for HUD panels and backgrounds:
+
+```lua
+-- Draw a semi-transparent background behind HUD text
+-- drawRect(x, y, width, height [, r, g, b, a])
+ffe.drawRect(5, 5, 200, 30, 0, 0, 0, 0.7)
+ffe.drawText("Score: " .. score, 10, 10)
+```
+
+The built-in font is 8x8 pixels per character. Multiply by the scale factor to calculate text width.
+
+**Note:** `ffe.setHudText("text")` is a simpler alternative that shows text top-center, but `drawText` gives you full control over position, color, and scale.
 
 ---
 
@@ -259,7 +284,116 @@ The shake decays linearly. A new shake replaces any active one.
 
 ---
 
-## 11. Quitting Cleanly
+## 11. Background Color
+
+Set a custom background (clear) color for your game:
+
+```lua
+-- Set a dark blue background (called once at init)
+ffe.setBackgroundColor(0.05, 0.05, 0.15)
+```
+
+RGB values are 0.0 to 1.0. Call this at the top of your script or in `update()`.
+
+---
+
+## 12. Mouse Input
+
+Check mouse button state and position:
+
+```lua
+function update(entityId, dt)
+    -- Mouse position in screen pixels
+    local mx = ffe.getMouseX()
+    local my = ffe.getMouseY()
+
+    -- Mouse buttons: MOUSE_LEFT, MOUSE_RIGHT, MOUSE_MIDDLE
+    if ffe.isMousePressed(ffe.MOUSE_LEFT) then
+        -- clicked this frame
+    end
+    if ffe.isMouseHeld(ffe.MOUSE_LEFT) then
+        -- held down
+    end
+    if ffe.isMouseReleased(ffe.MOUSE_LEFT) then
+        -- released this frame
+    end
+end
+```
+
+---
+
+## 13. Sprite Rotation and Flipping
+
+Rotate sprites by setting the rotation parameter in `setTransform` (radians, counter-clockwise):
+
+```lua
+local angle = 0
+function update(entityId, dt)
+    angle = angle + 2.0 * dt  -- rotate ~2 radians/sec
+    ffe.setTransform(entityId, x, y, angle, 1, 1)
+end
+```
+
+Flip sprites horizontally or vertically (useful for character facing direction):
+
+```lua
+-- Flip horizontally when moving left
+if dx < 0 then
+    ffe.setSpriteFlip(entityId, true, false)
+elseif dx > 0 then
+    ffe.setSpriteFlip(entityId, false, false)
+end
+```
+
+Flipping works correctly with sprite animations — the flip is applied at render time.
+
+---
+
+## 14. Title Screen Pattern
+
+Most games need a title screen. Use a state variable to switch between screens:
+
+```lua
+local STATE_TITLE = 0
+local STATE_PLAYING = 1
+local STATE_GAMEOVER = 2
+local state = STATE_TITLE
+
+function update(entityId, dt)
+    if state == STATE_TITLE then
+        local sw = ffe.getScreenWidth()
+        ffe.drawText("MY GAME", sw/2 - 56, 200, 2.0, 1, 0.8, 0, 1)
+        ffe.drawText("Press SPACE to start", sw/2 - 80, 350)
+
+        if ffe.isKeyPressed(ffe.KEY_SPACE) then
+            state = STATE_PLAYING
+        end
+
+    elseif state == STATE_PLAYING then
+        -- game logic here
+        if lives <= 0 then state = STATE_GAMEOVER end
+
+    elseif state == STATE_GAMEOVER then
+        ffe.drawText("GAME OVER", 500, 300, 3.0, 1, 0, 0, 1)
+        ffe.drawText("Press SPACE to restart", 480, 380)
+
+        if ffe.isKeyPressed(ffe.KEY_SPACE) then
+            state = STATE_TITLE
+            -- reset game state...
+        end
+    end
+
+    if ffe.isKeyPressed(ffe.KEY_ESCAPE) then
+        ffe.requestShutdown()
+    end
+end
+```
+
+See the Pong and Breakout demos for polished examples of this pattern with animated title screens.
+
+---
+
+## 15. Quitting Cleanly
 
 ```lua
 if ffe.isKeyPressed(ffe.KEY_ESCAPE) then
@@ -268,18 +402,6 @@ end
 ```
 
 This tells the engine to stop the game loop after the current frame. Your `shutdown()` function will be called automatically.
-
----
-
-## 12. Editor Overlay
-
-Press **F1** at any time to toggle the debug editor:
-
-- **Performance panel** — FPS, frame time, entity count, audio voices
-- **Entity inspector** — select entities, edit positions/rotations live
-- **Console** — scrollable log viewer with color-coded messages
-
-The editor is only available in Debug builds.
 
 ---
 
@@ -294,6 +416,8 @@ local speed = 200
 local tex = ffe.loadTexture("white.png")
 local buf = {}
 
+ffe.setBackgroundColor(0.05, 0.05, 0.15)
+
 function update(entityId, dt)
     if not ffe.fillTransform(entityId, buf) then return end
 
@@ -305,7 +429,9 @@ function update(entityId, dt)
 
     ffe.setTransform(entityId, buf.x + dx, buf.y + dy, 0, 1, 1)
 
-    ffe.setHudText("WASD to move | ESC to quit")
+    -- HUD with background panel
+    ffe.drawRect(5, 5, 250, 25, 0, 0, 0, 0.7)
+    ffe.drawText("WASD to move | ESC to quit", 10, 10)
 
     if ffe.isKeyPressed(ffe.KEY_ESCAPE) then
         ffe.requestShutdown()

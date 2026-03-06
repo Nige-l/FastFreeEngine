@@ -1886,3 +1886,53 @@ Games frequently need "do X after Y seconds." A simple `ffe.after(seconds, callb
 
 ---
 
+## 2026-03-06 — Session 28: Sprite Rotation + Flipping + Tutorial Update
+
+### Planned
+P0: Sprite rotation in render pipeline. P1: Tutorial documentation update. P2: Sprite flipping. P3: Timer/delay utility.
+
+### Completed
+
+**P0: Sprite Rotation in Render Pipeline**
+- Added `f32 rotation` field to `DrawCommand` (used 4 bytes from reserved padding — struct stays 80 bytes)
+- `renderPrepareSystem` now passes rotation through `writeCommand` for both interpolated and static entities
+- Interpolated entities get linear lerp between `PreviousTransform.rotation` and `Transform.rotation`
+- `application.cpp` passes `cmd.rotation` to `SpriteInstance` (was hardcoded to `0.0f`)
+- `sprite_batch.cpp` already handled rotation with cos/sin + fast-path for zero — no changes needed
+- Rotation was always settable from Lua via `ffe.setTransform(id, x, y, rotation, scaleX, scaleY)` — it just wasn't rendering
+
+**P2: Sprite Flipping**
+- Added `flipX`/`flipY` bool fields to `Sprite` component
+- `renderPrepareSystem` swaps UV min/max when flip flags are set — works correctly with animations
+- New Lua binding: `ffe.setSpriteFlip(entityId, flipX, flipY)` — safe for per-frame use
+- Character facing direction is now trivial: flip based on movement direction
+
+**P1: Tutorial Documentation Update**
+- Section 9: Rewrote HUD section — `ffe.drawText()` and `ffe.drawRect()` with positioning, color, scale
+- Section 11: New — `ffe.setBackgroundColor()` for custom backgrounds
+- Section 12: New — Mouse input (`isMousePressed/Held/Released`, `MOUSE_LEFT/RIGHT/MIDDLE`)
+- Section 13: New — Sprite rotation (`setTransform` rotation param) and flipping (`setSpriteFlip`)
+- Section 14: New — Title screen state machine pattern
+- Updated complete example with `drawRect` + `drawText` HUD and `setBackgroundColor`
+- Renumbered sections 11-15 (was 11-12)
+
+**Documentation Updates**
+- `engine/renderer/.context.md`: DrawCommand rotation field, Sprite flipX/flipY fields
+- `engine/scripting/.context.md`: `ffe.setSpriteFlip` binding documented
+
+### Test Results
+- **381 tests pass** on both Clang-18 and GCC-13, zero warnings (9 new tests)
+- 4 rotation pass-through tests (static, lerp alpha=0/0.5, default zero)
+- 3 flip tests (flipX, flipY, no-flip baseline)
+- 2 Lua binding tests (setSpriteFlip set/unset, invalid entity no-op)
+
+### Deferred
+- P3: Timer/delay utility (`ffe.after`, `ffe.every`) — deferred to next session
+
+### Next Session Should Start With
+- P0: Timer/scheduler API (`ffe.after(seconds, callback)`, `ffe.every(seconds, callback)`)
+- P1: Tilemap rendering (efficient batch rendering of tile grids)
+- P2: Scene management (load/unload scenes, transitions)
+
+---
+

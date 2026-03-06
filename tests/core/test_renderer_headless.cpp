@@ -582,6 +582,280 @@ TEST_CASE("renderPrepareSystem: static entity without PreviousTransform uses raw
 }
 
 // =============================================================================
+// Rotation pass-through — renderPrepareSystem writes rotation into DrawCommand
+// =============================================================================
+
+TEST_CASE("renderPrepareSystem passes rotation through for static entities", "[renderer][rendersystem][rotation]") {
+    RhiConfig rhiCfg;
+    rhiCfg.headless = true;
+    REQUIRE(init(rhiCfg) == RhiResult::OK);
+
+    ShaderLibrary shaderLib;
+    REQUIRE(initShaderLibrary(shaderLib));
+
+    RenderQueue queue;
+    initRenderQueue(queue, 8);
+
+    ffe::World world;
+    world.registry().ctx().emplace<RenderQueue*>(&queue);
+    world.registry().ctx().emplace<ShaderLibrary>(shaderLib);
+
+    const ffe::EntityId e = world.createEntity();
+
+    ffe::Transform& t = world.addComponent<ffe::Transform>(e);
+    t.position = {0.0f, 0.0f, 0.0f};
+    t.scale    = {1.0f, 1.0f, 1.0f};
+    t.rotation = 1.57f; // ~pi/2
+
+    ffe::Sprite& s = world.addComponent<ffe::Sprite>(e);
+    s.size    = {32.0f, 32.0f};
+    s.layer   = 0;
+    s.texture = rhi::TextureHandle{1};
+    s.color   = {1.0f, 1.0f, 1.0f, 1.0f};
+
+    ffe::renderer::renderPrepareSystem(world, 0.0f);
+
+    REQUIRE(queue.count == 1);
+    REQUIRE(queue.commands[0].rotation == Catch::Approx(1.57f));
+
+    destroyRenderQueue(queue);
+    shutdownShaderLibrary(shaderLib);
+    shutdown();
+}
+
+TEST_CASE("renderPrepareSystem lerps rotation with alpha=0.5", "[renderer][rendersystem][rotation]") {
+    RhiConfig rhiCfg;
+    rhiCfg.headless = true;
+    REQUIRE(init(rhiCfg) == RhiResult::OK);
+
+    ShaderLibrary shaderLib;
+    REQUIRE(initShaderLibrary(shaderLib));
+
+    RenderQueue queue;
+    initRenderQueue(queue, 8);
+
+    ffe::World world;
+    world.registry().ctx().emplace<RenderQueue*>(&queue);
+    world.registry().ctx().emplace<ShaderLibrary>(shaderLib);
+
+    const ffe::EntityId e = world.createEntity();
+
+    ffe::Transform& curr = world.addComponent<ffe::Transform>(e);
+    curr.position = {0.0f, 0.0f, 0.0f};
+    curr.scale    = {1.0f, 1.0f, 1.0f};
+    curr.rotation = 2.0f;
+
+    ffe::PreviousTransform& prev = world.addComponent<ffe::PreviousTransform>(e);
+    prev.position = {0.0f, 0.0f, 0.0f};
+    prev.scale    = {1.0f, 1.0f, 1.0f};
+    prev.rotation = 0.0f;
+
+    ffe::Sprite& s = world.addComponent<ffe::Sprite>(e);
+    s.size    = {32.0f, 32.0f};
+    s.layer   = 0;
+    s.texture = rhi::TextureHandle{1};
+    s.color   = {1.0f, 1.0f, 1.0f, 1.0f};
+
+    // alpha=0.5 → rotation = 0 + (2 - 0) * 0.5 = 1.0
+    ffe::renderer::renderPrepareSystem(world, 0.5f);
+
+    REQUIRE(queue.count == 1);
+    REQUIRE(queue.commands[0].rotation == Catch::Approx(1.0f));
+
+    destroyRenderQueue(queue);
+    shutdownShaderLibrary(shaderLib);
+    shutdown();
+}
+
+TEST_CASE("renderPrepareSystem rotation: alpha=0 yields previous rotation", "[renderer][rendersystem][rotation]") {
+    RhiConfig rhiCfg;
+    rhiCfg.headless = true;
+    REQUIRE(init(rhiCfg) == RhiResult::OK);
+
+    ShaderLibrary shaderLib;
+    REQUIRE(initShaderLibrary(shaderLib));
+
+    RenderQueue queue;
+    initRenderQueue(queue, 8);
+
+    ffe::World world;
+    world.registry().ctx().emplace<RenderQueue*>(&queue);
+    world.registry().ctx().emplace<ShaderLibrary>(shaderLib);
+
+    const ffe::EntityId e = world.createEntity();
+
+    ffe::Transform& curr = world.addComponent<ffe::Transform>(e);
+    curr.position = {0.0f, 0.0f, 0.0f};
+    curr.scale    = {1.0f, 1.0f, 1.0f};
+    curr.rotation = 3.14f;
+
+    ffe::PreviousTransform& prev = world.addComponent<ffe::PreviousTransform>(e);
+    prev.position = {0.0f, 0.0f, 0.0f};
+    prev.scale    = {1.0f, 1.0f, 1.0f};
+    prev.rotation = 1.0f;
+
+    ffe::Sprite& s = world.addComponent<ffe::Sprite>(e);
+    s.size    = {32.0f, 32.0f};
+    s.layer   = 0;
+    s.texture = rhi::TextureHandle{1};
+    s.color   = {1.0f, 1.0f, 1.0f, 1.0f};
+
+    ffe::renderer::renderPrepareSystem(world, 0.0f);
+
+    REQUIRE(queue.count == 1);
+    REQUIRE(queue.commands[0].rotation == Catch::Approx(1.0f));
+
+    destroyRenderQueue(queue);
+    shutdownShaderLibrary(shaderLib);
+    shutdown();
+}
+
+TEST_CASE("DrawCommand default rotation is zero", "[renderer][rotation]") {
+    DrawCommand cmd{};
+    REQUIRE(cmd.rotation == 0.0f);
+}
+
+// =============================================================================
+// Sprite flipping — UV swap in renderPrepareSystem
+// =============================================================================
+
+TEST_CASE("renderPrepareSystem flips UVs horizontally when flipX is set", "[renderer][rendersystem][flip]") {
+    RhiConfig rhiCfg;
+    rhiCfg.headless = true;
+    REQUIRE(init(rhiCfg) == RhiResult::OK);
+
+    ShaderLibrary shaderLib;
+    REQUIRE(initShaderLibrary(shaderLib));
+
+    RenderQueue queue;
+    initRenderQueue(queue, 8);
+
+    ffe::World world;
+    world.registry().ctx().emplace<RenderQueue*>(&queue);
+    world.registry().ctx().emplace<ShaderLibrary>(shaderLib);
+
+    const ffe::EntityId e = world.createEntity();
+
+    ffe::Transform& t = world.addComponent<ffe::Transform>(e);
+    t.position = {0.0f, 0.0f, 0.0f};
+    t.scale    = {1.0f, 1.0f, 1.0f};
+
+    ffe::Sprite& s = world.addComponent<ffe::Sprite>(e);
+    s.size    = {32.0f, 32.0f};
+    s.layer   = 0;
+    s.texture = rhi::TextureHandle{1};
+    s.color   = {1.0f, 1.0f, 1.0f, 1.0f};
+    s.uvMin   = {0.0f, 0.0f};
+    s.uvMax   = {1.0f, 1.0f};
+    s.flipX   = true;
+    s.flipY   = false;
+
+    ffe::renderer::renderPrepareSystem(world, 0.0f);
+
+    REQUIRE(queue.count == 1);
+    // flipX swaps uvMinX and uvMaxX
+    REQUIRE(queue.commands[0].uvMinX == Catch::Approx(1.0f));
+    REQUIRE(queue.commands[0].uvMaxX == Catch::Approx(0.0f));
+    // Y unchanged
+    REQUIRE(queue.commands[0].uvMinY == Catch::Approx(0.0f));
+    REQUIRE(queue.commands[0].uvMaxY == Catch::Approx(1.0f));
+
+    destroyRenderQueue(queue);
+    shutdownShaderLibrary(shaderLib);
+    shutdown();
+}
+
+TEST_CASE("renderPrepareSystem flips UVs vertically when flipY is set", "[renderer][rendersystem][flip]") {
+    RhiConfig rhiCfg;
+    rhiCfg.headless = true;
+    REQUIRE(init(rhiCfg) == RhiResult::OK);
+
+    ShaderLibrary shaderLib;
+    REQUIRE(initShaderLibrary(shaderLib));
+
+    RenderQueue queue;
+    initRenderQueue(queue, 8);
+
+    ffe::World world;
+    world.registry().ctx().emplace<RenderQueue*>(&queue);
+    world.registry().ctx().emplace<ShaderLibrary>(shaderLib);
+
+    const ffe::EntityId e = world.createEntity();
+
+    ffe::Transform& t = world.addComponent<ffe::Transform>(e);
+    t.position = {0.0f, 0.0f, 0.0f};
+    t.scale    = {1.0f, 1.0f, 1.0f};
+
+    ffe::Sprite& s = world.addComponent<ffe::Sprite>(e);
+    s.size    = {32.0f, 32.0f};
+    s.layer   = 0;
+    s.texture = rhi::TextureHandle{1};
+    s.color   = {1.0f, 1.0f, 1.0f, 1.0f};
+    s.uvMin   = {0.0f, 0.0f};
+    s.uvMax   = {1.0f, 1.0f};
+    s.flipX   = false;
+    s.flipY   = true;
+
+    ffe::renderer::renderPrepareSystem(world, 0.0f);
+
+    REQUIRE(queue.count == 1);
+    // X unchanged
+    REQUIRE(queue.commands[0].uvMinX == Catch::Approx(0.0f));
+    REQUIRE(queue.commands[0].uvMaxX == Catch::Approx(1.0f));
+    // flipY swaps uvMinY and uvMaxY
+    REQUIRE(queue.commands[0].uvMinY == Catch::Approx(1.0f));
+    REQUIRE(queue.commands[0].uvMaxY == Catch::Approx(0.0f));
+
+    destroyRenderQueue(queue);
+    shutdownShaderLibrary(shaderLib);
+    shutdown();
+}
+
+TEST_CASE("renderPrepareSystem no flip leaves UVs unchanged", "[renderer][rendersystem][flip]") {
+    RhiConfig rhiCfg;
+    rhiCfg.headless = true;
+    REQUIRE(init(rhiCfg) == RhiResult::OK);
+
+    ShaderLibrary shaderLib;
+    REQUIRE(initShaderLibrary(shaderLib));
+
+    RenderQueue queue;
+    initRenderQueue(queue, 8);
+
+    ffe::World world;
+    world.registry().ctx().emplace<RenderQueue*>(&queue);
+    world.registry().ctx().emplace<ShaderLibrary>(shaderLib);
+
+    const ffe::EntityId e = world.createEntity();
+
+    ffe::Transform& t = world.addComponent<ffe::Transform>(e);
+    t.position = {0.0f, 0.0f, 0.0f};
+    t.scale    = {1.0f, 1.0f, 1.0f};
+
+    ffe::Sprite& s = world.addComponent<ffe::Sprite>(e);
+    s.size    = {32.0f, 32.0f};
+    s.layer   = 0;
+    s.texture = rhi::TextureHandle{1};
+    s.color   = {1.0f, 1.0f, 1.0f, 1.0f};
+    s.uvMin   = {0.25f, 0.5f};
+    s.uvMax   = {0.75f, 1.0f};
+    s.flipX   = false;
+    s.flipY   = false;
+
+    ffe::renderer::renderPrepareSystem(world, 0.0f);
+
+    REQUIRE(queue.count == 1);
+    REQUIRE(queue.commands[0].uvMinX == Catch::Approx(0.25f));
+    REQUIRE(queue.commands[0].uvMinY == Catch::Approx(0.5f));
+    REQUIRE(queue.commands[0].uvMaxX == Catch::Approx(0.75f));
+    REQUIRE(queue.commands[0].uvMaxY == Catch::Approx(1.0f));
+
+    destroyRenderQueue(queue);
+    shutdownShaderLibrary(shaderLib);
+    shutdown();
+}
+
+// =============================================================================
 // animationUpdateSystem — frame advancement and UV computation
 // =============================================================================
 

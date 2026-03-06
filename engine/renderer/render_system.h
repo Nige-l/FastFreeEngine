@@ -40,6 +40,8 @@ struct Sprite {
     glm::vec4 color = {1.0f, 1.0f, 1.0f, 1.0f};
     i16 layer     = 0;
     i16 sortOrder = 0;
+    bool flipX    = false;
+    bool flipY    = false;
 };
 
 // --- SpriteAnimation component ---

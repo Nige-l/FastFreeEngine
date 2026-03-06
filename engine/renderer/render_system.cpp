@@ -85,7 +85,8 @@ void renderPrepareSystem(World& world, const float alpha) {
     // Helper lambda — writes a DrawCommand from already-resolved position and scale.
     // Avoids duplicating the sort key / color pack code in two loops below.
     const auto writeCommand = [&](const Sprite& sprite, const f32 posX, const f32 posY,
-                                  const f32 scaleX, const f32 scaleY, const f32 posZ) {
+                                  const f32 scaleX, const f32 scaleY, const f32 posZ,
+                                  const f32 rotation) {
         if (rq.count >= rq.capacity) return;
         DrawCommand& cmd = rq.commands[rq.count++];
         cmd.sortKey = makeSortKey(
@@ -97,14 +98,15 @@ void renderPrepareSystem(World& world, const float alpha) {
         );
         cmd.shader  = getShader(*shaderLib, BuiltinShader::SPRITE);
         cmd.texture = sprite.texture;
-        cmd.posX    = posX;
-        cmd.posY    = posY;
-        cmd.scaleX  = scaleX;
-        cmd.scaleY  = scaleY;
-        cmd.uvMinX  = sprite.uvMin.x;
-        cmd.uvMinY  = sprite.uvMin.y;
-        cmd.uvMaxX  = sprite.uvMax.x;
-        cmd.uvMaxY  = sprite.uvMax.y;
+        cmd.posX     = posX;
+        cmd.posY     = posY;
+        cmd.scaleX   = scaleX;
+        cmd.scaleY   = scaleY;
+        cmd.rotation = rotation;
+        cmd.uvMinX  = sprite.flipX ? sprite.uvMax.x : sprite.uvMin.x;
+        cmd.uvMinY  = sprite.flipY ? sprite.uvMax.y : sprite.uvMin.y;
+        cmd.uvMaxX  = sprite.flipX ? sprite.uvMin.x : sprite.uvMax.x;
+        cmd.uvMaxY  = sprite.flipY ? sprite.uvMin.y : sprite.uvMax.y;
         cmd.colorR  = static_cast<u8>(glm::clamp(sprite.color.r, 0.0f, 1.0f) * 255.0f);
         cmd.colorG  = static_cast<u8>(glm::clamp(sprite.color.g, 0.0f, 1.0f) * 255.0f);
         cmd.colorB  = static_cast<u8>(glm::clamp(sprite.color.b, 0.0f, 1.0f) * 255.0f);
@@ -120,13 +122,14 @@ void renderPrepareSystem(World& world, const float alpha) {
         const auto& curr  = interpView.get<const Transform>(entity);
         const auto& sprite = interpView.get<const Sprite>(entity);
 
-        const f32 posX   = prev.position.x + (curr.position.x - prev.position.x) * alpha;
-        const f32 posY   = prev.position.y + (curr.position.y - prev.position.y) * alpha;
-        const f32 scaleX = (prev.scale.x + (curr.scale.x - prev.scale.x) * alpha) * sprite.size.x;
-        const f32 scaleY = (prev.scale.y + (curr.scale.y - prev.scale.y) * alpha) * sprite.size.y;
+        const f32 posX     = prev.position.x + (curr.position.x - prev.position.x) * alpha;
+        const f32 posY     = prev.position.y + (curr.position.y - prev.position.y) * alpha;
+        const f32 scaleX   = (prev.scale.x + (curr.scale.x - prev.scale.x) * alpha) * sprite.size.x;
+        const f32 scaleY   = (prev.scale.y + (curr.scale.y - prev.scale.y) * alpha) * sprite.size.y;
+        const f32 rotation = prev.rotation + (curr.rotation - prev.rotation) * alpha;
 
         // Use current Z for depth sort (Z changes between ticks are uncommon in 2D)
-        writeCommand(sprite, posX, posY, scaleX, scaleY, curr.position.z);
+        writeCommand(sprite, posX, posY, scaleX, scaleY, curr.position.z, rotation);
     }
 
     // Pass 2: entities without PreviousTransform (static scenery, UI) — no lerp.
@@ -142,7 +145,8 @@ void renderPrepareSystem(World& world, const float alpha) {
                      transform.position.y,
                      transform.scale.x * sprite.size.x,
                      transform.scale.y * sprite.size.y,
-                     transform.position.z);
+                     transform.position.z,
+                     transform.rotation);
     }
 }
 

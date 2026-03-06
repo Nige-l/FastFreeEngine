@@ -1294,6 +1294,32 @@ void ScriptEngine::registerEcsBindings() {
     });
     lua_setfield(L, -2, "setSpriteSize");
 
+    // ffe.setSpriteFlip(entityId, flipX, flipY) -> nothing
+    // Sets horizontal/vertical flip flags on a Sprite component.
+    // Flipping swaps UV coordinates at render time — works with animations.
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = luaL_checkinteger(state, 1);
+        if (rawId < 0) { return 0; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) { return 0; }
+        if (!world->hasComponent<ffe::Sprite>(entityId)) { return 0; }
+
+        const bool flipX = lua_toboolean(state, 2) != 0;
+        const bool flipY = lua_toboolean(state, 3) != 0;
+
+        ffe::Sprite& sp = world->getComponent<ffe::Sprite>(entityId);
+        sp.flipX = flipX;
+        sp.flipY = flipY;
+        return 0;
+    });
+    lua_setfield(L, -2, "setSpriteFlip");
+
     // ffe.addPreviousTransform(entityId) -> bool
     lua_pushcfunction(L, [](lua_State* state) -> int {
         lua_pushlightuserdata(state, &s_worldRegistryKey);

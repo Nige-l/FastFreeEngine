@@ -492,7 +492,7 @@ void Application::render(const float alpha) {
                 static_cast<f32>(cmd.colorB) / 255.0f,
                 static_cast<f32>(cmd.colorA) / 255.0f
             };
-            sprite.rotation = 0.0f;
+            sprite.rotation = cmd.rotation;
             sprite.depth    = 0.0f;
 
             // Use the default white texture if the sprite has no texture assigned
