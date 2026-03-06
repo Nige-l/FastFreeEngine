@@ -2074,6 +2074,30 @@ TEST_CASE("Mouse button constants are defined", "[scripting][input]") {
     REQUIRE(fix.engine.doString("assert(ffe.MOUSE_MIDDLE ~= nil)"));
 }
 
+TEST_CASE("Full alphabet key constants are defined", "[scripting][input]") {
+    ScriptFixture fix;
+    REQUIRE(fix.engine.doString(
+        "for _, k in ipairs({'A','B','C','D','E','F','G','H','I','J','K','L','M',"
+        "'N','O','P','Q','R','S','T','U','V','W','X','Y','Z'}) do "
+        "assert(ffe['KEY_' .. k] ~= nil, 'missing KEY_' .. k) end"));
+}
+
+TEST_CASE("Number key constants are defined", "[scripting][input]") {
+    ScriptFixture fix;
+    REQUIRE(fix.engine.doString(
+        "for i = 0, 9 do assert(ffe['KEY_' .. i] ~= nil, 'missing KEY_' .. i) end"));
+}
+
+TEST_CASE("Modifier and function key constants are defined", "[scripting][input]") {
+    ScriptFixture fix;
+    REQUIRE(fix.engine.doString("assert(ffe.KEY_LEFT_SHIFT ~= nil)"));
+    REQUIRE(fix.engine.doString("assert(ffe.KEY_LEFT_CTRL ~= nil)"));
+    REQUIRE(fix.engine.doString("assert(ffe.KEY_TAB ~= nil)"));
+    REQUIRE(fix.engine.doString("assert(ffe.KEY_BACKSPACE ~= nil)"));
+    REQUIRE(fix.engine.doString("assert(ffe.KEY_F1 ~= nil)"));
+    REQUIRE(fix.engine.doString("assert(ffe.KEY_F5 ~= nil)"));
+}
+
 // =============================================================================
 // Entity count binding
 // =============================================================================

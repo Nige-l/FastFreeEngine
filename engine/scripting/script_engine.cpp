@@ -507,18 +507,67 @@ void ScriptEngine::registerEcsBindings() {
     // Key code constants — match Key enum values in input.h (= GLFW_KEY_*).
     // Scripts use these to avoid magic numbers.
     // ----------------------------------------------------------------
-    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::W));      lua_setfield(L, -2, "KEY_W");
-    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::A));      lua_setfield(L, -2, "KEY_A");
-    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::S));      lua_setfield(L, -2, "KEY_S");
-    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::D));      lua_setfield(L, -2, "KEY_D");
-    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::M));      lua_setfield(L, -2, "KEY_M");
-    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::SPACE));  lua_setfield(L, -2, "KEY_SPACE");
-    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::ESCAPE)); lua_setfield(L, -2, "KEY_ESCAPE");
-    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::ENTER));  lua_setfield(L, -2, "KEY_ENTER");
-    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::UP));     lua_setfield(L, -2, "KEY_UP");
-    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::DOWN));   lua_setfield(L, -2, "KEY_DOWN");
-    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::LEFT));   lua_setfield(L, -2, "KEY_LEFT");
-    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::RIGHT));  lua_setfield(L, -2, "KEY_RIGHT");
+    // Letters (full alphabet)
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::A)); lua_setfield(L, -2, "KEY_A");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::B)); lua_setfield(L, -2, "KEY_B");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::C)); lua_setfield(L, -2, "KEY_C");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::D)); lua_setfield(L, -2, "KEY_D");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::E)); lua_setfield(L, -2, "KEY_E");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::F)); lua_setfield(L, -2, "KEY_F");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::G)); lua_setfield(L, -2, "KEY_G");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::H)); lua_setfield(L, -2, "KEY_H");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::I)); lua_setfield(L, -2, "KEY_I");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::J)); lua_setfield(L, -2, "KEY_J");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::K)); lua_setfield(L, -2, "KEY_K");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::L)); lua_setfield(L, -2, "KEY_L");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::M)); lua_setfield(L, -2, "KEY_M");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::N)); lua_setfield(L, -2, "KEY_N");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::O)); lua_setfield(L, -2, "KEY_O");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::P)); lua_setfield(L, -2, "KEY_P");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::Q)); lua_setfield(L, -2, "KEY_Q");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::R)); lua_setfield(L, -2, "KEY_R");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::S)); lua_setfield(L, -2, "KEY_S");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::T)); lua_setfield(L, -2, "KEY_T");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::U)); lua_setfield(L, -2, "KEY_U");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::V)); lua_setfield(L, -2, "KEY_V");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::W)); lua_setfield(L, -2, "KEY_W");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::X)); lua_setfield(L, -2, "KEY_X");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::Y)); lua_setfield(L, -2, "KEY_Y");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::Z)); lua_setfield(L, -2, "KEY_Z");
+
+    // Numbers
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::NUM_0)); lua_setfield(L, -2, "KEY_0");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::NUM_1)); lua_setfield(L, -2, "KEY_1");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::NUM_2)); lua_setfield(L, -2, "KEY_2");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::NUM_3)); lua_setfield(L, -2, "KEY_3");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::NUM_4)); lua_setfield(L, -2, "KEY_4");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::NUM_5)); lua_setfield(L, -2, "KEY_5");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::NUM_6)); lua_setfield(L, -2, "KEY_6");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::NUM_7)); lua_setfield(L, -2, "KEY_7");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::NUM_8)); lua_setfield(L, -2, "KEY_8");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::NUM_9)); lua_setfield(L, -2, "KEY_9");
+
+    // Arrows
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::UP));    lua_setfield(L, -2, "KEY_UP");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::DOWN));  lua_setfield(L, -2, "KEY_DOWN");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::LEFT));  lua_setfield(L, -2, "KEY_LEFT");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::RIGHT)); lua_setfield(L, -2, "KEY_RIGHT");
+
+    // Common gameplay keys
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::SPACE));      lua_setfield(L, -2, "KEY_SPACE");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::ESCAPE));     lua_setfield(L, -2, "KEY_ESCAPE");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::ENTER));      lua_setfield(L, -2, "KEY_ENTER");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::TAB));        lua_setfield(L, -2, "KEY_TAB");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::BACKSPACE));  lua_setfield(L, -2, "KEY_BACKSPACE");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::LEFT_SHIFT)); lua_setfield(L, -2, "KEY_LEFT_SHIFT");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::LEFT_CTRL));  lua_setfield(L, -2, "KEY_LEFT_CTRL");
+
+    // Function keys
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::F1));  lua_setfield(L, -2, "KEY_F1");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::F2));  lua_setfield(L, -2, "KEY_F2");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::F3));  lua_setfield(L, -2, "KEY_F3");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::F4));  lua_setfield(L, -2, "KEY_F4");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::F5));  lua_setfield(L, -2, "KEY_F5");
 
     // ----------------------------------------------------------------
     // Mouse button bindings — ffe.isMousePressed/Held/Released(button)
