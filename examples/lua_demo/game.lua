@@ -199,6 +199,7 @@ for i = 1, STAR_COUNT do
     stars[i] = spawnStar(x, y)
 end
 
+ffe.setBackgroundColor(0.08, 0.06, 0.12)
 ffe.log("Collect the Stars! WASD to move, collect all stars. Score: 0")
 updateHud()
 

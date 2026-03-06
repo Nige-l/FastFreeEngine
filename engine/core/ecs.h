@@ -46,6 +46,16 @@ struct CameraShake {
     f32 elapsed   = 0.0f; // time since shake started
 };
 
+// ---------------------------------------------------------------------------
+// ClearColor — stored in the ECS registry context. Controls the background
+// color. Lua scripts set this via ffe.setBackgroundColor(r, g, b).
+// ---------------------------------------------------------------------------
+struct ClearColor {
+    f32 r = 0.1f;
+    f32 g = 0.1f;
+    f32 b = 0.12f;
+};
+
 class World {
 public:
     World() { m_systems.reserve(32); }

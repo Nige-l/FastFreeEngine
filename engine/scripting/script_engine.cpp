@@ -739,6 +739,41 @@ void ScriptEngine::registerEcsBindings() {
     lua_setfield(L, -2, "cameraShake");
 
     // ----------------------------------------------------------------
+    // ffe.setBackgroundColor(r, g, b) — set the clear/background color.
+    // Values are clamped to [0, 1]. NaN/Inf silently rejected.
+    // ----------------------------------------------------------------
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        if (lua_gettop(state) < 3) {
+            luaL_error(state, "setBackgroundColor requires 3 arguments: r, g, b");
+            return 0;
+        }
+        const auto r = static_cast<float>(luaL_checknumber(state, 1));
+        const auto g = static_cast<float>(luaL_checknumber(state, 2));
+        const auto b = static_cast<float>(luaL_checknumber(state, 3));
+
+        if (!std::isfinite(r) || !std::isfinite(g) || !std::isfinite(b)) {
+            return 0;
+        }
+
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            return 0;
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+        if (world == nullptr) { return 0; }
+
+        auto& cc = world->registry().ctx().get<ffe::ClearColor>();
+        cc.r = std::max(0.0f, std::min(1.0f, r));
+        cc.g = std::max(0.0f, std::min(1.0f, g));
+        cc.b = std::max(0.0f, std::min(1.0f, b));
+        return 0;
+    });
+    lua_setfield(L, -2, "setBackgroundColor");
+
+    // ----------------------------------------------------------------
     // Entity lifecycle bindings
     //
     // ffe.createEntity()

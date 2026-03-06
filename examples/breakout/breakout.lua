@@ -371,6 +371,7 @@ createBricks()
 initTrail()
 createLifeIndicators()
 
+ffe.setBackgroundColor(0.06, 0.04, 0.08)
 ffe.log("Breakout ready! Press SPACE to launch.")
 updateHud()
 

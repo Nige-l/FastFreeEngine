@@ -286,6 +286,9 @@ Result Application::startup() {
     // 5ce2. Emplace CameraShake into ECS context for Lua-driven camera effects.
     m_world.registry().ctx().emplace<CameraShake>();
 
+    // 5ce3. Emplace ClearColor into ECS context for Lua-driven background color.
+    m_world.registry().ctx().emplace<ClearColor>();
+
     // 5cf. Emplace frame arena pointer into ECS context so systems (e.g. collision)
     // can use per-frame arena allocation without holding an Application pointer.
     m_world.registry().ctx().emplace<ArenaAllocator*>(&m_frameAllocator);
@@ -435,8 +438,9 @@ void Application::render(const float alpha) {
     // Sort the render queue now that renderPrepareSystem has populated it.
     renderer::sortRenderQueue(m_renderQueue);
 
-    // Begin frame
-    rhi::beginFrame(m_clearColor);
+    // Begin frame — use ClearColor from ECS context (settable from Lua)
+    const auto& cc = m_world.registry().ctx().get<ClearColor>();
+    rhi::beginFrame({cc.r, cc.g, cc.b, 1.0f});
 
     // Apply camera shake (if active) and compute VP matrix.
     // Shake decays linearly over its duration. Offset is computed from

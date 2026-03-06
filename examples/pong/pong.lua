@@ -248,6 +248,7 @@ if goalFlashRight then ffe.setSpriteColor(goalFlashRight, 1.0, 0.5, 0.4, 0) end
 
 initTrail()
 
+ffe.setBackgroundColor(0.05, 0.05, 0.1)
 ffe.log("Pong ready! Press SPACE to serve.")
 updateHud()
 
