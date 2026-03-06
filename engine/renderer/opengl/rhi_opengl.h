@@ -1,12 +1,21 @@
 #pragma once
 
 // Internal OpenGL backend helpers. Not part of the public API.
-// Only included by rhi_opengl.cpp.
+// Included by rhi_opengl.cpp and by mesh_loader.cpp (for getGlBufferId).
 
 #include "core/types.h"
 #include "renderer/rhi_types.h"
 
 #include <glad/glad.h>
+
+namespace ffe::rhi {
+
+// Returns the raw OpenGL buffer ID for a given BufferHandle.
+// Used by mesh_loader.cpp to obtain the GL ID needed for VAO configuration.
+// Returns 0 for invalid handles or in headless mode.
+GLuint getGlBufferId(BufferHandle handle);
+
+} // namespace ffe::rhi
 
 namespace ffe::rhi::detail {
 

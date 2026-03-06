@@ -12,10 +12,15 @@ extern "C" {
 #include "core/ecs.h"
 #include "core/input.h"
 #include "renderer/render_system.h"
+#include "renderer/mesh_loader.h"
+#include "renderer/mesh_renderer.h"
 #include "renderer/texture_loader.h"
+#include "renderer/camera.h"
 #include "audio/audio.h"
 #include "renderer/text_renderer.h"
 #include "physics/collider2d.h"
+
+#include <glm/gtc/quaternion.hpp>
 
 #include <nlohmann/json.hpp>
 
@@ -3726,6 +3731,365 @@ void ScriptEngine::registerEcsBindings() {
     lua_pushinteger(L, static_cast<lua_Integer>(ffe::GamepadAxis::RIGHT_Y));         lua_setfield(L, -2, "GAMEPAD_AXIS_RIGHT_Y");
     lua_pushinteger(L, static_cast<lua_Integer>(ffe::GamepadAxis::LEFT_TRIGGER));    lua_setfield(L, -2, "GAMEPAD_AXIS_LEFT_TRIGGER");
     lua_pushinteger(L, static_cast<lua_Integer>(ffe::GamepadAxis::RIGHT_TRIGGER));   lua_setfield(L, -2, "GAMEPAD_AXIS_RIGHT_TRIGGER");
+
+    // ----------------------------------------------------------------
+    // 3D mesh bindings (ADR-007 Section 11)
+    // ----------------------------------------------------------------
+
+    // ffe.loadMesh(path: string) -> integer
+    // Load a .glb mesh from a path relative to the asset root.
+    // Returns integer mesh handle > 0 on success, 0 on failure.
+    // Cold path only — do NOT call per frame.
+    auto ffe_loadMesh = [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TSTRING) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.loadMesh: argument 1 must be a string");
+            lua_pushinteger(state, 0);
+            return 1;
+        }
+        const char* path = lua_tostring(state, 1);
+        if (path == nullptr || path[0] == '\0') {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.loadMesh: path is null or empty");
+            lua_pushinteger(state, 0);
+            return 1;
+        }
+        const ffe::renderer::MeshHandle handle = ffe::renderer::loadMesh(path);
+        lua_pushinteger(state, static_cast<lua_Integer>(handle.id));
+        return 1;
+    };
+    lua_pushcfunction(L, ffe_loadMesh);
+    lua_setfield(L, -2, "loadMesh");
+
+    // ffe.unloadMesh(meshHandle: integer) -> nothing
+    // Destroy a loaded mesh and free GPU resources.
+    auto ffe_unloadMesh = [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TNUMBER) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.unloadMesh: argument 1 must be a number");
+            return 0;
+        }
+        const lua_Integer rawHandle = lua_tointeger(state, 1);
+        if (rawHandle <= 0) {
+            return 0; // invalid handle — no-op
+        }
+        if (static_cast<ffe::u32>(rawHandle) > ffe::renderer::MAX_MESH_ASSETS) { return 0; }
+        ffe::renderer::unloadMesh(ffe::renderer::MeshHandle{static_cast<ffe::u32>(rawHandle)});
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_unloadMesh);
+    lua_setfield(L, -2, "unloadMesh");
+
+    // ffe.createEntity3D(meshHandle: integer, x: number, y: number, z: number) -> integer
+    // Create an entity with Transform3D and Mesh components at the given position.
+    // Returns entity ID on success, 0 on failure.
+    auto ffe_createEntity3D = [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TNUMBER) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.createEntity3D: argument 1 (meshHandle) must be a number");
+            lua_pushinteger(state, 0);
+            return 1;
+        }
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            lua_pushinteger(state, 0);
+            return 1;
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawHandle = lua_tointeger(state, 1);
+        if (rawHandle <= 0) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.createEntity3D: invalid mesh handle %" PRId64,
+                          static_cast<long long>(rawHandle));
+            lua_pushinteger(state, 0);
+            return 1;
+        }
+        const ffe::renderer::MeshHandle meshHandle{static_cast<ffe::u32>(rawHandle)};
+        if (!ffe::renderer::isValid(meshHandle)) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.createEntity3D: mesh handle %u is invalid",
+                          meshHandle.id);
+            lua_pushinteger(state, 0);
+            return 1;
+        }
+
+        const ffe::f32 x = static_cast<ffe::f32>(luaL_optnumber(state, 2, 0.0));
+        const ffe::f32 y = static_cast<ffe::f32>(luaL_optnumber(state, 3, 0.0));
+        const ffe::f32 z = static_cast<ffe::f32>(luaL_optnumber(state, 4, 0.0));
+
+        const ffe::EntityId entityId = world->createEntity();
+
+        ffe::Transform3D t3d;
+        t3d.position = {x, y, z};
+        world->registry().emplace<ffe::Transform3D>(static_cast<entt::entity>(entityId), t3d);
+
+        ffe::Mesh meshComp;
+        meshComp.meshHandle = meshHandle;
+        world->registry().emplace<ffe::Mesh>(static_cast<entt::entity>(entityId), meshComp);
+
+        lua_pushinteger(state, static_cast<lua_Integer>(entityId));
+        return 1;
+    };
+    lua_pushcfunction(L, ffe_createEntity3D);
+    lua_setfield(L, -2, "createEntity3D");
+
+    // ffe.setTransform3D(entityId, x, y, z, rx, ry, rz, sx, sy, sz) -> nothing
+    // Set the full 3D transform of an entity.
+    // rx, ry, rz are Euler angles in DEGREES (converted to quaternion internally — YXZ order).
+    // sx, sy, sz are scale factors.
+    auto ffe_setTransform3D = [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TNUMBER) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.setTransform3D: argument 1 (entityId) must be a number");
+            return 0;
+        }
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = lua_tointeger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) { return 0; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.setTransform3D: invalid entity ID %" PRId64,
+                          static_cast<long long>(rawId));
+            return 0;
+        }
+
+        const ffe::f32 px = static_cast<ffe::f32>(luaL_optnumber(state, 2, 0.0));
+        const ffe::f32 py = static_cast<ffe::f32>(luaL_optnumber(state, 3, 0.0));
+        const ffe::f32 pz = static_cast<ffe::f32>(luaL_optnumber(state, 4, 0.0));
+        const ffe::f32 rx = static_cast<ffe::f32>(luaL_optnumber(state, 5, 0.0));
+        const ffe::f32 ry = static_cast<ffe::f32>(luaL_optnumber(state, 6, 0.0));
+        const ffe::f32 rz = static_cast<ffe::f32>(luaL_optnumber(state, 7, 0.0));
+        const ffe::f32 sx = static_cast<ffe::f32>(luaL_optnumber(state, 8, 1.0));
+        const ffe::f32 sy = static_cast<ffe::f32>(luaL_optnumber(state, 9, 1.0));
+        const ffe::f32 sz = static_cast<ffe::f32>(luaL_optnumber(state, 10, 1.0));
+
+        // Convert Euler degrees to quaternion (YXZ order — standard game convention)
+        const glm::quat rotation = glm::quat(glm::radians(glm::vec3{rx, ry, rz}));
+
+        ffe::Transform3D& t3d = world->registry().get_or_emplace<ffe::Transform3D>(
+            static_cast<entt::entity>(entityId));
+        t3d.position = {px, py, pz};
+        t3d.rotation = rotation;
+        t3d.scale    = {sx, sy, sz};
+
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_setTransform3D);
+    lua_setfield(L, -2, "setTransform3D");
+
+    // ----------------------------------------------------------------
+    // ffe.fillTransform3D(entityId, buf) -> nothing
+    //   Zero-allocation alternative for reading a 3D transform.
+    //   Writes x, y, z (position), rx, ry, rz (rotation in degrees,
+    //   YXZ order), and sx, sy, sz (scale) into the caller-provided table.
+    //   Returns early safely if entity is invalid or has no Transform3D.
+    //   The caller pre-allocates the table once and reuses it every frame,
+    //   eliminating per-call GC pressure from table creation.
+    // ----------------------------------------------------------------
+    auto ffe_fillTransform3D = [](lua_State* state) -> int {
+        // Retrieve World pointer from the registry.
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            return 0;
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        // Validate arg 1: entity ID (integer).
+        if (lua_type(state, 1) != LUA_TNUMBER) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.fillTransform3D: argument 1 (entityId) must be a number");
+            return 0;
+        }
+        const lua_Integer rawId = lua_tointeger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) {
+            return 0;
+        }
+
+        // Validate arg 2: must be a table.
+        luaL_checktype(state, 2, LUA_TTABLE);
+
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) {
+            return 0;
+        }
+
+        // Transform3D is managed via the raw entt registry (not the World
+        // component wrapper), so use registry().try_get for safe access.
+        const ffe::Transform3D* t3d = world->registry().try_get<ffe::Transform3D>(
+            static_cast<entt::entity>(entityId));
+        if (t3d == nullptr) {
+            return 0;
+        }
+
+        // Convert quaternion back to Euler angles in degrees (YXZ order).
+        // glm::eulerAngles inverts glm::quat(glm::radians(vec3{rx, ry, rz})),
+        // returning radians in the same XYZ component order.
+        const glm::vec3 eulerDeg = glm::degrees(glm::eulerAngles(t3d->rotation));
+
+        // Fill the caller's table in-place — no new table allocation.
+        lua_pushnumber(state, static_cast<lua_Number>(t3d->position.x)); lua_setfield(state, 2, "x");
+        lua_pushnumber(state, static_cast<lua_Number>(t3d->position.y)); lua_setfield(state, 2, "y");
+        lua_pushnumber(state, static_cast<lua_Number>(t3d->position.z)); lua_setfield(state, 2, "z");
+        lua_pushnumber(state, static_cast<lua_Number>(eulerDeg.x));      lua_setfield(state, 2, "rx");
+        lua_pushnumber(state, static_cast<lua_Number>(eulerDeg.y));      lua_setfield(state, 2, "ry");
+        lua_pushnumber(state, static_cast<lua_Number>(eulerDeg.z));      lua_setfield(state, 2, "rz");
+        lua_pushnumber(state, static_cast<lua_Number>(t3d->scale.x));    lua_setfield(state, 2, "sx");
+        lua_pushnumber(state, static_cast<lua_Number>(t3d->scale.y));    lua_setfield(state, 2, "sy");
+        lua_pushnumber(state, static_cast<lua_Number>(t3d->scale.z));    lua_setfield(state, 2, "sz");
+
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_fillTransform3D);
+    lua_setfield(L, -2, "fillTransform3D");
+
+    // ffe.set3DCamera(x, y, z, targetX, targetY, targetZ) -> nothing
+    // Set the 3D perspective camera position and look-at target.
+    auto ffe_set3DCamera = [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        auto* cam = world->registry().ctx().find<ffe::renderer::Camera*>();
+        if (cam == nullptr || *cam == nullptr) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.set3DCamera: 3D camera not in ECS context");
+            return 0;
+        }
+
+        const ffe::f32 x       = static_cast<ffe::f32>(luaL_optnumber(state, 1, 0.0));
+        const ffe::f32 y       = static_cast<ffe::f32>(luaL_optnumber(state, 2, 0.0));
+        const ffe::f32 z       = static_cast<ffe::f32>(luaL_optnumber(state, 3, 5.0));
+        const ffe::f32 targetX = static_cast<ffe::f32>(luaL_optnumber(state, 4, 0.0));
+        const ffe::f32 targetY = static_cast<ffe::f32>(luaL_optnumber(state, 5, 0.0));
+        const ffe::f32 targetZ = static_cast<ffe::f32>(luaL_optnumber(state, 6, 0.0));
+
+        (*cam)->position = {x, y, z};
+        (*cam)->target   = {targetX, targetY, targetZ};
+        // up vector remains {0,1,0} — not settable from this binding
+
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_set3DCamera);
+    lua_setfield(L, -2, "set3DCamera");
+
+    // ffe.setMeshColor(entityId: integer, r, g, b, a: number) -> nothing
+    // Set the diffuse color tint on a 3D entity's Material3D component.
+    // Creates Material3D if not present on the entity.
+    auto ffe_setMeshColor = [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TNUMBER) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.setMeshColor: argument 1 (entityId) must be a number");
+            return 0;
+        }
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = lua_tointeger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) { return 0; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.setMeshColor: invalid entity ID %" PRId64,
+                          static_cast<long long>(rawId));
+            return 0;
+        }
+
+        const ffe::f32 r = static_cast<ffe::f32>(luaL_optnumber(state, 2, 1.0));
+        const ffe::f32 g = static_cast<ffe::f32>(luaL_optnumber(state, 3, 1.0));
+        const ffe::f32 b = static_cast<ffe::f32>(luaL_optnumber(state, 4, 1.0));
+        const ffe::f32 a = static_cast<ffe::f32>(luaL_optnumber(state, 5, 1.0));
+
+        ffe::Material3D& mat = world->registry().get_or_emplace<ffe::Material3D>(
+            static_cast<entt::entity>(entityId));
+        mat.diffuseColor = {r, g, b, a};
+
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_setMeshColor);
+    lua_setfield(L, -2, "setMeshColor");
+
+    // ffe.setLightDirection(x, y, z: number) -> nothing
+    // Set the scene directional light direction (world space).
+    // M-4: zero-length vector guard — rejects if length < 1e-4.
+    auto ffe_setLightDirection = [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        auto* lighting = world->registry().ctx().find<ffe::renderer::SceneLighting3D>();
+        if (lighting == nullptr) { return 0; }
+
+        const ffe::f32 x = static_cast<ffe::f32>(luaL_optnumber(state, 1, 0.5));
+        const ffe::f32 y = static_cast<ffe::f32>(luaL_optnumber(state, 2, -1.0));
+        const ffe::f32 z = static_cast<ffe::f32>(luaL_optnumber(state, 3, 0.3));
+
+        const glm::vec3 inputVec{x, y, z};
+        const float len = glm::length(inputVec);
+        if (len < 0.0001f) {
+            // M-4: zero-length vector guard — NaN in GLSL normalize(0,0,0)
+            FFE_LOG_WARN("ScriptEngine",
+                         "ffe.setLightDirection: zero-length vector rejected (would produce NaN in shader). "
+                         "Previous value unchanged.");
+            return 0;
+        }
+        lighting->lightDir = glm::normalize(inputVec);
+
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_setLightDirection);
+    lua_setfield(L, -2, "setLightDirection");
+
+    // ffe.setLightColor(r, g, b: number) -> nothing
+    // Set the directional light color (typically [0, 1]).
+    auto ffe_setLightColor = [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        auto* lighting = world->registry().ctx().find<ffe::renderer::SceneLighting3D>();
+        if (lighting == nullptr) { return 0; }
+
+        lighting->lightColor = {
+            static_cast<ffe::f32>(luaL_optnumber(state, 1, 1.0)),
+            static_cast<ffe::f32>(luaL_optnumber(state, 2, 1.0)),
+            static_cast<ffe::f32>(luaL_optnumber(state, 3, 1.0))
+        };
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_setLightColor);
+    lua_setfield(L, -2, "setLightColor");
+
+    // ffe.setAmbientColor(r, g, b: number) -> nothing
+    // Set the ambient light color (typically [0, 0.15]).
+    auto ffe_setAmbientColor = [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        auto* lighting = world->registry().ctx().find<ffe::renderer::SceneLighting3D>();
+        if (lighting == nullptr) { return 0; }
+
+        lighting->ambientColor = {
+            static_cast<ffe::f32>(luaL_optnumber(state, 1, 0.15)),
+            static_cast<ffe::f32>(luaL_optnumber(state, 2, 0.15)),
+            static_cast<ffe::f32>(luaL_optnumber(state, 3, 0.15))
+        };
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_setAmbientColor);
+    lua_setfield(L, -2, "setAmbientColor");
 
     // Set the 'ffe' table as a global.
     lua_setglobal(L, "ffe");

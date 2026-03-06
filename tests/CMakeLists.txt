@@ -11,6 +11,7 @@ add_executable(ffe_tests
     core/test_particles.cpp
     physics/test_narrow_phase.cpp
     renderer/test_ttf_font.cpp
+    renderer/test_mesh_loader.cpp
 )
 
 target_link_libraries(ffe_tests

@@ -1,0 +1,707 @@
+// mesh_loader.cpp — cgltf-based .glb mesh loading for FFE.
+//
+// cgltf v1.14 — https://github.com/jkuhlmann/cgltf
+// cgltf is a single-header C library embedded in third_party/cgltf.h.
+// CGLTF_IMPLEMENTATION is defined in exactly this file and no other.
+//
+// Security constraints implemented (from ADR-007-security-review.md):
+//   SEC-M1: Path traversal prevention (identical to texture_loader pattern).
+//   SEC-M2: stat() file size check before any cgltf call. Rejects > 64 MB.
+//   SEC-M3: cgltf_validate() + buffer.data non-null check after cgltf_load_buffers (H-2).
+//           Exclusive use of cgltf_accessor_read_float/index safe accessor API.
+//   SEC-M4: Vertex and index count limits checked before any allocation.
+//   SEC-M5: u64 arithmetic for all size calculations — no 32-bit overflow.
+//   SEC-M6: cgltf_free() called on every exit path after cgltf_parse_file succeeds.
+//   SEC-M7: No per-frame loading. Header comment states this constraint.
+//   SEC-M8: .glb-only restriction. Extension check is the first path check.
+//   M-2:    Heap fallback uses new(std::nothrow); null-checked before use.
+//   M-3:    glGetError() checked after glBufferData — GPU OOM detection.
+
+// Suppress warnings cgltf generates under -Wall -Wextra (it's a C library).
+#ifdef __clang__
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wsign-conversion"
+    #pragma clang diagnostic ignored "-Wdisabled-macro-expansion"
+    #pragma clang diagnostic ignored "-Wcast-qual"
+    #pragma clang diagnostic ignored "-Wimplicit-fallthrough"
+    #pragma clang diagnostic ignored "-Wreserved-identifier"
+    #pragma clang diagnostic ignored "-Wdouble-promotion"
+    #pragma clang diagnostic ignored "-Wunused-function"
+    #pragma clang diagnostic ignored "-Wcast-align"
+    #pragma clang diagnostic ignored "-Wmissing-field-initializers"
+    #pragma clang diagnostic ignored "-Wpadded"
+    #pragma clang diagnostic ignored "-Wshadow"
+#elif defined(__GNUC__)
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wsign-conversion"
+    #pragma GCC diagnostic ignored "-Wdouble-promotion"
+    #pragma GCC diagnostic ignored "-Wunused-function"
+    #pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
+    #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+    #pragma GCC diagnostic ignored "-Wpadded"
+    #pragma GCC diagnostic ignored "-Wshadow"
+    #pragma GCC diagnostic ignored "-Wcast-align"
+#endif
+
+#define CGLTF_IMPLEMENTATION
+#include "cgltf.h"
+
+#ifdef __clang__
+    #pragma clang diagnostic pop
+#elif defined(__GNUC__)
+    #pragma GCC diagnostic pop
+#endif
+
+#include "renderer/mesh_loader.h"
+#include "renderer/rhi.h"
+#include "renderer/rhi_types.h"
+#include "renderer/opengl/rhi_opengl.h"
+#include "renderer/texture_loader.h"
+#include "core/logging.h"
+
+#include <glad/glad.h>
+
+#include <climits>    // PATH_MAX
+#include <cstring>    // strnlen, strstr, memcpy, strcasecmp equivalent
+#include <cctype>     // tolower
+#include <sys/stat.h> // stat()
+#include <stdlib.h>   // realpath()
+#include <cinttypes>  // PRIu64
+#include <new>        // std::nothrow
+
+namespace ffe::renderer {
+
+// MeshGpuRecord is defined in mesh_loader.h so that mesh_renderer.cpp can
+// dereference pointers returned by getMeshGpuRecord() without an incomplete-type
+// error. The GLuint fields are compatible with the unsigned int members declared
+// in the header because GLuint is typedef'd to unsigned int on all supported targets.
+
+// ---------------------------------------------------------------------------
+// Module state
+// ---------------------------------------------------------------------------
+
+static MeshGpuRecord s_meshPool[MAX_MESH_ASSETS + 1]; // slot 0 reserved (null handle)
+static u32           s_nextMeshSlot = 1;
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+// isPathSafe — SEC-M1: path traversal prevention.
+// MUST be the first operation called on any caller-supplied path.
+// Returns true only if the path is safe to concatenate and pass to realpath().
+static bool isPathSafe(const char* const path) {
+    if (!path) {
+        return false;
+    }
+    const size_t pathLen = strnlen(path, PATH_MAX);
+    if (pathLen >= PATH_MAX) {
+        return false;
+    }
+    if (path[0] == '\0') {
+        return false;
+    }
+    // Reject absolute Unix paths
+    if (path[0] == '/') {
+        return false;
+    }
+    // Reject absolute Windows paths (backslash root)
+    if (path[0] == '\\') {
+        return false;
+    }
+    // Reject drive letters (e.g., "C:")
+    if (pathLen >= 2 && path[1] == ':') {
+        return false;
+    }
+    // Reject UNC paths ("\\server\share")
+    if (path[0] == '\\' && pathLen >= 2 && path[1] == '\\') {
+        return false;
+    }
+    // Reject traversal sequences
+    if (strstr(path, "../") != nullptr) { return false; }
+    if (strstr(path, "..\\") != nullptr) { return false; }
+    if (strstr(path, "/..") != nullptr) { return false; }
+    if (strstr(path, "\\..") != nullptr) { return false; }
+    return true;
+}
+
+// hasGlbExtension — SEC-M8: reject any path that doesn't end with ".glb"
+// (case-insensitive). Performed after isPathSafe but before any file I/O.
+static bool hasGlbExtension(const char* const path) {
+    const size_t len = strnlen(path, PATH_MAX);
+    if (len < 4) {
+        return false; // shorter than ".glb\0" — can't possibly end with .glb
+    }
+    // Check last 4 characters case-insensitively
+    const char* ext = path + len - 4;
+    return (ext[0] == '.' &&
+            (ext[1] == 'g' || ext[1] == 'G') &&
+            (ext[2] == 'l' || ext[2] == 'L') &&
+            (ext[3] == 'b' || ext[3] == 'B'));
+}
+
+// findFreeSlot — linear scan for a free MeshGpuRecord slot.
+// Only called at load time (cold path).
+static u32 findFreeMeshSlot() {
+    // Try the fast path: next sequential slot
+    if (s_nextMeshSlot <= MAX_MESH_ASSETS && !s_meshPool[s_nextMeshSlot].alive) {
+        return s_nextMeshSlot++;
+    }
+    // Linear scan for a free slot
+    for (u32 i = 1; i <= MAX_MESH_ASSETS; ++i) {
+        if (!s_meshPool[i].alive) {
+            if (i >= s_nextMeshSlot) s_nextMeshSlot = i + 1;
+            return i;
+        }
+    }
+    return 0; // No free slots
+}
+
+// countAliveSlots — for pool utilisation warning.
+static u32 countAliveSlots() {
+    u32 count = 0;
+    for (u32 i = 1; i <= MAX_MESH_ASSETS; ++i) {
+        if (s_meshPool[i].alive) ++count;
+    }
+    return count;
+}
+
+// ---------------------------------------------------------------------------
+// loadMesh implementation
+// ---------------------------------------------------------------------------
+
+MeshHandle loadMesh(const char* const path) {
+
+    // --- SEC-M1: Path safety (traversal prevention) — FIRST check ---
+    if (!isPathSafe(path)) {
+        FFE_LOG_ERROR("MeshLoader", "loadMesh: unsafe path rejected: \"%s\"",
+                      path ? path : "(null)");
+        return MeshHandle{0};
+    }
+
+    // --- SEC-M8: .glb-only restriction ---
+    if (!hasGlbExtension(path)) {
+        FFE_LOG_ERROR("MeshLoader",
+                      "loadMesh: only .glb files are accepted (path: \"%s\")", path);
+        return MeshHandle{0};
+    }
+
+    // --- Asset root check ---
+    const char* const assetRoot = getAssetRoot();
+    if (assetRoot == nullptr || assetRoot[0] == '\0') {
+        FFE_LOG_ERROR("MeshLoader", "loadMesh: asset root not set — call setAssetRoot() first");
+        return MeshHandle{0};
+    }
+
+    // --- Pool cap check (before file I/O — SEC-M7 defence) ---
+    const u32 aliveCount = countAliveSlots();
+    if (aliveCount >= MAX_MESH_ASSETS) {
+        FFE_LOG_ERROR("MeshLoader",
+                      "loadMesh: mesh pool full (%u/%u) — unload meshes before loading new ones",
+                      aliveCount, MAX_MESH_ASSETS);
+        return MeshHandle{0};
+    }
+
+    // --- Pool utilisation warning at 75% ---
+    if (aliveCount >= (MAX_MESH_ASSETS * 3 / 4)) {
+        FFE_LOG_WARN("MeshLoader",
+                     "loadMesh: mesh pool at %u/%u slots (>75%% full)",
+                     aliveCount, MAX_MESH_ASSETS);
+    }
+
+    // --- Build full path: assetRoot + "/" + path ---
+    const size_t rootLen = strnlen(assetRoot, PATH_MAX);
+    const size_t pathLen = strnlen(path, PATH_MAX);
+    // HIGH-2 equivalent: check combined path length before concatenation
+    if (rootLen + 1u + pathLen + 1u > static_cast<size_t>(PATH_MAX) + 1u) {
+        FFE_LOG_ERROR("MeshLoader", "loadMesh: concatenated path too long");
+        return MeshHandle{0};
+    }
+
+    char fullPath[PATH_MAX + 1];
+    memcpy(fullPath, assetRoot, rootLen);
+    fullPath[rootLen] = '/';
+    memcpy(fullPath + rootLen + 1u, path, pathLen);
+    fullPath[rootLen + 1u + pathLen] = '\0';
+
+    // --- SEC-M1 (continued): realpath() to resolve symlinks and encoded traversal ---
+    char canonPath[PATH_MAX + 1];
+    if (::realpath(fullPath, canonPath) == nullptr) {
+        FFE_LOG_ERROR("MeshLoader", "loadMesh: realpath() failed for \"%s\"", fullPath);
+        return MeshHandle{0};
+    }
+
+    // Verify the canonical path begins with the asset root prefix
+    if (strncmp(canonPath, assetRoot, rootLen) != 0) {
+        FFE_LOG_ERROR("MeshLoader",
+                      "loadMesh: canonical path \"%s\" escapes asset root \"%s\"",
+                      canonPath, assetRoot);
+        return MeshHandle{0};
+    }
+    // Confirm the separator immediately follows the root prefix
+    if (canonPath[rootLen] != '/' && canonPath[rootLen] != '\0') {
+        FFE_LOG_ERROR("MeshLoader",
+                      "loadMesh: canonical path \"%s\" escapes asset root \"%s\"",
+                      canonPath, assetRoot);
+        return MeshHandle{0};
+    }
+
+    // --- SEC-M2: File size check before any cgltf call ---
+    {
+        struct stat fileStat{};
+        if (::stat(canonPath, &fileStat) != 0) {
+            FFE_LOG_ERROR("MeshLoader", "loadMesh: file not found or stat() failed: \"%s\"",
+                          canonPath);
+            return MeshHandle{0};
+        }
+        const u64 fileSize = static_cast<u64>(fileStat.st_size);
+        if (fileSize > MESH_FILE_SIZE_LIMIT) {
+            FFE_LOG_ERROR("MeshLoader",
+                          "loadMesh: file too large (%" PRIu64 " bytes, max %" PRIu64 "): \"%s\"",
+                          fileSize, MESH_FILE_SIZE_LIMIT, canonPath);
+            return MeshHandle{0};
+        }
+    }
+
+    // --- Parse the .glb file using cgltf ---
+    cgltf_options options{};  // Zero-initialised: use cgltf defaults (system malloc/free)
+    cgltf_data* data = nullptr;
+
+    const cgltf_result parseResult = cgltf_parse_file(&options, canonPath, &data);
+    if (parseResult != cgltf_result_success) {
+        FFE_LOG_ERROR("MeshLoader", "loadMesh: cgltf_parse_file failed (result=%d) for \"%s\"",
+                      static_cast<int>(parseResult), canonPath);
+        // data may be non-null on partial parse — free it
+        if (data != nullptr) {
+            cgltf_free(data);
+        }
+        return MeshHandle{0};
+    }
+
+    // --- Load the embedded BIN chunk from the .glb ---
+    const cgltf_result loadResult = cgltf_load_buffers(&options, data, canonPath);
+    if (loadResult != cgltf_result_success) {
+        FFE_LOG_ERROR("MeshLoader", "loadMesh: cgltf_load_buffers failed (result=%d) for \"%s\"",
+                      static_cast<int>(loadResult), canonPath);
+        cgltf_free(data); // SEC-M6
+        return MeshHandle{0};
+    }
+
+    // --- SEC-M3 (H-2): Verify buffer data_size >= buffer.size for every buffer ---
+    for (cgltf_size bi = 0; bi < data->buffers_count; ++bi) {
+        const cgltf_buffer& buf = data->buffers[bi];
+        if (buf.data == nullptr) {
+            FFE_LOG_ERROR("MeshLoader",
+                          "loadMesh: buffer[%zu].data is null after cgltf_load_buffers for \"%s\"",
+                          bi, canonPath);
+            cgltf_free(data); // SEC-M6
+            return MeshHandle{0};
+        }
+        // cgltf_buffer has no data_size field; a non-null data pointer after
+        // cgltf_load_buffers succeeds is the correct guarantee that buf.size
+        // bytes have been loaded (cgltf loads the full declared size or fails).
+    }
+
+    // --- SEC-M3: cgltf_validate() ---
+    const cgltf_result validateResult = cgltf_validate(data);
+    if (validateResult != cgltf_result_success) {
+        FFE_LOG_ERROR("MeshLoader", "loadMesh: cgltf_validate failed (result=%d) for \"%s\"",
+                      static_cast<int>(validateResult), canonPath);
+        cgltf_free(data); // SEC-M6
+        return MeshHandle{0};
+    }
+
+    // --- SEC-M3: Verify at least one mesh and one primitive exist ---
+    if (data->meshes_count == 0) {
+        FFE_LOG_ERROR("MeshLoader", "loadMesh: no meshes in \"%s\"", canonPath);
+        cgltf_free(data);
+        return MeshHandle{0};
+    }
+
+    const cgltf_mesh& mesh = data->meshes[0];
+    if (mesh.primitives_count == 0) {
+        FFE_LOG_ERROR("MeshLoader", "loadMesh: mesh[0] has no primitives in \"%s\"", canonPath);
+        cgltf_free(data);
+        return MeshHandle{0};
+    }
+
+    const cgltf_primitive& prim = mesh.primitives[0];
+
+    // --- SEC-M3: Verify primitive type is TRIANGLES ---
+    if (prim.type != cgltf_primitive_type_triangles) {
+        FFE_LOG_ERROR("MeshLoader",
+                      "loadMesh: primitive type is not TRIANGLES (type=%d) in \"%s\"",
+                      static_cast<int>(prim.type), canonPath);
+        cgltf_free(data);
+        return MeshHandle{0};
+    }
+
+    // --- SEC-M3: Indices required (unindexed meshes not supported) ---
+    if (prim.indices == nullptr) {
+        FFE_LOG_ERROR("MeshLoader",
+                      "loadMesh: unindexed meshes are not supported in \"%s\"", canonPath);
+        cgltf_free(data);
+        return MeshHandle{0};
+    }
+
+    // --- SEC-M3: Validate index accessor component type ---
+    const cgltf_accessor* idxAccessor = prim.indices;
+    if (idxAccessor->component_type != cgltf_component_type_r_16u &&
+        idxAccessor->component_type != cgltf_component_type_r_32u &&
+        idxAccessor->component_type != cgltf_component_type_r_8u) {
+        FFE_LOG_ERROR("MeshLoader",
+                      "loadMesh: unsupported index component type (%d) in \"%s\"",
+                      static_cast<int>(idxAccessor->component_type), canonPath);
+        cgltf_free(data);
+        return MeshHandle{0};
+    }
+
+    // --- Locate POSITION, NORMAL, TEXCOORD_0 accessors ---
+    const cgltf_accessor* posAccessor      = nullptr;
+    const cgltf_accessor* normalAccessor   = nullptr;
+    const cgltf_accessor* texcoordAccessor = nullptr;
+
+    for (cgltf_size ai = 0; ai < prim.attributes_count; ++ai) {
+        const cgltf_attribute& attr = prim.attributes[ai];
+        if (attr.type == cgltf_attribute_type_position) {
+            posAccessor = attr.data;
+        } else if (attr.type == cgltf_attribute_type_normal) {
+            normalAccessor = attr.data;
+        } else if (attr.type == cgltf_attribute_type_texcoord && attr.index == 0) {
+            texcoordAccessor = attr.data;
+        }
+    }
+
+    // --- SEC-M3: POSITION is required ---
+    if (posAccessor == nullptr) {
+        FFE_LOG_ERROR("MeshLoader", "loadMesh: no POSITION attribute in \"%s\"", canonPath);
+        cgltf_free(data);
+        return MeshHandle{0};
+    }
+
+    // --- SEC-M3: Validate POSITION accessor type/component ---
+    if (posAccessor->component_type != cgltf_component_type_r_32f ||
+        posAccessor->type != cgltf_type_vec3) {
+        FFE_LOG_ERROR("MeshLoader",
+                      "loadMesh: POSITION accessor must be VEC3/F32 in \"%s\"", canonPath);
+        cgltf_free(data);
+        return MeshHandle{0};
+    }
+
+    // --- SEC-M3: Validate NORMAL accessor if present ---
+    if (normalAccessor != nullptr &&
+        (normalAccessor->component_type != cgltf_component_type_r_32f ||
+         normalAccessor->type != cgltf_type_vec3)) {
+        FFE_LOG_ERROR("MeshLoader",
+                      "loadMesh: NORMAL accessor must be VEC3/F32 in \"%s\"", canonPath);
+        cgltf_free(data);
+        return MeshHandle{0};
+    }
+
+    // --- SEC-M4: Vertex and index count limits ---
+    const u32 vertexCount = static_cast<u32>(posAccessor->count);
+    const u32 indexCount  = static_cast<u32>(idxAccessor->count);
+
+    if (vertexCount > MAX_MESH_VERTICES) {
+        FFE_LOG_ERROR("MeshLoader",
+                      "loadMesh: vertex count %u exceeds MAX_MESH_VERTICES=%u in \"%s\"",
+                      vertexCount, MAX_MESH_VERTICES, canonPath);
+        cgltf_free(data);
+        return MeshHandle{0};
+    }
+
+    if (indexCount > MAX_MESH_INDICES) {
+        FFE_LOG_ERROR("MeshLoader",
+                      "loadMesh: index count %u exceeds MAX_MESH_INDICES=%u in \"%s\"",
+                      indexCount, MAX_MESH_INDICES, canonPath);
+        cgltf_free(data);
+        return MeshHandle{0};
+    }
+
+    if (indexCount == 0) {
+        FFE_LOG_ERROR("MeshLoader", "loadMesh: zero indices in \"%s\"", canonPath);
+        cgltf_free(data);
+        return MeshHandle{0};
+    }
+
+    // --- SEC-M5: u64 arithmetic for size calculations ---
+    const u64 vboBytes = static_cast<u64>(vertexCount) * sizeof(rhi::MeshVertex);
+    const u64 iboBytes = static_cast<u64>(indexCount)  * sizeof(u32);
+
+    // --- Allocate CPU-side staging buffers ---
+    // Use heap allocation (new std::nothrow) for staging — this is a cold path.
+    // M-2: use new(std::nothrow), check for null before proceeding.
+    rhi::MeshVertex* const vertices = new(std::nothrow) rhi::MeshVertex[vertexCount];
+    if (vertices == nullptr) {
+        FFE_LOG_ERROR("MeshLoader",
+                      "loadMesh: failed to allocate vertex staging buffer (%u vertices)", vertexCount);
+        cgltf_free(data); // SEC-M6
+        return MeshHandle{0};
+    }
+
+    u32* const indices = new(std::nothrow) u32[indexCount];
+    if (indices == nullptr) {
+        FFE_LOG_ERROR("MeshLoader",
+                      "loadMesh: failed to allocate index staging buffer (%u indices)", indexCount);
+        delete[] vertices;
+        cgltf_free(data); // SEC-M6
+        return MeshHandle{0};
+    }
+
+    // --- SEC-M3 (H-2): Extract vertex data using ONLY the safe accessor API ---
+    // cgltf_accessor_read_float / cgltf_accessor_read_index perform bounds checking.
+    // Direct pointer arithmetic into buffer_view->data is prohibited.
+
+    for (u32 vi = 0; vi < vertexCount; ++vi) {
+        rhi::MeshVertex& v = vertices[vi];
+
+        // Position (required)
+        float pos[3] = {0.0f, 0.0f, 0.0f};
+        cgltf_accessor_read_float(posAccessor, static_cast<cgltf_size>(vi), pos, 3);
+        v.px = pos[0]; v.py = pos[1]; v.pz = pos[2];
+
+        // Normal (optional — default to {0,1,0} if absent)
+        float norm[3] = {0.0f, 1.0f, 0.0f};
+        if (normalAccessor != nullptr) {
+            cgltf_accessor_read_float(normalAccessor, static_cast<cgltf_size>(vi), norm, 3);
+        }
+        v.nx = norm[0]; v.ny = norm[1]; v.nz = norm[2];
+
+        // Texcoord (optional — default to {0,0} if absent)
+        float uv[2] = {0.0f, 0.0f};
+        if (texcoordAccessor != nullptr) {
+            cgltf_accessor_read_float(texcoordAccessor, static_cast<cgltf_size>(vi), uv, 2);
+        }
+        v.u = uv[0]; v.v = uv[1];
+    }
+
+    // --- Extract index data using safe accessor API ---
+    // All indices widened to u32 (ADR-007 Section 13.7).
+    for (u32 ii = 0; ii < indexCount; ++ii) {
+        indices[ii] = static_cast<u32>(cgltf_accessor_read_index(idxAccessor,
+                                                                  static_cast<cgltf_size>(ii)));
+    }
+
+    // --- SEC-M6: cgltf data no longer needed — free before GPU upload ---
+    cgltf_free(data);
+    data = nullptr;
+
+    // --- Allocate mesh slot ---
+    const u32 slot = findFreeMeshSlot();
+    if (slot == 0) {
+        FFE_LOG_ERROR("MeshLoader", "loadMesh: no free mesh slots");
+        delete[] vertices;
+        delete[] indices;
+        return MeshHandle{0};
+    }
+
+    MeshGpuRecord& rec = s_meshPool[slot];
+
+    // --- GPU upload ---
+    // Step 9a: Create VBO via RHI (registers with RHI for VRAM tracking)
+    rhi::BufferDesc vboDesc;
+    vboDesc.type      = rhi::BufferType::VERTEX;
+    vboDesc.usage     = rhi::BufferUsage::STATIC;
+    vboDesc.data      = vertices;
+    vboDesc.sizeBytes = static_cast<u32>(vboBytes);  // safe — vboBytes <= 32 MB < u32 max
+
+    rec.vboHandle = rhi::createBuffer(vboDesc);
+    if (!rhi::isValid(rec.vboHandle)) {
+        FFE_LOG_ERROR("MeshLoader", "loadMesh: failed to create VBO for \"%s\"", canonPath);
+        delete[] vertices;
+        delete[] indices;
+        return MeshHandle{0};
+    }
+
+    // Get the raw GL ID from the RHI handle for VAO configuration
+    rec.vboId = rhi::getGlBufferId(rec.vboHandle);
+
+    // M-3: Check for GL_OUT_OF_MEMORY after VBO upload
+    // Note: rhi::createBuffer calls glBufferData internally; we check error state here.
+    {
+        const GLenum glErr = glGetError();
+        if (glErr == GL_OUT_OF_MEMORY) {
+            FFE_LOG_ERROR("MeshLoader", "loadMesh: GPU OOM after VBO upload for \"%s\"", canonPath);
+            rhi::destroyBuffer(rec.vboHandle);
+            rec.vboHandle = {};
+            rec.vboId = 0;
+            delete[] vertices;
+            delete[] indices;
+            return MeshHandle{0};
+        }
+    }
+
+    // Step 9b: Create IBO via RHI
+    rhi::BufferDesc iboDesc;
+    iboDesc.type      = rhi::BufferType::INDEX;
+    iboDesc.usage     = rhi::BufferUsage::STATIC;
+    iboDesc.data      = indices;
+    iboDesc.sizeBytes = static_cast<u32>(iboBytes);  // safe — iboBytes <= 12 MB < u32 max
+
+    rec.iboHandle = rhi::createBuffer(iboDesc);
+    if (!rhi::isValid(rec.iboHandle)) {
+        FFE_LOG_ERROR("MeshLoader", "loadMesh: failed to create IBO for \"%s\"", canonPath);
+        rhi::destroyBuffer(rec.vboHandle);
+        rec.vboHandle = {};
+        rec.vboId = 0;
+        delete[] vertices;
+        delete[] indices;
+        return MeshHandle{0};
+    }
+
+    rec.iboId = rhi::getGlBufferId(rec.iboHandle);
+
+    // M-3: Check for GL_OUT_OF_MEMORY after IBO upload
+    {
+        const GLenum glErr = glGetError();
+        if (glErr == GL_OUT_OF_MEMORY) {
+            FFE_LOG_ERROR("MeshLoader", "loadMesh: GPU OOM after IBO upload for \"%s\"", canonPath);
+            rhi::destroyBuffer(rec.iboHandle);
+            rhi::destroyBuffer(rec.vboHandle);
+            rec.iboHandle = {};
+            rec.vboHandle = {};
+            rec.iboId = 0;
+            rec.vboId = 0;
+            delete[] vertices;
+            delete[] indices;
+            return MeshHandle{0};
+        }
+    }
+
+    // CPU staging data is no longer needed after GPU upload
+    delete[] vertices;
+    delete[] indices;
+
+    // Step 9c-h: Create and configure the VAO for this mesh (GL 3.3 — no DSA)
+    glGenVertexArrays(1, &rec.vaoId);
+    glBindVertexArray(rec.vaoId);
+
+    // Bind VBO inside VAO state capture
+    glBindBuffer(GL_ARRAY_BUFFER, rec.vboId);
+
+    // Attribute layout matching rhi::MeshVertex exactly (ADR-007 Section 10.3):
+    //   location 0: position — 3 floats, offset 0,  stride 32
+    //   location 1: normal   — 3 floats, offset 12, stride 32
+    //   location 2: texcoord — 2 floats, offset 24, stride 32
+
+    // location 0 — position
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE,
+                          static_cast<GLsizei>(sizeof(rhi::MeshVertex)),
+                          reinterpret_cast<const void*>(0));
+
+    // location 1 — normal
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE,
+                          static_cast<GLsizei>(sizeof(rhi::MeshVertex)),
+                          reinterpret_cast<const void*>(12));
+
+    // location 2 — texcoord
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE,
+                          static_cast<GLsizei>(sizeof(rhi::MeshVertex)),
+                          reinterpret_cast<const void*>(24));
+
+    // Bind IBO inside VAO state capture (recorded in VAO state)
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, rec.iboId);
+
+    // Unbind VAO first, then unbind buffers (order matters: VAO must be unbound before
+    // unbinding IBO, otherwise the IBO unbind is recorded in the VAO state)
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    // Note: do NOT unbind GL_ELEMENT_ARRAY_BUFFER after unbinding VAO — it's not stored outside VAO
+
+    // --- Finalise the record ---
+    rec.indexCount  = indexCount;
+    rec.vertexCount = vertexCount;
+    rec.alive       = true;
+
+    FFE_LOG_INFO("MeshLoader",
+                 "loadMesh: loaded \"%s\" — %u vertices, %u indices (slot %u)",
+                 path, vertexCount, indexCount, slot);
+
+    return MeshHandle{slot};
+}
+
+// ---------------------------------------------------------------------------
+// unloadMesh
+// ---------------------------------------------------------------------------
+
+void unloadMesh(const MeshHandle handle) {
+    if (!isValid(handle)) {
+        return;
+    }
+    if (handle.id > MAX_MESH_ASSETS) {
+        return;
+    }
+
+    MeshGpuRecord& rec = s_meshPool[handle.id];
+    if (!rec.alive) {
+        return;
+    }
+
+    // Destroy VAO directly (not tracked by RHI — GL only)
+    if (rec.vaoId != 0) {
+        glDeleteVertexArrays(1, &rec.vaoId);
+        rec.vaoId = 0;
+    }
+
+    // Destroy VBO and IBO through RHI (handles VRAM tracking)
+    if (rhi::isValid(rec.iboHandle)) {
+        rhi::destroyBuffer(rec.iboHandle);
+        rec.iboHandle = {};
+        rec.iboId = 0;
+    }
+    if (rhi::isValid(rec.vboHandle)) {
+        rhi::destroyBuffer(rec.vboHandle);
+        rec.vboHandle = {};
+        rec.vboId = 0;
+    }
+
+    rec.indexCount  = 0;
+    rec.vertexCount = 0;
+    rec.alive       = false;
+}
+
+// ---------------------------------------------------------------------------
+// unloadAllMeshes
+// ---------------------------------------------------------------------------
+
+void unloadAllMeshes() {
+    for (u32 i = 1; i <= MAX_MESH_ASSETS; ++i) {
+        if (s_meshPool[i].alive) {
+            unloadMesh(MeshHandle{i});
+        }
+    }
+    s_nextMeshSlot = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Queries
+// ---------------------------------------------------------------------------
+
+u32 getMeshVertexCount(const MeshHandle handle) {
+    if (!isValid(handle) || handle.id > MAX_MESH_ASSETS) {
+        return 0;
+    }
+    const MeshGpuRecord& rec = s_meshPool[handle.id];
+    return rec.alive ? rec.vertexCount : 0u;
+}
+
+u32 getMeshIndexCount(const MeshHandle handle) {
+    if (!isValid(handle) || handle.id > MAX_MESH_ASSETS) {
+        return 0;
+    }
+    const MeshGpuRecord& rec = s_meshPool[handle.id];
+    return rec.alive ? rec.indexCount : 0u;
+}
+
+const MeshGpuRecord* getMeshGpuRecord(const MeshHandle handle) {
+    if (!isValid(handle) || handle.id > MAX_MESH_ASSETS) {
+        return nullptr;
+    }
+    const MeshGpuRecord& rec = s_meshPool[handle.id];
+    return rec.alive ? &rec : nullptr;
+}
+
+} // namespace ffe::renderer

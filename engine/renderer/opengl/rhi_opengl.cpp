@@ -82,7 +82,7 @@ struct GlShader {
     GLuint vertexId      = 0;
     GLuint fragmentId    = 0;
     bool alive           = false;
-    static constexpr u32 MAX_CACHED_UNIFORMS = 16;
+    static constexpr u32 MAX_CACHED_UNIFORMS = 32;
     struct UniformEntry {
         u32 nameHash = 0;
         GLint location = -1;
@@ -840,6 +840,15 @@ void drawIndexed(const BufferHandle vertexBuffer, const BufferHandle indexBuffer
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, s_buffers[indexBuffer.id].glId);
     glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(indexCount), GL_UNSIGNED_SHORT,
                    reinterpret_cast<const void*>(static_cast<uintptr_t>(indexOffset)));
+}
+
+// --- Raw GL ID accessor for mesh_loader ---
+
+GLuint getGlBufferId(const BufferHandle handle) {
+    if (s_headless) return 0;
+    if (handle.id == 0 || handle.id >= MAX_BUFFERS) return 0;
+    if (!s_buffers[handle.id].alive) return 0;
+    return s_buffers[handle.id].glId;
 }
 
 } // namespace ffe::rhi

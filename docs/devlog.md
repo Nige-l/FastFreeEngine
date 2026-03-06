@@ -2285,3 +2285,181 @@ No new API paradigm — all three features follow the established `ffe.*` bindin
 - Assess Phase 1 exit criteria and readiness for Phase 2
 
 ---
+
+## 2026-03-06 — Session 37: Phase 2 Architecture — 3D Foundation Design
+
+### Goal
+
+Design the Phase 2 3D Foundation. No code written, no build run. This is a pure design session: produce an implementation-ready architecture document (ADR-007) for the 3D renderer extension, and validate its security posture through a shift-left review before any implementation begins.
+
+### Work Completed
+
+**architect — ADR-007 v1.0:**
+Produced `docs/architecture/ADR-007-3d-foundation.md` v1.0. The document covers every decision required for engine-dev to implement 3D mesh rendering in a single session without any open architectural choices. Decisions made:
+
+- Mesh library: **cgltf**, single-header C, vendored in `third_party/cgltf.h` — no new vcpkg dependency
+- glTF 2.0 as the mesh format (OBJ deferred); `.glb` (binary glTF) as the accepted file type (rationale: eliminates external `.bin` URI surface; revisable in a future ADR)
+- ECS components: `Transform3D` (44 bytes, quaternion rotation, separate from 2D `Transform`), `Mesh` (8 bytes, holds `MeshHandle`), `Material3D` (24 bytes, diffuse color + texture + shader override)
+- `MeshHandle` opaque asset handle (same pattern as `TextureHandle`, `BufferHandle`)
+- Render order: **3D before 2D** — depth test enabled for 3D pass, disabled for 2D pass; existing 2D pipeline is fully preserved and unaffected when no 3D entities exist
+- VAO strategy: one VAO per loaded mesh, created at load time, owned by the mesh asset cache
+- Perspective camera: new `m_camera3d` member in `Application`, uses existing `renderer::Camera` struct with `ProjectionType::PERSPECTIVE`
+- Shader: Blinn-Phong GLSL 330 core, compile-time string in `shader_library.cpp`, new `BuiltinShader::MESH_BLINN_PHONG` enum value
+- Scene lighting: new `SceneLighting3D` ECS context struct (lightDir, lightColor, ambientColor) with Lua overrides
+- Mesh asset pool: fixed-size array of 100 slots (`MAX_MESH_ASSETS`), 64 MB file size cap (`MESH_FILE_SIZE_LIMIT`), 1M vertex / 3M index limits
+- Security constraints SEC-M1 through SEC-M7 specified in ADR (path traversal prevention, file size cap, cgltf output validation, count limits, u64 size arithmetic, cgltf_free on all paths, no per-frame loading)
+- 8 new Lua bindings specified with exact signatures: `ffe.loadMesh`, `ffe.createEntity3D`, `ffe.setTransform3D`, `ffe.set3DCamera`, `ffe.setMeshColor`, `ffe.setLightDirection`, `ffe.setLightColor`, `ffe.setAmbientColor`
+- Full file layout: 6 new files, 8 modified files — all specified
+- Catch2 test plan: 20 test cases covering path validation, struct layout, asset pool, ECS integration (Section L of ADR-007)
+- 4 open security questions (Q-M1 through Q-M4) raised explicitly for shift-left review
+
+**security-auditor — ADR-007-security-review.md (shift-left review):**
+Produced `docs/architecture/ADR-007-security-review.md`. Overall verdict: HIGH ISSUES — implementation blocked pending design changes to the two HIGH findings. All findings:
+
+| ID | Severity | Finding |
+|----|----------|---------|
+| H-1 | HIGH | cgltf resolves `.bin` buffer URIs relative to `base_path` — `.gltf` + external `.bin` path traversal risk; not mitigated by SEC-M1 (which only validates the top-level path) |
+| H-2 | HIGH | `cgltf_validate()` alone insufficient — does not verify that `buffer.data_size >= buffer.size`; truncated BIN chunk produces OOB reads when using direct pointer arithmetic |
+| M-1 | MEDIUM | External `.bin` file size uncapped if `.gltf` supported; resolved by H-1 Option A |
+| M-2 | MEDIUM | Heap fallback uses bare `new`; null/terminate case on OOM not handled before `cgltf_free` |
+| M-3 | MEDIUM | `glBufferData` GPU OOM not detected; `glGetError()` not called after buffer upload |
+| M-4 | MEDIUM | `ffe.setLightDirection(0,0,0)` passes zero vector to `glm::normalize` → NaN in fragment shader |
+| L-1 | LOW | Missing `lua_type()` guard on integer arguments to new bindings |
+| I-1 | INFO | cgltf CVE status confirmed clean; iterative JSON parser, no stack overflow risk |
+
+Security-auditor also confirmed: `getGlBufferId` does not currently exist in `rhi_opengl.h` — engine-dev must add it.
+
+**architect — ADR-007 v1.1 (revised per security review):**
+Updated `docs/architecture/ADR-007-3d-foundation.md` to v1.1. All HIGH and MEDIUM findings resolved in the design before implementation was allowed to proceed:
+
+- **H-1 resolved → SEC-M8 added:** `.glb`-only restriction at path validation time, before any cgltf call. `.gltf` support deferred to a future ADR with its own security review. This also resolves M-1.
+- **H-2 resolved → SEC-M3 expanded:** After `cgltf_load_buffers`, verify `buffer->data != nullptr` and `buffer->data_size >= buffer->size` for every buffer. Exclusive use of `cgltf_accessor_read_float()` / `cgltf_accessor_read_index()` safe accessor API (no direct pointer arithmetic into buffer data) during vertex extraction.
+- **M-2 resolved → implementation constraint added:** Heap fallback must use `new (std::nothrow)`, check result for null, call `cgltf_free` and return `MeshHandle{0}` on null.
+- **M-3 resolved → implementation constraint added:** `glGetError()` after each `glBufferData` call; `GL_OUT_OF_MEMORY` triggers cleanup and returns `MeshHandle{0}`.
+- **M-4 resolved → implementation constraint added:** `ffe.setLightDirection` guard: compute `glm::length`, reject (log + keep previous value) if length < 0.0001f; only normalise and store if non-trivial.
+
+Section 3 (mesh library rationale) and Section 10.2 (data flow) updated to reflect `.glb`-only parsing and buffer data-size validation. Revision history added (Section 18). Final status: **APPROVED — ready for implementation**.
+
+### Agents Dispatched
+
+1. `architect` (sequential) — ADR-007 v1.0
+2. `security-auditor` (sequential, shift-left) — ADR-007-security-review.md
+3. `architect` (sequential, revision) — ADR-007 v1.1
+
+### Files Produced
+
+| File | Status |
+|------|--------|
+| `docs/architecture/ADR-007-3d-foundation.md` | NEW (v1.1, approved) |
+| `docs/architecture/ADR-007-security-review.md` | NEW (shift-left review complete) |
+
+### game-dev-tester: NOT INVOKED
+
+Design-only session; no implementation, no API to test. game-dev-tester will be invoked in Session 38 (implementation session) after the expert panel, because 3D rendering is a categorically new API paradigm (per ADR-007 Section 17 and CLAUDE.md Section 7).
+
+### Session 37 Stats
+
+- No code written
+- No build run
+- 2 documents produced
+- All HIGH security findings resolved before implementation unblocked
+
+### Next Session (38) Starts With
+
+Phase 2 implementation: `engine-dev` implements ADR-007 v1.1 in full — all new files, all modified files, all Lua bindings, all Catch2 tests, per Section 12 (file layout) and Section 14 (test plan) of ADR-007.
+
+---
+
+## 2026-03-06 — Session 36: Phase 1 Documentation Complete
+
+### Goal
+
+Complete all Phase 1 documentation work: extend the tutorial to cover the four features added in Session 35 (gamepad, save/load, TTF fonts, particles were already partially covered), polish CONTRIBUTING.md, review and update all `.context.md` files, and assess whether Phase 1 exit criteria are met.
+
+No engine code was changed this session. No build was run.
+
+### Work Completed
+
+**Tutorial expansion (api-designer pass 1):**
+- Section 19: Gamepad Input — `ffe.isGamepadConnected`, `isGamepadButtonPressed/Held/Released`, `getGamepadAxis`, `setGamepadDeadzone`, gamepad constants table, combined keyboard+gamepad movement pattern
+- Section 20: Save/Load System — `ffe.saveData`/`ffe.loadData`, JSON persistence, filename rules, error handling, high-score example
+- Section 21: TTF Font Rendering — `ffe.loadFont`, `ffe.drawFontText`, `ffe.measureText`, `ffe.unloadFont`, centered text layout example, bitmap vs TTF comparison
+- Section 22: Particle Effects — `ffe.addEmitter`, `ffe.setEmitterConfig`, `ffe.startEmitter`/`stopEmitter`, `ffe.emitBurst`, config table reference, explosion burst example
+- Updated "What's Next?" section to reflect Phase 1 completion and Phase 2 (3D Foundation) as next milestone
+- ROADMAP: tutorial documentation and CONTRIBUTING.md polish checked off; test count (498) and Lua binding count (~70) updated
+
+**CONTRIBUTING.md polish (api-designer pass 1):**
+- GCC-13 build commands added alongside Clang-18
+- mold and ccache installation notes
+- AI-native documentation section (explains `.context.md` files and their role)
+- "Getting Help" section (devlog, roadmap, CLAUDE.md orientation)
+- Clarified that `build-engineer` owns the build step in the 5-phase flow
+
+**`.context.md` review and updates (api-designer pass 1):**
+- `engine/scripting/.context.md`: `ffe.cancelAllTimers` documented; `KEY_LEFT_CTRL` added (was incorrectly documented as `KEY_LEFT_CONTROL`); `KEY_TAB`, `KEY_F1` added; `GAMEPAD_GUIDE`, `GAMEPAD_LEFT_STICK`, `GAMEPAD_RIGHT_STICK` constants added
+- `engine/renderer/.context.md`: verified current and accurate
+- `engine/core/.context.md`: verified current and accurate
+
+**Tutorial review (game-dev-tester):**
+Found 13 issues across the new tutorial sections.
+
+**Tutorial and `.context.md` corrections (api-designer pass 2):**
+All 13 issues fixed:
+1. Added `ffe.getEntityCount()` usage example
+2. Added `ffe.isGamepadButtonReleased` code example (was described but not demonstrated)
+3. Added `ffe.setHudText` code example
+4. Added `GAMEPAD_GUIDE`, `GAMEPAD_LEFT_STICK`, `GAMEPAD_RIGHT_STICK` constants to tutorial constant table and to `engine/scripting/.context.md`
+5. Corrected `KEY_LEFT_CONTROL` → `KEY_LEFT_CTRL` in tutorial (was wrong in two places)
+6. Added `KEY_LEFT_CTRL`, `KEY_TAB`, `KEY_F1` to `.context.md` key constants section
+7. Fixed gamepad movement example to preserve entity rotation and scale when calling `setTransform`
+8. Fixed TTF character range table: documented range was 32-127, correct range is 32-126 (ASCII printable, matching stb_truetype atlas bake)
+
+### Phase 1 Exit Criteria Assessment
+
+| Criterion | Status | Notes |
+|-----------|--------|-------|
+| A non-trivial 2D game can be built entirely in Lua | **MET** | Three demo games (Collect the Stars, Pong, Breakout) built entirely in Lua with no C++ game code |
+| Game runs at 60fps on LEGACY tier hardware | **MET** | OpenGL 3.3 renderer, sprite batching, no heap allocations per frame, all systems within budget |
+| New developer can go from `git clone` to running a game in under 10 minutes | **MET** | CONTRIBUTING.md documents exact build commands; README.md exists; three runnable demos |
+| All features documented in `.context.md` files and the tutorial | **MET** | Tutorial now covers 22 sections spanning all Phase 1 features; all subsystem directories have `.context.md` files |
+
+**All four Phase 1 exit criteria are met.**
+
+The two remaining ROADMAP items (Windows build support, macOS build support) are cross-platform concerns explicitly listed as lower priority. They do not block Phase 1 exit — the exit criteria make no reference to cross-platform builds. Phase 1 is complete on Linux.
+
+### Phase 1 Status (Final)
+
+| Feature | Status |
+|---------|--------|
+| ECS, game loop, arena allocator | DONE |
+| OpenGL 3.3 renderer (batching, render queue) | DONE |
+| Input (keyboard, mouse, gamepad) | DONE |
+| Audio (SFX + streaming music) | DONE |
+| Collision (spatial hash, AABB/circle) | DONE |
+| Lua scripting (LuaJIT sandbox, ~70 bindings) | DONE |
+| Sprite animation | DONE |
+| Text rendering (bitmap + TTF) | DONE |
+| Camera system (shake, clear color) | DONE |
+| Scene management | DONE |
+| Particle system | DONE |
+| Tilemap rendering | DONE |
+| Timer system | DONE |
+| Save/load system | DONE |
+| Tutorial documentation (22 sections) | DONE |
+| CONTRIBUTING.md | DONE |
+| `.context.md` files (all subsystems) | DONE |
+| Windows build support | DEFERRED (post-Phase 1) |
+| macOS build support | DEFERRED (post-Phase 1) |
+
+**Phase 1 is COMPLETE on Linux.**
+
+### Known Issues Updated
+- `KEY_LEFT_CONTROL` corrected to `KEY_LEFT_CTRL` in tutorial and `.context.md` — was a documentation error, not a code error (the binding was always correct)
+- TTF character range clarified: 32-126, not 32-127 (127 is DEL, not a printable character)
+
+### Next Session Should Start With
+- **Phase 2 architecture planning**: invoke `architect` to produce a Phase 2 design note covering the 3D renderer extension, RHI changes needed, mesh loading library selection (glTF/OBJ), perspective camera, and how 2D and 3D coexist in the same ECS
+- Security shift-left review of Phase 2 design (asset loading surface will expand significantly)
+- Windows build support can be addressed in parallel or immediately before Phase 2, at user's discretion
+
+---

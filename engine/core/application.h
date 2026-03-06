@@ -5,6 +5,7 @@
 #include "core/logging.h"
 #include "core/ecs.h"
 #include "renderer/camera.h"
+#include "renderer/mesh_renderer.h"
 #include "renderer/render_queue.h"
 #include "renderer/shader_library.h"
 #include "renderer/sprite_batch.h"
@@ -66,7 +67,9 @@ private:
 
     // Renderer state
     GLFWwindow* m_window = nullptr;
-    renderer::Camera m_camera;
+    renderer::Camera m_camera;         // 2D orthographic camera (existing)
+    renderer::Camera m_camera3d;       // 3D perspective camera (set via ffe.set3DCamera)
+    renderer::SceneLighting3D m_sceneLighting;  // 3D scene lighting (set via Lua)
     renderer::RenderQueue m_renderQueue;
     renderer::ShaderLibrary m_shaderLibrary;
     renderer::SpriteBatch m_spriteBatch;

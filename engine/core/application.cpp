@@ -2,6 +2,8 @@
 #include "core/input.h"
 #include "renderer/rhi.h"
 #include "renderer/render_system.h"
+#include "renderer/mesh_loader.h"
+#include "renderer/mesh_renderer.h"
 #include "renderer/text_renderer.h"
 #include "physics/collider2d.h"
 #include "physics/collision_system.h"
@@ -182,6 +184,9 @@ Result Application::startup() {
         glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
         glfwWindowHint(GLFW_SAMPLES, 0);
         glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+        // Explicitly request a 24-bit depth buffer for the 3D pass (ADR-007 Section 7.1).
+        // GLFW defaults to 24 on most platforms for GL 3.3 core, but explicit is safer.
+        glfwWindowHint(GLFW_DEPTH_BITS, 24);
 
         m_window = glfwCreateWindow(
             m_config.windowWidth,
@@ -313,6 +318,21 @@ Result Application::startup() {
     m_camera.viewportWidth  = static_cast<f32>(m_config.windowWidth);
     m_camera.viewportHeight = static_cast<f32>(m_config.windowHeight);
 
+    // 5d2. Setup 3D perspective camera defaults (ADR-007 Section 8.1)
+    m_camera3d.projType      = renderer::ProjectionType::PERSPECTIVE;
+    m_camera3d.fovDegrees    = 60.0f;
+    m_camera3d.nearPlane     = 0.1f;
+    m_camera3d.farPlane      = 1000.0f;
+    m_camera3d.position      = {0.0f, 0.0f, 5.0f};
+    m_camera3d.target        = {0.0f, 0.0f, 0.0f};
+    m_camera3d.up            = {0.0f, 1.0f, 0.0f};
+    m_camera3d.viewportWidth  = static_cast<f32>(m_config.windowWidth);
+    m_camera3d.viewportHeight = static_cast<f32>(m_config.windowHeight);
+
+    // Emplace 3D camera pointer and SceneLighting3D into ECS context for Lua access
+    m_world.registry().ctx().emplace<renderer::Camera*>(&m_camera3d);
+    m_world.registry().ctx().emplace<renderer::SceneLighting3D>(m_sceneLighting);
+
     // 5e. Initialize render queue (pre-allocated, persistent — not from the frame arena)
     renderer::initRenderQueue(m_renderQueue, renderer::MAX_DRAW_COMMANDS_LEGACY);
 
@@ -381,6 +401,9 @@ void Application::shutdown() {
     // 8. (nothing)
     // 7. Unregister systems (clear handled by World destructor)
     // 6. Shutdown scripting — not yet implemented
+
+    // 5e2. Unload all 3D meshes before shutting down the RHI
+    renderer::unloadAllMeshes();
 
     // 5e. Destroy render queue
     renderer::destroyRenderQueue(m_renderQueue);
@@ -459,6 +482,17 @@ void Application::render(const float alpha) {
     // Begin frame — use ClearColor from ECS context (settable from Lua)
     const auto& cc = m_world.registry().ctx().get<ClearColor>();
     rhi::beginFrame({cc.r, cc.g, cc.b, 1.0f});
+
+    // --- 3D pass: render all mesh entities before 2D sprites ---
+    // meshRenderSystem sets its own pipeline state (depth LESS, cull BACK, no blend),
+    // draws all Transform3D + Mesh entities, then restores 2D-compatible state.
+    // If no 3D entities exist, meshRenderSystem returns immediately with no state changes.
+    {
+        // Sync the ECS context camera pointer with the current m_camera3d values
+        // (Lua may have updated m_camera3d via ffe.set3DCamera — the pointer
+        // in ctx points directly to m_camera3d so it's always current)
+        renderer::meshRenderSystem(m_world, m_camera3d);
+    }
 
     // Apply camera shake (if active) and compute VP matrix.
     // Shake uses exponential decay for a punchy start that fades naturally.

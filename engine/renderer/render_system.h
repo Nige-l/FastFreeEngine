@@ -3,13 +3,45 @@
 #include "core/types.h"
 #include "core/system.h"
 #include "renderer/rhi_types.h"
+#include "renderer/mesh_loader.h"
 #include "renderer/render_queue.h"
 #include "renderer/sprite_batch.h"
 
 #include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <new>
 
 namespace ffe {
+
+// --- Transform3D component — 3D world transform. ---
+// Use this for 3D entities. Does NOT replace Transform (2D-only).
+// 2D entities use Transform (scalar z-axis rotation); 3D entities use Transform3D.
+struct Transform3D {
+    glm::vec3 position = {0.0f, 0.0f, 0.0f};  // 12 bytes
+    glm::quat rotation = {1.0f, 0.0f, 0.0f, 0.0f}; // 16 bytes — identity quaternion
+    glm::vec3 scale    = {1.0f, 1.0f, 1.0f};  // 12 bytes
+    u32       _pad     = 0;                     //  4 bytes — explicit alignment padding
+};
+static_assert(sizeof(Transform3D) == 44, "Transform3D must be 44 bytes");
+
+// --- Mesh ECS component — references a loaded mesh asset ---
+// The GPU resources (VAO, VBO, IBO) are owned by the mesh asset cache,
+// not by the component. Multiple entities may reference the same MeshHandle.
+struct Mesh {
+    renderer::MeshHandle meshHandle;  // 4 bytes — which loaded mesh to render
+    u32                  _pad = 0;    // 4 bytes — explicit padding
+};
+static_assert(sizeof(Mesh) == 8, "Mesh component must be 8 bytes");
+
+// --- Material3D ECS component — per-entity 3D material override ---
+// Optional: if not present on a 3D entity, the mesh renderer uses default values
+// (white diffuse color, default white texture, builtin MESH_BLINN_PHONG shader).
+struct Material3D {
+    glm::vec4          diffuseColor   = {1.0f, 1.0f, 1.0f, 1.0f}; // 16 bytes
+    rhi::TextureHandle diffuseTexture;  // 4 bytes (0 = use default white texture)
+    rhi::ShaderHandle  shaderOverride; // 4 bytes (0 = use builtin MESH_BLINN_PHONG)
+};
+static_assert(sizeof(Material3D) == 24, "Material3D must be 24 bytes");
 
 // --- Transform component (needed by render system) ---
 // Defined here because the render system needs it and it is not yet in core.

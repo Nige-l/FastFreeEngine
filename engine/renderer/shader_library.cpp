@@ -107,6 +107,69 @@ void main() {
 }
 )glsl";
 
+// --- 3D Blinn-Phong shaders (ADR-007 Section 9) ---
+
+static const char* const MESH_BLINN_PHONG_VERT_SOURCE = R"glsl(
+#version 330 core
+
+layout(location = 0) in vec3 a_position;
+layout(location = 1) in vec3 a_normal;
+layout(location = 2) in vec2 a_texcoord;
+
+uniform mat4 u_model;
+uniform mat4 u_viewProjection;
+uniform mat3 u_normalMatrix;
+
+out vec3 v_fragPos;
+out vec3 v_normal;
+out vec2 v_texcoord;
+
+void main() {
+    vec4 worldPos  = u_model * vec4(a_position, 1.0);
+    v_fragPos      = worldPos.xyz;
+    v_normal       = u_normalMatrix * a_normal;
+    v_texcoord     = a_texcoord;
+    gl_Position    = u_viewProjection * worldPos;
+}
+)glsl";
+
+static const char* const MESH_BLINN_PHONG_FRAG_SOURCE = R"glsl(
+#version 330 core
+
+in vec3 v_fragPos;
+in vec3 v_normal;
+in vec2 v_texcoord;
+
+uniform sampler2D u_diffuseTexture;
+uniform vec4      u_diffuseColor;
+uniform vec3      u_lightDir;
+uniform vec3      u_lightColor;
+uniform vec3      u_ambientColor;
+uniform vec3      u_viewPos;
+
+out vec4 fragColor;
+
+void main() {
+    vec3  norm      = normalize(v_normal);
+    vec3  lightDir  = normalize(-u_lightDir);
+
+    // Diffuse
+    float diff      = max(dot(norm, lightDir), 0.0);
+    vec3  diffuse   = diff * u_lightColor;
+
+    // Specular (Blinn-Phong half-vector)
+    vec3  viewDir   = normalize(u_viewPos - v_fragPos);
+    vec3  halfDir   = normalize(lightDir + viewDir);
+    float spec      = pow(max(dot(norm, halfDir), 0.0), 32.0);
+    vec3  specular  = spec * u_lightColor * 0.3;
+
+    // Combine
+    vec4  texSample = texture(u_diffuseTexture, v_texcoord);
+    vec3  lighting  = u_ambientColor + diffuse + specular;
+    fragColor       = vec4(lighting, 1.0) * texSample * u_diffuseColor;
+}
+)glsl";
+
 // ==================== Library Implementation ====================
 
 struct ShaderPair {
@@ -116,9 +179,10 @@ struct ShaderPair {
 };
 
 static const ShaderPair PAIRS[] = {
-    { SOLID_VERT_SOURCE,    SOLID_FRAG_SOURCE,    "solid"    },
-    { TEXTURED_VERT_SOURCE, TEXTURED_FRAG_SOURCE, "textured" },
-    { SPRITE_VERT_SOURCE,   SPRITE_FRAG_SOURCE,   "sprite"   },
+    { SOLID_VERT_SOURCE,               SOLID_FRAG_SOURCE,               "solid"            },
+    { TEXTURED_VERT_SOURCE,            TEXTURED_FRAG_SOURCE,            "textured"         },
+    { SPRITE_VERT_SOURCE,              SPRITE_FRAG_SOURCE,              "sprite"           },
+    { MESH_BLINN_PHONG_VERT_SOURCE,    MESH_BLINN_PHONG_FRAG_SOURCE,    "mesh_blinn_phong" },
 };
 static_assert(sizeof(PAIRS) / sizeof(PAIRS[0]) == static_cast<u32>(BuiltinShader::COUNT));
 

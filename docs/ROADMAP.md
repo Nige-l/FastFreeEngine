@@ -17,14 +17,14 @@ The engine is developed in daily sessions. Each session should advance the curre
 - [x] Audio (miniaudio, WAV/OGG, SFX + streaming music)
 - [x] 2D collision detection (spatial hash, AABB/circle, Lua callbacks)
 - [x] Input system (keyboard + mouse, pressed/held/released)
-- [x] Lua scripting sandbox (LuaJIT, 1M instruction budget, ~40 bindings)
+- [x] Lua scripting sandbox (LuaJIT, 1M instruction budget, ~70 bindings)
 - [x] Bitmap text rendering (8x8 font, screen-space HUD)
 - [x] Texture loading (stb_image, path traversal prevention)
 - [x] Arena allocator (per-frame, zero hot-path heap allocations)
 - [x] Camera system (ortho, shake effects)
 - [x] 3 playable demo games (Collect the Stars, Pong, Breakout)
 - [x] AI-native documentation (.context.md files)
-- [x] 372+ Catch2 tests, zero warnings on Clang-18 and GCC-13
+- [x] 498 Catch2 tests, zero warnings on Clang-18 and GCC-13
 
 ### Remaining
 - [x] Sprite rotation in render pipeline (Transform has rotation, DrawCommand passes it through)
@@ -32,12 +32,12 @@ The engine is developed in daily sessions. Each session should advance the curre
 - [x] Tilemap rendering (efficient batch rendering of tile grids)
 - [x] Scene management (load/unload scenes, transitions)
 - [x] Timer/scheduler API from Lua (ffe.after, ffe.every)
-- [ ] Gamepad input (SDL_GameController or similar)
+- [x] Gamepad input (GLFW gamepad API, 4 pads, 15 buttons, 6 axes, deadzone)
 - [x] Particle system (engine-side, not Lua entity hacks)
-- [ ] TTF font rendering (stb_truetype, scalable text)
-- [ ] Save/load system (serialise game state to disk)
-- [ ] Tutorial documentation covering all features
-- [ ] CONTRIBUTING.md polish
+- [x] TTF font rendering (stb_truetype, scalable text, 8 font slots)
+- [x] Save/load system (JSON on disk, path security, atomic writes, 128 file limit)
+- [x] Tutorial documentation covering all features
+- [x] CONTRIBUTING.md polish
 - [ ] Windows build support (MSVC or MinGW)
 - [ ] macOS build support
 

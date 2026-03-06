@@ -6,9 +6,10 @@ namespace ffe::renderer {
 
 // Pre-defined shader IDs
 enum class BuiltinShader : u8 {
-    SOLID     = 0,
-    TEXTURED  = 1,
-    SPRITE    = 2,
+    SOLID            = 0,
+    TEXTURED         = 1,
+    SPRITE           = 2,
+    MESH_BLINN_PHONG = 3,  // 3D Blinn-Phong lighting shader (ADR-007)
     COUNT
 };
 
