@@ -1531,3 +1531,51 @@ Session 19 handover document written at `docs/session19-handover.md`.
 
 ---
 
+## 2026-03-06 — Session 19: Integration Test, Pong Demo, MEMORY.md
+
+### Planned
+- P0: Update MEMORY.md with current project state
+- P1: Integration testing — verify 348 tests pass, both compilers
+- P2: Second example game (Pong) to demonstrate engine versatility
+- P3: Further polish
+
+### Completed
+- **MEMORY.md updated** with current test count, session count, all subsystems, all demos
+- **Integration test: PASS** — 348/348 tests on Clang-18 and GCC-13, zero warnings
+- **Pong demo implemented** (`examples/pong/`):
+  - Two-player classic Pong: left paddle (W/S), right paddle (UP/DOWN)
+  - Ball physics with wall bouncing and paddle deflection
+  - Angle varies based on hit position on paddle
+  - Ball speed increases each rally hit (400 → 800 max)
+  - Score tracking with first-to-5 win condition
+  - HUD display showing score, controls, and game state
+  - SFX on paddle hit and scoring
+  - Serve system (SPACE to serve, loser serves)
+  - Restart on game over
+  - Center line decoration and wall indicators
+  - Clean shutdown with resource cleanup
+  - All game logic in Lua — no C++ game code
+  - Exercises: input, entity lifecycle, transforms, HUD, audio, sprites
+- **Both compilers build clean** with zero warnings
+- **All 348 tests still pass**
+
+### Architecture Notes
+- Pong main.cpp follows the same pattern as lua_demo: PongContext struct in ECS registry, pongSystem at priority 100, ScriptEngine loads pong.lua
+- Ball-paddle collision is done manually in Lua (AABB check) rather than using the collision system — demonstrates that Lua has enough API surface to implement game physics without engine collision
+- Center line and wall decorations are static entities created at init time
+
+### Known Issues Carried Forward
+- Console/log viewer panel: stretch goal since Session 13
+- M-1 getTransform GC pressure: mitigated by fillTransform
+- isAudioPathSafe() bare ".." check: LOW, non-exploitable
+
+### Next Session Should Start With
+- P0: Update README.md to mention Pong demo
+- P1: Consider adding background music to Pong
+- P2: Third example or further polish (screenshots, contributing guide)
+- P3: Console/log viewer panel (long-standing stretch goal)
+
+Session 20 handover document written at `docs/session20-handover.md`.
+
+---
+

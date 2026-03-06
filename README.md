@@ -20,7 +20,7 @@ FFE is free and open source forever. MIT licensed. That is not up for debate.
 
 ## Features
 
-All subsystems below are implemented and working together in the "Collect the Stars" demo game.
+All subsystems below are implemented and working together in two demo games: "Collect the Stars" and "Pong".
 
 - **ECS** -- Entity Component System built on EnTT with a thin `World` wrapper and function-pointer system dispatch. No virtual calls in hot paths.
 - **2D Sprite Rendering** -- OpenGL 3.3 backend with batched draw calls (2048 sprites per batch), packed 64-bit sort keys, and render queue.
@@ -117,7 +117,7 @@ cmake --build build-gcc
 
 ### Running Tests
 
-341+ Catch2 tests covering core, renderer, scripting, audio, physics, and texture loading:
+348 Catch2 tests covering core, renderer, scripting, audio, physics, and texture loading:
 
 ```bash
 ctest --test-dir build --output-on-failure
@@ -150,6 +150,19 @@ The flagship demo -- a complete mini-game written entirely in Lua exercising eve
 - **ESC** to quit
 - Background music and pickup sound effects
 
+### Pong
+
+Classic two-player Pong -- demonstrates input, collision, entity lifecycle, HUD scoring, and audio.
+
+```bash
+./build/examples/pong/ffe_pong
+```
+
+- **W/S** left paddle, **UP/DOWN** right paddle
+- **SPACE** to serve the ball
+- First to 5 wins -- ball speeds up each rally
+- **F1** editor overlay, **ESC** to quit
+
 ### Other Demos
 
 ```bash
@@ -176,8 +189,8 @@ engine/
   scripting/    Lua sandbox, ffe.* API bindings, instruction budget
   editor/       Dear ImGui overlay, entity inspector
 
-tests/          341+ Catch2 tests (core, renderer, scripting, audio, physics)
-examples/       Demo games (lua_demo, hello_sprites, interactive_demo, headless_test)
+tests/          348 Catch2 tests (core, renderer, scripting, audio, physics)
+examples/       Demo games (lua_demo, pong, hello_sprites, interactive_demo, headless_test)
 assets/         Textures, spritesheets, audio files
 docs/
   architecture/ ADR design documents for each subsystem
