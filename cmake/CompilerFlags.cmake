@@ -7,7 +7,8 @@ add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-rtti> $<$<COMPILE_LANGUAGE:CX
 # Linker: use mold if available
 find_program(MOLD_LINKER mold)
 if(MOLD_LINKER)
-    add_link_options(-fuse-ld=mold)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=mold")
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fuse-ld=mold")
     message(STATUS "Using mold linker: ${MOLD_LINKER}")
 else()
     message(WARNING "mold linker not found — falling back to default linker")

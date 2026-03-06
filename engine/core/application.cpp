@@ -64,13 +64,6 @@ int32_t Application::run() {
             glfwPollEvents();
         }
 
-#ifdef FFE_EDITOR
-        // F1 toggles editor overlay — checked before input system so F1 always works
-        if (ffe::isKeyPressed(ffe::Key::F1)) {
-            m_editorOverlay.toggle();
-        }
-#endif
-
         const auto currentTime = Clock::now();
         float frameTime = Duration(currentTime - previousTime).count();
         previousTime = currentTime;
@@ -106,6 +99,14 @@ int32_t Application::run() {
                 break;
             }
         }
+
+#ifdef FFE_EDITOR
+        // F1 toggles editor overlay — checked after updateInput() has processed
+        // pending key events during the tick loop above.
+        if (ffe::isKeyPressed(ffe::Key::F1)) {
+            m_editorOverlay.toggle();
+        }
+#endif
 
         // --- Variable-rate render ---
         {

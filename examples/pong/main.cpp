@@ -15,6 +15,7 @@
 #include "core/application.h"
 #include "core/ecs.h"
 #include "core/logging.h"
+#include "audio/audio.h"
 #include "renderer/render_system.h"
 #include "renderer/rhi.h"
 #include "renderer/rhi_types.h"
@@ -147,6 +148,10 @@ int main()
 
     ffe::Application app(config);
 
+    if (!ffe::audio::init(false)) {
+        FFE_LOG_WARN("Pong", "Audio init failed — audio disabled");
+    }
+
     PongContext pongCtx;
     app.world().registry().ctx().emplace<PongContext>(pongCtx);
 
@@ -166,5 +171,6 @@ int main()
         ffe::renderer::unloadTexture(s_whiteTex);
     }
 
+    ffe::audio::shutdown();
     return result;
 }

@@ -15,6 +15,7 @@
 #include "core/application.h"
 #include "core/ecs.h"
 #include "core/logging.h"
+#include "audio/audio.h"
 #include "renderer/render_system.h"
 #include "renderer/rhi.h"
 #include "renderer/rhi_types.h"
@@ -196,6 +197,13 @@ int main()
     ffe::Application app(config);
 
     // -----------------------------------------------------------------------
+    // Initialize audio subsystem (must be before Lua loads sounds)
+    // -----------------------------------------------------------------------
+    if (!ffe::audio::init(false)) {
+        FFE_LOG_WARN("LuaDemo", "Audio init failed — audio disabled");
+    }
+
+    // -----------------------------------------------------------------------
     // Inject context into the ECS registry
     // -----------------------------------------------------------------------
     LuaDemoContext demoCtx;
@@ -239,5 +247,6 @@ int main()
     }
 
     // ScriptEngine destructor calls shutdown() automatically.
+    ffe::audio::shutdown();
     return result;
 }
