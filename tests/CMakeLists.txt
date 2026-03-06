@@ -52,3 +52,20 @@ target_link_libraries(ffe_tests_texture
 )
 
 catch_discover_tests(ffe_tests_texture)
+
+# --- Audio tests ---
+# Separate executable because audio tests mutate global static state
+# (init/shutdown write-once semantics) and use Catch2 SECTION isolation.
+# Isolation prevents cross-contamination with ffe_tests and other test suites.
+add_executable(ffe_tests_audio
+    test_main.cpp
+    audio/test_audio.cpp
+)
+
+target_link_libraries(ffe_tests_audio
+    PRIVATE
+        ffe_audio
+        Catch2::Catch2WithMain
+)
+
+catch_discover_tests(ffe_tests_audio)

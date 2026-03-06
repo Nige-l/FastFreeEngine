@@ -12,6 +12,7 @@ extern "C" {
 #include "core/ecs.h"
 #include "core/input.h"
 #include "renderer/render_system.h"
+#include "renderer/texture_loader.h"
 
 #include <algorithm>  // std::max, std::min
 #include <cinttypes>  // PRId64
@@ -831,6 +832,67 @@ void ScriptEngine::registerEcsBindings() {
         return 1;
     });
     lua_setfield(L, -2, "addPreviousTransform");
+
+    // ----------------------------------------------------------------
+    // Texture lifecycle bindings — load and unload GPU textures.
+    // These bindings have NO World dependency — texture loading is a
+    // renderer function, not an ECS function.
+    //
+    // ffe.loadTexture(path)
+    //   path must be a relative string (no traversal, no absolute paths).
+    //   Uses the global asset root set by renderer::setAssetRoot() in C++.
+    //   Returns an integer handle id on success, nil on failure.
+    //   Return nil if the argument is not a string (MEDIUM-1 type guard).
+    //   Scripts must NOT be able to specify an asset root (LOW-5).
+    //
+    // ffe.unloadTexture(handle)
+    //   handle must be a positive integer in (0, UINT32_MAX] (LOW-2).
+    //   Destroys the GPU texture. After this call handle.id must not be used.
+    //   Returns nothing.
+    // ----------------------------------------------------------------
+
+    // ffe.loadTexture(path) -> integer or nil
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        // MEDIUM-1: explicit type guard — do NOT use lua_tostring without checking
+        // type first. lua_tostring silently coerces numbers and booleans to strings
+        // (e.g. ffe.loadTexture(0) would forward "0" to C++ without this guard).
+        if (lua_type(state, 1) != LUA_TSTRING) {
+            FFE_LOG_ERROR("ScriptEngine", "loadTexture: argument must be a string");
+            lua_pushnil(state);
+            return 1;
+        }
+        const char* path = lua_tostring(state, 1);
+
+        // LOW-5: call the single-argument overload — scripts must not control the
+        // asset root. The two-argument loadTexture(path, assetRoot) overload is
+        // intentionally NOT called from this binding.
+        const ffe::rhi::TextureHandle handle = ffe::renderer::loadTexture(path);
+
+        if (handle.id == 0u) {
+            lua_pushnil(state);
+            return 1;
+        }
+        lua_pushinteger(state, static_cast<lua_Integer>(handle.id));
+        return 1;
+    });
+    lua_setfield(L, -2, "loadTexture");
+
+    // ffe.unloadTexture(handle) -> nothing
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const lua_Integer rawHandle = luaL_checkinteger(state, 1);
+        // LOW-2: validate handle range before calling C++.
+        // 0 is the null sentinel (invalid handle); values above UINT32_MAX overflow u32.
+        if (rawHandle <= 0 || rawHandle > static_cast<lua_Integer>(UINT32_MAX)) {
+            FFE_LOG_ERROR("ScriptEngine",
+                          "unloadTexture: handle %" PRId64 " is out of range — no-op",
+                          static_cast<long long>(rawHandle));
+            return 0;
+        }
+        const ffe::rhi::TextureHandle handle{static_cast<ffe::u32>(rawHandle)};
+        ffe::renderer::unloadTexture(handle);
+        return 0;
+    });
+    lua_setfield(L, -2, "unloadTexture");
 
     // Set the 'ffe' table as a global.
     lua_setglobal(L, "ffe");

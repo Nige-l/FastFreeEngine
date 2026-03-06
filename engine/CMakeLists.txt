@@ -10,7 +10,7 @@ add_library(ffe_engine INTERFACE)
 target_link_libraries(ffe_engine INTERFACE
     ffe_core
     ffe_renderer
-    # ffe_audio      — added when audio is implemented
+    ffe_audio
     # ffe_physics    — added when physics is implemented
     ffe_scripting
     # ffe_editor     — added when editor is implemented

@@ -83,15 +83,14 @@ void luaDemoSystem(ffe::World& world, const float dt)
     // One-time scene setup: create player entity, load texture
     // -----------------------------------------------------------------------
     if (!ctx->sceneReady) {
-        // Attempt to load checkerboard.png.
-        // setAssetRoot is write-once; it may already be set in test environments.
-        // We use the two-argument loadTexture overload so we can pass assetRoot
-        // directly without depending on a prior setAssetRoot() call.
+        // Set the global asset root so that ffe.loadTexture() works from Lua.
+        // setAssetRoot() is write-once — safe to call here even if already set.
         static constexpr const char* ASSET_ROOT =
             "/home/nigel/FastFreeEngine/assets/textures";
+        ffe::renderer::setAssetRoot(ASSET_ROOT);
 
         ffe::rhi::TextureHandle loaded =
-            ffe::renderer::loadTexture("checkerboard.png", ASSET_ROOT);
+            ffe::renderer::loadTexture("checkerboard.png");
 
         if (ffe::rhi::isValid(loaded)) {
             s_playerTex = loaded;

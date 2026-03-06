@@ -829,3 +829,82 @@ Session 9 handover document written at `docs/session9-handover.md`.
 
 ---
 
+## Session 9 — [2026-03-06] — Audio Subsystem + ffe.loadTexture
+
+### Goals
+1. P0 — Audio subsystem implementation from ADR-006 (miniaudio + stb_vorbis)
+2. P1 — ffe.loadTexture(path) + ffe.unloadTexture(handle) Lua bindings
+3. P2 — M-1 getTransform GC pressure (deferred again — higher priority items took the session)
+
+### Session opened
+Autonomous execution continuing.
+
+---
+
+## 2026-03-06 — Session 9 Outcomes
+
+### Completed
+
+**Phase 1 — Parallel (system-engineer, architect):**
+- **system-engineer** downloaded and embedded `miniaudio.h` v0.11.25 (public domain) and `stb_vorbis.c` v1.22 (public domain) into `third_party/`. Version comments prepended to each file.
+- **architect** wrote `design-note-lua-texture-load.md` — 6 design questions answered: use global C++ asset root (write-once semantics maintained), return integer handle, include `ffe.unloadTexture` in same session, main-thread safe, existing C++ validation chain is sufficient, nil on failure.
+
+**Phase 2 — Security reviews:**
+- **security-auditor reviewed ffe.loadTexture design: PASS WITH CONDITIONS** — 1 MEDIUM (explicit `lua_type` string check before `lua_tostring`). All 5 LOW findings documented. Implementation may begin.
+
+**Phase 3 — Implementation (parallel, separate subsystems):**
+- **engine-dev** implemented audio subsystem:
+  - `engine/audio/audio.h` — public API: `init()`, `shutdown()`, `loadSound()`, `unloadSound()`, `playSound()`, `setMasterVolume()`, `isAudioAvailable()`, `getActiveVoiceCount()`
+  - `engine/audio/audio.cpp` — miniaudio (single-header, `MINIAUDIO_IMPLEMENTATION`), stb_vorbis (single-header, `STB_VORBIS_IMPLEMENTATION`), headless mode (null device), SPSC ring buffer (64 commands, release/acquire memory ordering), voice pool, path traversal prevention with strnlen throughout
+  - ALL 4 security conditions (HIGH-1, HIGH-2, MEDIUM-1, MEDIUM-2) implemented with code comments
+  - `engine/audio/CMakeLists.txt` updated from INTERFACE to STATIC library
+  - `tests/audio/test_audio.cpp` — 19 new tests
+- **engine-dev** implemented `ffe.loadTexture` + `ffe.unloadTexture` Lua bindings in `script_engine.cpp`:
+  - MEDIUM-1: `lua_type` string type guard before `lua_tostring`
+  - LOW-2: handle range validation in `unloadTexture`
+  - LOW-5: single-argument `renderer::loadTexture(path)` overload only
+  - 9 new scripting tests (including live file load test with headless RHI + setAssetRoot)
+
+**Phase 4 — Reviews:**
+- **security-auditor post-impl: PASS (both)** — all conditions verified in audio and ffe.loadTexture/unloadTexture. One false-positive syntax finding (comment lines already had `//`). SPSC ring buffer memory ordering confirmed correct. `unloadSound` mutex ordering confirmed safe.
+- **api-designer** wrote `engine/audio/.context.md` — full six-section doc including security section. Updated `engine/scripting/.context.md` with Texture Lifecycle subsection + per-frame loadTexture anti-pattern.
+- **game-dev-tester** updated `lua_demo/game.lua` to use `ffe.loadTexture("checkerboard.png")` for the follower sprite handle. Report: audio API 8/10 discoverability. Texture load API 7/10. Two friction points: (1) `setAssetRoot()` not called in `main.cpp` before Lua could use `ffe.loadTexture` — fixed immediately; (2) no Lua shutdown callback for `ffe.unloadTexture` at scene teardown — tracked.
+
+**Fixes applied after reviews:**
+- `examples/lua_demo/main.cpp`: added `renderer::setAssetRoot(ASSET_ROOT)` call before texture load, enabling `ffe.loadTexture()` from Lua to work correctly.
+
+### Session 9 Stats
+- **New engine files:** engine/audio/audio.h, engine/audio/audio.cpp (2 files)
+- **New third-party files:** third_party/miniaudio.h, third_party/stb_vorbis.c (2 files)
+- **New test file:** tests/audio/test_audio.cpp (19 tests)
+- **Modified:** engine/audio/CMakeLists.txt, engine/CMakeLists.txt, tests/CMakeLists.txt, script_engine.cpp, test_lua_sandbox.cpp, game.lua, lua_demo/main.cpp
+- **New tests:** 19 (audio) + 9 (ffe.loadTexture) = 28 new (total: 224)
+- **ADRs docs added:** design-note-lua-texture-load.md, security reviews (×3)
+- **.context.md files:** engine/audio/.context.md written; engine/scripting/.context.md updated
+
+### Review Results
+- security-auditor audio: **PASS** (all 4 conditions)
+- security-auditor ffe.loadTexture: **PASS** (1 MEDIUM + LOWs)
+- security-auditor post-impl: **PASS** (both features)
+- test-engineer: **PASS** (224/224, zero warnings, both compilers)
+- api-designer: **APPROVED**
+- game-dev-tester: **No blockers** — 8/10 (audio), 7/10 (texture load)
+
+### Known Issues Updated
+- **FRICTION-4 (no ffe.loadTexture):** FIXED — ffe.loadTexture + ffe.unloadTexture implemented.
+- **setAssetRoot in lua_demo:** FIXED — main.cpp now calls setAssetRoot() so Lua texture loading works.
+- **FRICTION-5 (no Lua shutdown callback):** NEW — ffe.unloadTexture cannot be called at scene teardown without a Lua `shutdown()` callback. Tracked for Session 10.
+- **Audio loop/stop:** NOT IN SCOPE — playSound is one-shot only. playMusic, stopMusic deferred.
+- **M-1 (getTransform GC pressure):** Still tracked.
+
+### Next Session Should Start With
+- Lua shutdown callback: optional `shutdown()` function called by ScriptEngine::shutdown()
+- Audio loop and music streaming: playMusic(handle, loop), stopMusic() — architect + implementation
+- Performance review: performance-critic reviews audio subsystem
+- M-1: getTransform GC batching design note (architect)
+- Entity creation from Lua: still missing `ffe.addComponent` for custom components
+
+Session 10 handover document written at `docs/session10-handover.md`.
+
+---
+

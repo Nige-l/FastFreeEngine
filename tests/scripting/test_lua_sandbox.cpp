@@ -4,6 +4,9 @@
 #include "core/ecs.h"
 #include "core/input.h"
 #include "renderer/render_system.h"
+#include "renderer/rhi.h"
+#include "renderer/rhi_types.h"
+#include "renderer/texture_loader.h"
 
 #include <string>
 
@@ -894,4 +897,105 @@ TEST_CASE("ffe.addSprite with zero width returns false (invalid dimension)", "[s
         "assert(ok == false)";
     REQUIRE(fix.engine.doString(script.c_str()));
     REQUIRE_FALSE(world.hasComponent<ffe::Sprite>(entity));
+}
+
+// =============================================================================
+// ffe.loadTexture / ffe.unloadTexture bindings
+// =============================================================================
+
+TEST_CASE("ffe.loadTexture exists as a callable in the ffe table", "[scripting][texture]") {
+    // The binding must be registered — type() of a C function is 'function'.
+    ScriptFixture fix;
+    REQUIRE(fix.engine.doString("assert(type(ffe.loadTexture) == 'function')"));
+}
+
+TEST_CASE("ffe.loadTexture with nil argument returns nil without crash", "[scripting][texture][security]") {
+    // Passing nil (no argument) must return nil, not crash.
+    // The type guard (MEDIUM-1) fires: lua_type(state, 1) is LUA_TNIL, not LUA_TSTRING.
+    ScriptFixture fix;
+    REQUIRE(fix.engine.doString("local h = ffe.loadTexture(nil); assert(h == nil)"));
+}
+
+TEST_CASE("ffe.loadTexture with a number argument returns nil (MEDIUM-1 type guard)", "[scripting][texture][security]") {
+    // MEDIUM-1: lua_tostring silently coerces numbers to strings, which could forward
+    // "0" as a path. The explicit lua_type check must reject non-string arguments.
+    ScriptFixture fix;
+    REQUIRE(fix.engine.doString("local h = ffe.loadTexture(0); assert(h == nil)"));
+    REQUIRE(fix.engine.doString("local h = ffe.loadTexture(42); assert(h == nil)"));
+}
+
+TEST_CASE("ffe.loadTexture with a boolean argument returns nil (MEDIUM-1 type guard)", "[scripting][texture][security]") {
+    // Same MEDIUM-1 guard — boolean coercion must not reach C++.
+    ScriptFixture fix;
+    REQUIRE(fix.engine.doString("local h = ffe.loadTexture(true); assert(h == nil)"));
+}
+
+TEST_CASE("ffe.loadTexture with a path traversal string returns nil", "[scripting][texture][security]") {
+    // Path traversal must be rejected by the C++ isPathSafe() layer. The binding
+    // forwards the string to C++ (which returns an invalid handle), and the binding
+    // converts id=0 to nil. No crash, no file opened.
+    ScriptFixture fix;
+    REQUIRE(fix.engine.doString("local h = ffe.loadTexture('../../../etc/passwd'); assert(h == nil)"));
+}
+
+TEST_CASE("ffe.unloadTexture with handle = 0 is a no-op", "[scripting][texture][security]") {
+    // LOW-2: handle 0 is the null sentinel — must be rejected before calling C++.
+    ScriptFixture fix;
+    REQUIRE(fix.engine.doString("ffe.unloadTexture(0)"));
+}
+
+TEST_CASE("ffe.unloadTexture with handle = -1 is a no-op", "[scripting][texture][security]") {
+    // LOW-2: negative handles are out of range — must be rejected.
+    ScriptFixture fix;
+    REQUIRE(fix.engine.doString("ffe.unloadTexture(-1)"));
+}
+
+TEST_CASE("ffe.unloadTexture with handle > UINT32_MAX is a no-op", "[scripting][texture][security]") {
+    // LOW-2: 4294967296 == UINT32_MAX + 1 == 2^32. lua_Integer is 64-bit, so this
+    // value is representable and must be range-checked to prevent truncation to 0.
+    ScriptFixture fix;
+    REQUIRE(fix.engine.doString("ffe.unloadTexture(4294967296)"));
+}
+
+TEST_CASE("ffe.loadTexture with valid file returns a non-nil integer handle", "[scripting][texture][requires_rhi]") {
+    // Full integration: headless RHI initialised, asset root set from C++,
+    // then ffe.loadTexture("checkerboard.png") called from Lua.
+    // The result must be a non-nil integer (the u32 texture handle id).
+    //
+    // NOTE: This test requires a display-capable GL context OR headless RHI support.
+    // The headless RHI returns valid handles (stubs), so this works without a display.
+
+    ffe::rhi::RhiConfig config;
+    config.headless = true;
+    const ffe::rhi::RhiResult result = ffe::rhi::init(config);
+    if (result != ffe::rhi::RhiResult::OK) {
+        // RHI unavailable — skip gracefully.
+        SUCCEED("RHI not available in this environment — skipping texture load test");
+        return;
+    }
+
+    // setAssetRoot has write-once semantics. This test process may already have
+    // a root set (from a prior test run in the same process). Use the two-argument
+    // overload via a direct C++ call to validate the path, then set root if needed.
+    // Because catch_discover_tests runs each TEST_CASE in a fresh subprocess, the
+    // write-once global is clean when this test runs.
+    const bool rootSet = ffe::renderer::setAssetRoot("/home/nigel/FastFreeEngine/assets/textures");
+    if (!rootSet && ffe::renderer::getAssetRoot()[0] == '\0') {
+        // Root was not set and the current root is empty — cannot proceed.
+        ffe::rhi::shutdown();
+        SUCCEED("setAssetRoot failed and no root is set — skipping");
+        return;
+    }
+
+    ScriptFixture fix;
+    REQUIRE(fix.engine.doString(
+        "local h = ffe.loadTexture('checkerboard.png')\n"
+        "assert(h ~= nil, 'expected non-nil handle from loadTexture')\n"
+        "assert(type(h) == 'number', 'expected integer handle')\n"
+        "assert(h > 0, 'expected positive handle id')\n"
+        // Clean up the texture immediately.
+        "ffe.unloadTexture(h)\n"
+    ));
+
+    ffe::rhi::shutdown();
 }

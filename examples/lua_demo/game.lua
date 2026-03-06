@@ -3,12 +3,15 @@
 -- This script is loaded once at startup via scriptEngine.doFile().
 -- It defines a global update() function that the C++ host calls each tick.
 --
--- What this demo exercises (Session 8 entity lifecycle bindings):
+-- What this demo exercises (Session 8 + Session 9 bindings):
 --   - ffe.createEntity()          spawn entities from Lua
 --   - ffe.addTransform(...)       attach Transform component
 --   - ffe.addSprite(...)          attach Sprite component
 --   - ffe.addPreviousTransform()  opt entity into render interpolation
 --   - ffe.destroyEntity()         not demonstrated here (no pickup/death yet)
+--   - ffe.loadTexture(path)       load a GPU texture from the asset root (Session 9)
+--   - ffe.unloadTexture(handle)   release a GPU texture (Session 9; no shutdown
+--                                 callback exists yet, so not called in this demo)
 --
 -- Controls:
 --   WASD       move the player
@@ -18,14 +21,17 @@
 -- Coordinate system: centered origin, -640..640 (x), -360..360 (y).
 -- Window: 1280x720.
 --
--- Texture handle note:
---   The C++ host loads checkerboard.png and owns that handle. We cannot pass it
---   to Lua directly without a further binding (e.g. ffe.getTextureHandle(name)).
---   Follower and spawned-marker sprites use handle 1 as an opaque stub -- this
---   is explicitly documented as acceptable for the headless renderer in the
---   test suite and in the .context.md "Do not hold texture handles across scene
---   transitions" warning. A real game would pass the handle through a dedicated
---   C++ binding or expose it as a registered constant.
+-- Texture handle note (Session 9 update):
+--   On the first update tick, ffe.loadTexture("checkerboard.png") is called once.
+--   If the load succeeds, the returned integer handle is used for the follower
+--   sprite instead of the hardcoded stub constant 1.
+--   If the load fails (e.g. because renderer::setAssetRoot() was not called from
+--   C++ before this script runs), a warning is logged and the stub handle 1 is
+--   used as a fallback -- the demo continues to work in headless mode.
+--
+--   NOTE: ffe.unloadTexture is NOT called at shutdown in this demo because the
+--   ScriptEngine has no Lua-side shutdown callback. The texture is reclaimed when
+--   the process exits. See the game-dev-tester session 9 report for details.
 
 local SPEED        = 150.0      -- pixels per second
 local FOLLOWER_SPEED = 80.0     -- pixels per second, follower chases player
@@ -33,8 +39,8 @@ local HALF_W       = 640.0      -- visible half-width
 local HALF_H       = 360.0      -- visible half-height
 local HALF_SPRITE  = 24.0       -- half-size of the 48px player sprite
 local MAX_MARKERS  = 5          -- maximum spawned static markers
-local MARKER_TEX   = 1          -- stub texture handle (headless-safe)
-local FOLLOWER_TEX = 1          -- stub texture handle (headless-safe)
+local MARKER_TEX   = 1          -- stub texture handle (headless-safe fallback)
+local FOLLOWER_TEX = 1          -- stub texture handle; replaced at first tick if loadTexture succeeds
 
 ffe.log("lua_demo: script loaded. WASD=move, SPACE=spawn marker, ESC=quit")
 
@@ -43,6 +49,11 @@ ffe.log("lua_demo: script loaded. WASD=move, SPACE=spawn marker, ESC=quit")
 -- Persistent across update() calls because these are upvalues of the module
 -- chunk, not locals inside update().
 -- ---------------------------------------------------------------------------
+
+-- textureHandle: loaded once on the first update() tick via ffe.loadTexture.
+-- nil until loaded; remains nil if the load fails (headless / no asset root).
+-- Used for the follower sprite; falls back to FOLLOWER_TEX (stub=1) on failure.
+local textureHandle = nil
 
 -- followerEntityId: created on the first update() tick, reused every frame.
 local followerEntityId = nil
@@ -145,10 +156,30 @@ end
 function update(entityId, dt)
 
     -- ------------------------------------------------------------------
-    -- First-tick initialisation: spawn the follower.
-    -- We defer this to the first update() call so that setWorld() has
-    -- already been called and the World is live.
+    -- First-tick initialisation: load the checkerboard texture via the
+    -- Session 9 ffe.loadTexture binding, then spawn the follower.
+    -- Both are deferred to the first update() call so that setWorld() and
+    -- the renderer are already live.
+    --
+    -- ffe.loadTexture requires renderer::setAssetRoot() to have been called
+    -- from C++ before this point. In the current lua_demo/main.cpp that call
+    -- is absent (texture loading uses the two-argument C++ overload directly),
+    -- so loadTexture may return nil. We guard for that and fall back to the
+    -- stub handle FOLLOWER_TEX = 1 so the demo keeps working headless.
     -- ------------------------------------------------------------------
+    if textureHandle == nil then
+        local loaded = ffe.loadTexture("checkerboard.png")
+        if loaded ~= nil then
+            textureHandle = loaded
+            ffe.log("lua_demo: ffe.loadTexture('checkerboard.png') succeeded, handle=" .. tostring(textureHandle))
+            FOLLOWER_TEX = textureHandle  -- use the real texture for follower sprites
+        else
+            ffe.log("lua_demo: WARNING -- ffe.loadTexture('checkerboard.png') returned nil "
+                    .. "(asset root not set from C++?). Follower will use stub handle 1.")
+            textureHandle = false  -- sentinel: we attempted the load; do not retry
+        end
+    end
+
     if followerEntityId == nil then
         followerEntityId = spawnFollower()
     end
