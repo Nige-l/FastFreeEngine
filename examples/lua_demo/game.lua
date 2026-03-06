@@ -5,8 +5,10 @@
 -- texture loading, and clean shutdown from Lua.
 --
 -- Controls:
---   WASD   move the player
---   ESC    quit cleanly via ffe.requestShutdown()
+--   WASD       move the player
+--   M          toggle background music on/off
+--   UP/DOWN    adjust music volume
+--   ESC        quit cleanly via ffe.requestShutdown()
 --
 -- The C++ host creates one player entity (white square, 48x48) and passes
 -- its ID to update(entityId, dt) each tick. Stars are spawned from Lua
@@ -20,10 +22,11 @@
 -- ---------------------------------------------------------------------------
 -- Constants
 -- ---------------------------------------------------------------------------
-local PLAYER_SPEED = 200.0
-local STAR_COUNT   = 8
-local HALF_W       = 640
-local HALF_H       = 360
+local PLAYER_SPEED   = 200.0
+local STAR_COUNT     = 8
+local HALF_W         = 640
+local HALF_H         = 360
+local VOLUME_STEP    = 0.05
 
 -- ---------------------------------------------------------------------------
 -- State
@@ -36,6 +39,16 @@ local musicHandle     = nil
 local spritesheetTex  = nil
 local playerTex       = nil
 local transformBuf    = {}  -- reusable table for fillTransform (zero-alloc reads)
+local musicPlaying    = false
+
+-- ---------------------------------------------------------------------------
+-- Helper: update the HUD text with current game state
+-- ---------------------------------------------------------------------------
+local function updateHud()
+    ffe.setHudText("Score: " .. score ..
+                   "  |  Stars: " .. #stars ..
+                   "  |  WASD move  |  M music  |  Up/Down vol  |  ESC quit")
+end
 
 -- ---------------------------------------------------------------------------
 -- Helper: random position within bounds (with margin for sprite size)
@@ -52,7 +65,8 @@ local function spawnStar(x, y)
     local id = ffe.createEntity()
     if not id then return nil end
 
-    ffe.addTransform(id, x, y, 0, 1, 1)
+    local rot = math.random() * 2 * math.pi  -- random rotation for visual variety
+    ffe.addTransform(id, x, y, rot, 1, 1)
     ffe.addSprite(id, spritesheetTex or 1, 32, 32, 1, 1, 1, 1, 3)
     ffe.addPreviousTransform(id)
     ffe.addSpriteAnimation(id, 8, 4, 0.12, true)
@@ -72,7 +86,11 @@ ffe.setCollisionCallback(function(entityA, entityB)
             -- Pickup!
             score = score + 1
             ffe.log("Score: " .. tostring(score))
-            ffe.setHudText("Score: " .. tostring(score))
+            updateHud()
+
+            if score % 10 == 0 then
+                ffe.log("Amazing! Score: " .. score)
+            end
 
             if sfxHandle then ffe.playSound(sfxHandle, 0.8) end
 
@@ -106,7 +124,9 @@ end
 if musicHandle then
     ffe.playMusic(musicHandle, true)
     ffe.setMusicVolume(0.3)
+    musicPlaying = true
     ffe.log("Music started (handle=" .. tostring(musicHandle) .. ", vol=0.3)")
+    ffe.log("Music controls: M to toggle, UP/DOWN arrows to adjust volume")
 else
     ffe.log("WARNING: music.ogg not loaded -- music disabled")
 end
@@ -119,7 +139,7 @@ for i = 1, STAR_COUNT do
 end
 
 ffe.log("Collect the Stars! WASD to move, collect all stars. Score: 0")
-ffe.setHudText("Score: 0")
+updateHud()
 
 -- ---------------------------------------------------------------------------
 -- update(entityId, dt) -- called per tick by the C++ host
@@ -127,9 +147,11 @@ ffe.setHudText("Score: 0")
 -- dt: fixed timestep delta (1/60 for 60 Hz)
 -- ---------------------------------------------------------------------------
 function update(entityId, dt)
-    -- First-tick: remember the player entity and add a collider to it
+    -- First-tick: remember the player entity, tint it light blue, add collider
     if playerEntity == nil then
         playerEntity = entityId
+        -- Re-add sprite with light blue tint (r=0.7, g=0.85, b=1.0) for visual distinction
+        ffe.addSprite(entityId, playerTex or 1, 48, 48, 0.7, 0.85, 1.0, 1.0, 1)
         ffe.addCollider(entityId, "aabb", 24, 24)  -- 48x48 sprite = 24 half-extents
     end
 
@@ -148,6 +170,31 @@ function update(entityId, dt)
     local ny = math.max(-336, math.min(336, transformBuf.y + dy))
     ffe.setTransform(entityId, nx, ny, transformBuf.rotation,
                      transformBuf.scaleX, transformBuf.scaleY)
+
+    -- Music controls: M toggles, UP/DOWN adjust volume
+    if musicHandle then
+        if ffe.isKeyPressed(ffe.KEY_M) then
+            if musicPlaying then
+                ffe.stopMusic()
+                musicPlaying = false
+                ffe.log("Music paused")
+            else
+                ffe.playMusic(musicHandle, true)
+                musicPlaying = true
+                ffe.log("Music resumed")
+            end
+        end
+        if ffe.isKeyPressed(ffe.KEY_UP) then
+            local vol = math.min(1.0, ffe.getMusicVolume() + VOLUME_STEP)
+            ffe.setMusicVolume(vol)
+            ffe.log("Music volume: " .. string.format("%.2f", vol))
+        end
+        if ffe.isKeyPressed(ffe.KEY_DOWN) then
+            local vol = math.max(0.0, ffe.getMusicVolume() - VOLUME_STEP)
+            ffe.setMusicVolume(vol)
+            ffe.log("Music volume: " .. string.format("%.2f", vol))
+        end
+    end
 
     -- ESC to quit
     if ffe.isKeyPressed(ffe.KEY_ESCAPE) then

@@ -1850,3 +1850,120 @@ TEST_CASE("ffe.setCollisionCallback accepts nil to unregister", "[scripting][col
     REQUIRE(fix.engine.doString("ffe.setCollisionCallback(function(a, b) end)"));
     REQUIRE(fix.engine.doString("ffe.setCollisionCallback(nil)"));
 }
+
+// =============================================================================
+// ffe.setHudText — HUD text buffer from Lua
+// =============================================================================
+
+TEST_CASE("ffe.setHudText sets text and verifies HudTextBuffer contents", "[scripting][hud]") {
+    ScriptFixture fix;
+    ffe::World world;
+    world.registry().ctx().emplace<ffe::HudTextBuffer>();
+    fix.engine.setWorld(&world);
+
+    REQUIRE(fix.engine.doString("ffe.setHudText('hello')"));
+
+    const auto* buf = world.registry().ctx().find<ffe::HudTextBuffer>();
+    REQUIRE(buf != nullptr);
+    CHECK(std::string(buf->text) == "hello");
+}
+
+TEST_CASE("ffe.setHudText clears text with empty string", "[scripting][hud]") {
+    ScriptFixture fix;
+    ffe::World world;
+    world.registry().ctx().emplace<ffe::HudTextBuffer>();
+    fix.engine.setWorld(&world);
+
+    // Set some text first, then clear it.
+    REQUIRE(fix.engine.doString("ffe.setHudText('something')"));
+    REQUIRE(fix.engine.doString("ffe.setHudText('')"));
+
+    const auto* buf = world.registry().ctx().find<ffe::HudTextBuffer>();
+    REQUIRE(buf != nullptr);
+    CHECK(std::string(buf->text).empty());
+}
+
+TEST_CASE("ffe.setHudText handles nil argument (clears text)", "[scripting][hud]") {
+    ScriptFixture fix;
+    ffe::World world;
+    world.registry().ctx().emplace<ffe::HudTextBuffer>();
+    fix.engine.setWorld(&world);
+
+    // Set text, then pass nil — must clear without crashing.
+    REQUIRE(fix.engine.doString("ffe.setHudText('before')"));
+    REQUIRE(fix.engine.doString("ffe.setHudText(nil)"));
+
+    const auto* buf = world.registry().ctx().find<ffe::HudTextBuffer>();
+    REQUIRE(buf != nullptr);
+    CHECK(std::string(buf->text).empty());
+}
+
+TEST_CASE("ffe.setHudText handles non-string argument (clears text)", "[scripting][hud]") {
+    ScriptFixture fix;
+    ffe::World world;
+    world.registry().ctx().emplace<ffe::HudTextBuffer>();
+    fix.engine.setWorld(&world);
+
+    // Set text, then pass a number — not a string, so it must clear the buffer.
+    REQUIRE(fix.engine.doString("ffe.setHudText('before')"));
+    REQUIRE(fix.engine.doString("ffe.setHudText(42)"));
+
+    const auto* buf = world.registry().ctx().find<ffe::HudTextBuffer>();
+    REQUIRE(buf != nullptr);
+    CHECK(std::string(buf->text).empty());
+
+    // Boolean argument — also not a string.
+    REQUIRE(fix.engine.doString("ffe.setHudText('before2')"));
+    REQUIRE(fix.engine.doString("ffe.setHudText(true)"));
+    CHECK(std::string(buf->text).empty());
+
+    // Table argument — also not a string.
+    REQUIRE(fix.engine.doString("ffe.setHudText('before3')"));
+    REQUIRE(fix.engine.doString("ffe.setHudText({})"));
+    CHECK(std::string(buf->text).empty());
+}
+
+TEST_CASE("ffe.setHudText truncates text longer than HUD_TEXT_BUFFER_SIZE - 1", "[scripting][hud][security]") {
+    ScriptFixture fix;
+    ffe::World world;
+    world.registry().ctx().emplace<ffe::HudTextBuffer>();
+    fix.engine.setWorld(&world);
+
+    // Build a Lua string longer than HUD_TEXT_BUFFER_SIZE (256).
+    // string.rep('A', 300) produces 300 'A' characters.
+    REQUIRE(fix.engine.doString("ffe.setHudText(string.rep('A', 300))"));
+
+    const auto* buf = world.registry().ctx().find<ffe::HudTextBuffer>();
+    REQUIRE(buf != nullptr);
+    // Must be truncated to HUD_TEXT_BUFFER_SIZE - 1 = 255 characters.
+    CHECK(std::strlen(buf->text) == ffe::HUD_TEXT_BUFFER_SIZE - 1);
+    // Must be null-terminated.
+    CHECK(buf->text[ffe::HUD_TEXT_BUFFER_SIZE - 1] == '\0');
+    // All stored characters must be 'A'.
+    for (ffe::u32 i = 0; i < ffe::HUD_TEXT_BUFFER_SIZE - 1; ++i) {
+        CHECK(buf->text[i] == 'A');
+    }
+}
+
+TEST_CASE("ffe.setHudText works when HudTextBuffer is emplaced in ECS context", "[scripting][hud]") {
+    // Verifies the binding correctly finds the HudTextBuffer in the ECS context
+    // when it has been emplaced (not just default-constructed by something else).
+    ScriptFixture fix;
+    ffe::World world;
+    auto& hudBuf = world.registry().ctx().emplace<ffe::HudTextBuffer>();
+    // Pre-fill to confirm overwrite works.
+    std::strncpy(hudBuf.text, "old text", ffe::HUD_TEXT_BUFFER_SIZE - 1);
+    hudBuf.text[ffe::HUD_TEXT_BUFFER_SIZE - 1] = '\0';
+    fix.engine.setWorld(&world);
+
+    REQUIRE(fix.engine.doString("ffe.setHudText('new text')"));
+
+    CHECK(std::string(hudBuf.text) == "new text");
+}
+
+TEST_CASE("ffe.setHudText is no-op when no World is set (does not crash)", "[scripting][hud]") {
+    ScriptFixture fix;
+    // No setWorld() call — World pointer is nullptr in Lua registry.
+    // Must not crash; the binding logs an error and returns 0.
+    REQUIRE(fix.engine.doString("ffe.setHudText('should not crash')"));
+}

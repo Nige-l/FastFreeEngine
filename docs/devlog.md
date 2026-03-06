@@ -1470,3 +1470,64 @@ Session 18 handover document written at `docs/session18-handover.md`.
 
 ---
 
+## 2026-03-06 — Session 18: setHudText Tests, .context.md Updates, Demo Polish
+
+### Planned
+- P0: Test coverage for ffe.setHudText (7 new test cases)
+- P1: Update .context.md files for HudTextBuffer, setHudText, HUD rendering
+- P2: Demo polish — better HUD, music controls, visual variety
+
+### Completed
+
+- **7 new setHudText tests** — all critical paths now covered:
+  - Set text and verify HudTextBuffer contents
+  - Clear text with empty string `""`
+  - Clear text with `nil` argument
+  - Handle non-string arguments (number, boolean, table) — clears buffer without crashing
+  - Truncation at 255 characters (HUD_TEXT_BUFFER_SIZE - 1) with null termination verified
+  - Overwrite existing HudTextBuffer contents
+  - No-op when World is not set (no crash)
+- **.context.md updates** for three subsystems:
+  - `engine/scripting/.context.md` — added `ffe.setHudText(text)` to Lua API reference
+  - `engine/core/.context.md` — added `HudTextBuffer` struct to ECS context documentation
+  - `engine/editor/.context.md` — documented HUD rendering behaviour and `setShowHud()`
+- **Demo polish** — "Collect the Stars" is now more polished and interactive:
+  - HUD shows score, remaining star count, and control hints ("Score: 3 | Stars: 5 | WASD move | M music | Up/Down vol | ESC quit")
+  - Music controls: M key toggles music on/off, UP/DOWN arrows adjust volume in 0.05 steps
+  - Player entity has light blue tint (r=0.7, g=0.85, b=1.0) for visual distinction from stars
+  - Stars spawn with random rotation (`math.random() * 2 * math.pi`) for visual variety
+  - Score milestone messages logged at multiples of 10
+  - Music state tracked via `musicPlaying` flag, volume via `ffe.getMusicVolume()`
+  - All cleanup verified in shutdown()
+
+### Implementation Details
+
+| File | Change |
+|------|--------|
+| `tests/scripting/test_lua_sandbox.cpp` | +117 lines: 7 new TEST_CASE blocks for ffe.setHudText |
+| `engine/scripting/.context.md` | Added setHudText to Lua API docs |
+| `engine/core/.context.md` | Added HudTextBuffer to ECS context docs |
+| `engine/editor/.context.md` | Added HUD rendering and setShowHud docs |
+| `examples/lua_demo/game.lua` | Music controls, updateHud() helper, player tint, random star rotation, milestone messages |
+
+### Session 18 Stats
+- **Modified files:** 5
+- **Lines changed:** +226 / -10
+- **Test count:** 348/348 pass on both Clang-18 and GCC-13, zero warnings
+- **New tests:** 7 (setHudText coverage)
+
+### Known Issues Updated
+- **Console/log viewer panel:** Still a stretch goal from Session 13
+- **M-1 getTransform GC pressure:** Mitigated by fillTransform() usage in demo
+- **isAudioPathSafe() bare ".." check:** LOW — still tracked, non-exploitable
+
+### Next Session Should Start With
+- P0: Update MEMORY.md with current state (test count 348, session count 18, all subsystems)
+- P1: Any remaining integration issues found during testing
+- P2: A second small example game (different genre) to show engine versatility
+- P3: Further polish or features
+
+Session 19 handover document written at `docs/session19-handover.md`.
+
+---
+
