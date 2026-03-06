@@ -1800,3 +1800,36 @@ User-reported bugs: F1 editor toggle broken, no audio. After initial fix (Sessio
 
 ---
 
+## 2026-03-06 — Session 27: Text Rendering + Title Screens
+
+### Completed
+
+**New Engine Feature: Bitmap Text Rendering**
+- Built-in 8x8 pixel font (CP437-style, 95 ASCII glyphs) embedded as compile-time data
+- Font baked into 128x48 RGBA8 NEAREST-filtered GPU texture atlas at init
+- `TextRenderer` queues up to 4096 glyph quads per frame, flushed in screen-space ortho
+- Integrated into Application render path: world sprites -> text -> editor overlay
+- `ffe.drawText(text, x, y [, scale, r, g, b, a])` Lua binding
+- `ffe.getScreenWidth()` / `ffe.getScreenHeight()` for centering text
+- No new dependencies — zero external font files, just embedded bitmap data
+
+**Expanded Key Constants**
+- 45 new Lua key constants: A-Z, 0-9, arrows, SPACE, ENTER, TAB, BACKSPACE, LEFT_SHIFT, LEFT_CTRL, F1-F5
+
+**Title Screens for All Three Demos**
+- lua_demo: gold "COLLECT THE STARS" with control hints
+- pong: blue "PONG" with per-player controls
+- breakout: orange "BREAKOUT" with animated color blocks
+- All use pulsing "PRESS SPACE TO START" prompt
+- State machine pattern: title -> playing -> gameover
+
+**On-Screen HUD Text for All Demos**
+- lua_demo: score with flash effect on pickup, controls hint
+- pong: large centered score, serve/win messages
+- breakout: score + lives display, launch/game-over messages, bottom controls
+
+### Test Results
+- **371 tests pass** on both Clang-18 and GCC-13, zero warnings (6 new tests)
+
+---
+
