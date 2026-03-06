@@ -2185,3 +2185,103 @@ No new API paradigm — changes are config adjustments and removal of incorrect 
 - P2: Save/load system (serialise game state to disk)
 
 ---
+
+## 2026-03-06 — Session 35: Phase 1 Feature-Complete — Gamepad, Save/Load, TTF Fonts
+
+### Summary
+
+Session 35 delivered the final three Phase 1 features, bringing the engine to feature-complete for Phase 1. All three features followed the 5-phase development flow introduced in Session 34 (design note, implementation, build verification, expert panel, integration).
+
+### Features Implemented
+
+#### 1. Gamepad Input
+- **GLFW gamepad API** — no new dependency, uses GLFW's built-in gamepad support
+- Supports up to **4 gamepads** simultaneously
+- Full button state tracking: pressed, held, released
+- **6 axes** with configurable deadzone (left stick, right stick, triggers)
+- **18 Lua constants** (`GAMEPAD_BUTTON_A`, `GAMEPAD_AXIS_LEFT_X`, etc.)
+- **7 Lua bindings**: `isGamepadConnected`, `getGamepadAxis`, `isGamepadButtonPressed`, `isGamepadButtonHeld`, `isGamepadButtonReleased`, `getGamepadName`, `setGamepadDeadzone`
+- Test hooks for headless testing (no physical gamepad required)
+- Pending buffer pattern for pressed/released state (matches keyboard input design)
+- **15 new tests**
+
+#### 2. Save/Load System
+- `ffe.saveData(filename, table)` / `ffe.loadData(filename)` — simple Lua table persistence
+- **JSON on disk** via nlohmann-json (already a vcpkg dependency)
+- Full security hardening:
+  - Filename allowlist: alphanumeric, hyphens, underscores, `.json` extension only
+  - `realpath` validation to prevent path traversal
+  - **1 MB** per-file size limit
+  - **128 file** count limit per save directory
+  - **32 depth** limit for nested tables
+  - Atomic writes (write to `.tmp`, rename into place)
+- `setSaveRoot` is write-once (set by the engine host, not overridable from Lua)
+- **22 new tests**
+
+#### 3. TTF Font Rendering
+- **stb_truetype** + **stb_rect_pack** for font atlas generation
+- `GL_RED` texture with swizzle mask (`GL_TEXTURE_SWIZZLE_RGBA`) for single-channel rendering
+- Supports up to **8 loaded fonts** simultaneously
+- Font atlas: 512x512 texture, ASCII range 32-126, configurable pixel height
+- **4 Lua bindings**: `ffe.loadFont`, `ffe.unloadFont`, `ffe.drawFontText`, `ffe.measureText`
+- `measureText` returns width and height for layout calculations
+- **17 new tests**
+
+### Process Improvements
+- **build-engineer agent** introduced in Session 34, used throughout Session 35
+- **5-phase development flow**: design note, implementation, build verification (both compilers), expert panel, integration testing
+- This flow caught several build issues early (GL_TEXTURE_SWIZZLE defines, GCC memset warnings, gamepad test hook pending buffer)
+
+### Camera Shake and UI Fixes
+- Removed world-space life indicator entities from Breakout (was shaking with camera — incorrect)
+- Reduced shake intensities across all three demos
+- Fixed HUD sizing: Breakout text reduced from scale 3 to scale 2, lives display right-aligned
+
+### Build Fixes
+- Added `GL_TEXTURE_SWIZZLE_R/G/B/A` defines for GLAD compatibility
+- Fixed GCC memset warnings in font rendering code
+- Fixed gamepad test hook: added pending buffer for pressed/released state in headless tests
+
+### Expert Panel
+- **performance-critic**: PASS (minor: texture thrashing potential if fonts loaded/unloaded rapidly — backlog item)
+- **security-auditor**: MINOR ISSUES (LOW findings only — all acceptable)
+- **api-designer**: updated 3 `.context.md` files (`engine/core/`, `engine/renderer/`, `engine/scripting/`)
+
+### game-dev-tester: SKIPPED
+No new API paradigm — all three features follow the established `ffe.*` binding pattern. Standard integration.
+
+### Design Notes Added
+- `docs/architecture/design-note-save-load.md`
+- `docs/architecture/design-note-ttf-font.md`
+
+### Build Results
+- **498 tests** passing on both Clang-18 and GCC-13, zero warnings
+
+### Phase 1 Status
+| Item | Status |
+|------|--------|
+| Core engine (ECS, game loop, arena allocator) | DONE |
+| OpenGL 3.3 renderer (sprite batching, render queue) | DONE |
+| Input (keyboard, mouse, gamepad) | DONE |
+| Audio (SFX + music streaming) | DONE |
+| Collision (spatial hash, AABB/circle) | DONE |
+| Lua scripting (LuaJIT sandbox, 40+ bindings) | DONE |
+| Sprite animation | DONE |
+| Text rendering (bitmap + TTF) | DONE |
+| Camera system (shake, clear color) | DONE |
+| Scene management | DONE |
+| Particle system | DONE |
+| Tilemap rendering | DONE |
+| Timer system | DONE |
+| Save/load system | DONE |
+| Tutorial documentation | REMAINING |
+| CONTRIBUTING.md | REMAINING |
+| Windows build | REMAINING |
+| macOS build | REMAINING |
+
+### Next Session Should Start With
+- Tutorial documentation covering all Phase 1 features (gamepad, save/load, TTF fonts)
+- CONTRIBUTING.md polish
+- Assess Phase 1 exit criteria and readiness for Phase 2
+
+---

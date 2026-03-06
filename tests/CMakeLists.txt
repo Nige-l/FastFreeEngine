@@ -7,8 +7,10 @@ add_executable(ffe_tests
     core/test_ecs.cpp
     core/test_renderer_headless.cpp
     core/test_input.cpp
+    core/test_gamepad.cpp
     core/test_particles.cpp
     physics/test_narrow_phase.cpp
+    renderer/test_ttf_font.cpp
 )
 
 target_link_libraries(ffe_tests
@@ -29,6 +31,7 @@ catch_discover_tests(ffe_tests)
 add_executable(ffe_tests_scripting
     test_main.cpp
     scripting/test_lua_sandbox.cpp
+    scripting/test_save_load.cpp
 )
 
 target_link_libraries(ffe_tests_scripting

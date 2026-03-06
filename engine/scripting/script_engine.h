@@ -113,6 +113,20 @@ public:
     // Returns the stored script root, or nullptr if not set.
     const char* scriptRoot() const;
 
+    // Save root for ffe.saveData / ffe.loadData.
+    // Write-once, same pattern as asset root.
+    static constexpr u32 SAVE_ROOT_BUF_SIZE = 512u;
+    char m_saveRoot[SAVE_ROOT_BUF_SIZE] = {};
+
+public:
+    // Set the save root directory for ffe.saveData / ffe.loadData.
+    // Must be an absolute path. Write-once: rejects further calls once set.
+    // Returns true on success, false if null/empty or already set.
+    bool setSaveRoot(const char* absolutePath);
+
+    // Returns the stored save root, or nullptr if not set.
+    const char* saveRoot() const;
+
     // Re-entrancy depth for loadScene (security guard against recursive loading).
     u32 m_loadSceneDepth = 0;
     static constexpr u32 MAX_LOAD_SCENE_DEPTH = 4;

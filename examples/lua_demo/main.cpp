@@ -149,6 +149,12 @@ void luaDemoSystem(ffe::World& world, const float dt)
         const char* SCRIPT_ROOT = scriptRootBuf;
         ctx->scripts->setScriptRoot(SCRIPT_ROOT);
 
+        // Set save root to project root — saves go in <projectRoot>/saves/
+        static char saveRootBuf[512];
+        if (demoProjectRoot(saveRootBuf, sizeof(saveRootBuf))) {
+            ctx->scripts->setSaveRoot(saveRootBuf);
+        }
+
         const bool ok = ctx->scripts->doFile("game.lua", SCRIPT_ROOT);
         if (!ok) {
             FFE_LOG_ERROR("LuaDemo", "game.lua failed to load -- Lua movement disabled");

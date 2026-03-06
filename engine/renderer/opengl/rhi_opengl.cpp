@@ -11,6 +11,21 @@
 
 #include <cstring>
 
+// GL 3.3 texture swizzle constants — missing from our GLAD generation.
+// These are core GL 3.3 enums (ARB_texture_swizzle), values per the OpenGL spec.
+#ifndef GL_TEXTURE_SWIZZLE_R
+#define GL_TEXTURE_SWIZZLE_R 0x8E42
+#endif
+#ifndef GL_TEXTURE_SWIZZLE_G
+#define GL_TEXTURE_SWIZZLE_G 0x8E43
+#endif
+#ifndef GL_TEXTURE_SWIZZLE_B
+#define GL_TEXTURE_SWIZZLE_B 0x8E44
+#endif
+#ifndef GL_TEXTURE_SWIZZLE_A
+#define GL_TEXTURE_SWIZZLE_A 0x8E45
+#endif
+
 namespace ffe::rhi {
 
 // --- Internal state ---
@@ -466,6 +481,16 @@ TextureHandle createTexture(const TextureDesc& desc) {
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, detail::toGlTextureWrap(desc.wrap));
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, detail::toGlTextureWrap(desc.wrap));
+
+    // Apply R-to-alpha swizzle for single-channel font atlases.
+    // Maps RGBA sampling to (1, 1, 1, red_channel) so the standard RGBA
+    // sprite shader can render coverage-based glyphs with tint color.
+    if (desc.swizzleRedToAlpha && desc.format == TextureFormat::R8) {
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_R, GL_ONE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_G, GL_ONE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B, GL_ONE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_A, GL_RED);
+    }
 
     if (desc.generateMipmaps) {
         glGenerateMipmap(GL_TEXTURE_2D);

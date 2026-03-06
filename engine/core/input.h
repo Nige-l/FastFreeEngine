@@ -79,6 +79,39 @@ enum class MouseButton : i32 {
     EXTRA2 = 4
 };
 
+// --- Gamepad -----------------------------------------------------------------
+
+inline constexpr i32 MAX_GAMEPADS = 4;
+inline constexpr i32 MAX_GAMEPAD_BUTTONS = 15;
+inline constexpr i32 MAX_GAMEPAD_AXES = 6;
+
+enum class GamepadButton : i32 {
+    A             = 0,
+    B             = 1,
+    X             = 2,
+    Y             = 3,
+    LEFT_BUMPER   = 4,
+    RIGHT_BUMPER  = 5,
+    BACK          = 6,
+    START         = 7,
+    GUIDE         = 8,
+    LEFT_STICK    = 9,
+    RIGHT_STICK   = 10,
+    DPAD_UP       = 11,
+    DPAD_DOWN     = 12,
+    DPAD_LEFT     = 13,
+    DPAD_RIGHT    = 14
+};
+
+enum class GamepadAxis : i32 {
+    LEFT_X        = 0,
+    LEFT_Y        = 1,
+    RIGHT_X       = 2,
+    RIGHT_Y       = 3,
+    LEFT_TRIGGER  = 4,
+    RIGHT_TRIGGER = 5
+};
+
 // --- Actions -----------------------------------------------------------------
 
 inline constexpr i32 MAX_ACTIONS = 64;
@@ -126,6 +159,18 @@ bool isMouseButtonUp(MouseButton btn);
 void setCursorCaptured(bool captured);
 bool isCursorCaptured();
 
+// --- Gamepad Queries ---------------------------------------------------------
+
+bool isGamepadConnected(i32 id);
+bool isGamepadButtonPressed(i32 id, GamepadButton btn);
+bool isGamepadButtonHeld(i32 id, GamepadButton btn);
+bool isGamepadButtonReleased(i32 id, GamepadButton btn);
+f32  getGamepadAxis(i32 id, GamepadAxis axis);
+const char* getGamepadName(i32 id);
+
+void setGamepadDeadzone(f32 deadzone);
+f32  getGamepadDeadzone();
+
 // --- Action Mapping ----------------------------------------------------------
 
 // Register a named action. Returns action index, or -1 if MAX_ACTIONS exceeded.
@@ -157,6 +202,9 @@ namespace test {
     void simulateMouseButtonRelease(MouseButton btn);
     void simulateMouseMove(f64 x, f64 y);
     void simulateScroll(f64 dx, f64 dy);
+    void simulateGamepadButton(i32 id, GamepadButton btn, bool pressed);
+    void simulateGamepadAxis(i32 id, GamepadAxis axis, f32 value);
+    void simulateGamepadConnect(i32 id, bool connected);
 } // namespace test
 #endif
 

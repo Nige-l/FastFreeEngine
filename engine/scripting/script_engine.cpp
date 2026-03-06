@@ -17,12 +17,17 @@ extern "C" {
 #include "renderer/text_renderer.h"
 #include "physics/collider2d.h"
 
+#include <nlohmann/json.hpp>
+
 #include <algorithm>  // std::max, std::min
 #include <cinttypes>  // PRId64
 #include <climits>    // PATH_MAX
 #include <cmath>      // std::isfinite
+#include <cstdio>     // std::rename, std::snprintf
 #include <cstring>    // strnlen, strstr, strlen, memcpy
 #include <cstdlib>
+#include <filesystem> // create_directories
+#include <sys/stat.h> // stat
 
 // ---------------------------------------------------------------------------
 // Registry key for the World pointer
@@ -83,6 +88,211 @@ bool isPathSafe(const char* path) {
 // This is registered via lua_sethook and runs in C, so it can call luaL_error.
 void instructionHook(lua_State* L, lua_Debug* /*ar*/) {
     luaL_error(L, "script exceeded instruction budget (possible infinite loop)");
+}
+
+// Registry key for the ScriptEngine pointer (for save/load bindings).
+// We reuse s_engineRegistryKey defined below for timer/save bindings.
+
+// ---------------------------------------------------------------------------
+// Save/Load helpers
+// ---------------------------------------------------------------------------
+
+// Maximum save file size (1 MB).
+static constexpr std::size_t MAX_SAVE_FILE_SIZE = 1024u * 1024u;
+
+// Maximum JSON nesting depth during Lua table -> JSON serialization.
+static constexpr int MAX_SAVE_NESTING_DEPTH = 32;
+
+// Maximum number of .json files in the saves directory.
+static constexpr int MAX_SAVE_FILE_COUNT = 128;
+
+// Returns true if the filename consists only of [a-zA-Z0-9._-] characters,
+// ends with ".json", and contains no path traversal.
+bool isValidSaveFilename(const char* filename) {
+    if (filename == nullptr || filename[0] == '\0') return false;
+
+    const std::size_t len = std::strlen(filename);
+    if (len > 255) return false;
+
+    // Must end with .json
+    if (len < 6) return false;  // minimum: "x.json" = 6 chars
+    if (std::strcmp(filename + len - 5, ".json") != 0) return false;
+
+    // Character allowlist and traversal check
+    for (std::size_t i = 0; i < len; ++i) {
+        const char c = filename[i];
+        const bool allowed = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                             (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-';
+        if (!allowed) return false;
+    }
+
+    // Reject ".." anywhere in the filename
+    if (std::strstr(filename, "..") != nullptr) return false;
+
+    // Reject slashes (already covered by allowlist, but explicit for safety)
+    if (std::strchr(filename, '/') != nullptr) return false;
+    if (std::strchr(filename, '\\') != nullptr) return false;
+
+    return true;
+}
+
+// Count .json files in a directory. Returns -1 on error.
+int countJsonFiles(const char* dirPath) {
+    int count = 0;
+    std::error_code ec;
+    for (const auto& entry : std::filesystem::directory_iterator(dirPath, ec)) {
+        if (ec) return -1;
+        if (entry.is_regular_file(ec) && !ec) {
+            const auto& p = entry.path();
+            if (p.extension() == ".json") {
+                ++count;
+            }
+        }
+    }
+    return count;
+}
+
+// Recursively convert a Lua table (at stack index tblIdx) to nlohmann::json.
+// depth tracks recursion. Unsupported types are skipped with a log warning.
+nlohmann::json luaTableToJson(lua_State* L, int tblIdx, int depth) {
+    if (depth > MAX_SAVE_NESTING_DEPTH) {
+        FFE_LOG_WARN("ScriptEngine", "saveData: max nesting depth (%d) exceeded — truncating", MAX_SAVE_NESTING_DEPTH);
+        return nlohmann::json(nullptr);
+    }
+
+    // Make absolute index
+    if (tblIdx < 0) tblIdx = lua_gettop(L) + tblIdx + 1;
+
+    // Detect if the table is array-like: consecutive integer keys starting at 1.
+    bool isArray = true;
+    lua_Integer maxIdx = 0;
+    lua_Integer count = 0;
+
+    lua_pushnil(L);
+    while (lua_next(L, tblIdx) != 0) {
+        if (lua_type(L, -2) == LUA_TNUMBER) {
+            const lua_Number key = lua_tonumber(L, -2);
+            const auto intKey = static_cast<lua_Integer>(key);
+            if (static_cast<lua_Number>(intKey) == key && intKey >= 1) {
+                if (intKey > maxIdx) maxIdx = intKey;
+                ++count;
+            } else {
+                isArray = false;
+            }
+        } else {
+            isArray = false;
+        }
+        lua_pop(L, 1); // pop value, keep key
+    }
+
+    // If all keys are sequential integers 1..N, treat as array
+    if (isArray && maxIdx == count && count > 0) {
+        nlohmann::json arr = nlohmann::json::array();
+        for (lua_Integer i = 1; i <= maxIdx; ++i) {
+            lua_rawgeti(L, tblIdx, static_cast<int>(i));
+            const int vtype = lua_type(L, -1);
+            switch (vtype) {
+                case LUA_TSTRING:
+                    arr.push_back(lua_tostring(L, -1));
+                    break;
+                case LUA_TNUMBER:
+                    arr.push_back(lua_tonumber(L, -1));
+                    break;
+                case LUA_TBOOLEAN:
+                    arr.push_back(lua_toboolean(L, -1) != 0);
+                    break;
+                case LUA_TNIL:
+                    arr.push_back(nullptr);
+                    break;
+                case LUA_TTABLE:
+                    arr.push_back(luaTableToJson(L, -1, depth + 1));
+                    break;
+                default:
+                    FFE_LOG_WARN("ScriptEngine", "saveData: skipping unsupported type %s in array",
+                                 lua_typename(L, vtype));
+                    arr.push_back(nullptr);
+                    break;
+            }
+            lua_pop(L, 1);
+        }
+        return arr;
+    }
+
+    // Otherwise, object
+    nlohmann::json obj = nlohmann::json::object();
+    lua_pushnil(L);
+    while (lua_next(L, tblIdx) != 0) {
+        // Convert key to string
+        const char* keyStr = nullptr;
+        char keyBuf[64];
+        if (lua_type(L, -2) == LUA_TSTRING) {
+            keyStr = lua_tostring(L, -2);
+        } else if (lua_type(L, -2) == LUA_TNUMBER) {
+            std::snprintf(keyBuf, sizeof(keyBuf), "%.17g", lua_tonumber(L, -2));
+            keyStr = keyBuf;
+        } else {
+            FFE_LOG_WARN("ScriptEngine", "saveData: skipping non-string/number key");
+            lua_pop(L, 1);
+            continue;
+        }
+
+        const int vtype = lua_type(L, -1);
+        switch (vtype) {
+            case LUA_TSTRING:
+                obj[keyStr] = lua_tostring(L, -1);
+                break;
+            case LUA_TNUMBER:
+                obj[keyStr] = lua_tonumber(L, -1);
+                break;
+            case LUA_TBOOLEAN:
+                obj[keyStr] = (lua_toboolean(L, -1) != 0);
+                break;
+            case LUA_TNIL:
+                obj[keyStr] = nullptr;
+                break;
+            case LUA_TTABLE:
+                obj[keyStr] = luaTableToJson(L, -1, depth + 1);
+                break;
+            default:
+                FFE_LOG_WARN("ScriptEngine", "saveData: skipping unsupported type %s for key '%s'",
+                             lua_typename(L, vtype), keyStr);
+                break;
+        }
+        lua_pop(L, 1); // pop value, keep key
+    }
+    return obj;
+}
+
+// Push a nlohmann::json value onto the Lua stack as a Lua table/value.
+void jsonToLuaTable(lua_State* L, const nlohmann::json& j) {
+    if (j.is_null()) {
+        lua_pushnil(L);
+    } else if (j.is_boolean()) {
+        lua_pushboolean(L, j.get<bool>() ? 1 : 0);
+    } else if (j.is_number_integer()) {
+        lua_pushinteger(L, static_cast<lua_Integer>(j.get<int64_t>()));
+    } else if (j.is_number_float()) {
+        lua_pushnumber(L, static_cast<lua_Number>(j.get<double>()));
+    } else if (j.is_string()) {
+        const auto& s = j.get_ref<const std::string&>();
+        lua_pushlstring(L, s.c_str(), s.size());
+    } else if (j.is_array()) {
+        lua_createtable(L, static_cast<int>(j.size()), 0);
+        int idx = 1;
+        for (const auto& elem : j) {
+            jsonToLuaTable(L, elem);
+            lua_rawseti(L, -2, idx++);
+        }
+    } else if (j.is_object()) {
+        lua_createtable(L, 0, static_cast<int>(j.size()));
+        for (auto it = j.begin(); it != j.end(); ++it) {
+            lua_pushstring(L, it.key().c_str());
+            jsonToLuaTable(L, it.value());
+            lua_settable(L, -3);
+        }
+    } else {
+        lua_pushnil(L);
+    }
 }
 
 } // anonymous namespace
@@ -268,6 +478,37 @@ bool ScriptEngine::setScriptRoot(const char* absolutePath) {
 
 const char* ScriptEngine::scriptRoot() const {
     return m_assetRoot[0] != '\0' ? m_assetRoot : nullptr;
+}
+
+bool ScriptEngine::setSaveRoot(const char* absolutePath) {
+    if (absolutePath == nullptr || absolutePath[0] == '\0') {
+        FFE_LOG_ERROR("ScriptEngine", "setSaveRoot: path is null or empty");
+        return false;
+    }
+    if (m_saveRoot[0] != '\0') {
+        FFE_LOG_WARN("ScriptEngine", "setSaveRoot: already set to '%s'", m_saveRoot);
+        return false;
+    }
+
+    // Resolve to canonical path via realpath
+    char resolved[SAVE_ROOT_BUF_SIZE];
+    const char* rp = realpath(absolutePath, resolved);
+    if (rp == nullptr) {
+        FFE_LOG_ERROR("ScriptEngine", "setSaveRoot: realpath failed for '%s'", absolutePath);
+        return false;
+    }
+
+    const std::size_t len = std::strlen(resolved);
+    if (len >= SAVE_ROOT_BUF_SIZE) {
+        FFE_LOG_ERROR("ScriptEngine", "setSaveRoot: resolved path too long (%zu chars)", len);
+        return false;
+    }
+    std::memcpy(m_saveRoot, resolved, len + 1);
+    return true;
+}
+
+const char* ScriptEngine::saveRoot() const {
+    return m_saveRoot[0] != '\0' ? m_saveRoot : nullptr;
 }
 
 bool ScriptEngine::doString(const char* script) {
@@ -2840,6 +3081,651 @@ void ScriptEngine::registerEcsBindings() {
         return 0;
     });
     lua_setfield(L, -2, "loadScene");
+
+    // ----------------------------------------------------------------
+    // Save/Load bindings — persist Lua tables as JSON files.
+    //
+    // ffe.saveData(filename, table) -> true | (nil, error)
+    // ffe.loadData(filename)        -> table | (nil, error)
+    //
+    // Security: filename is validated against an allowlist, path traversal
+    // is prevented, file size is capped at 1 MB, and the save directory is
+    // sandboxed under the configured save root.
+    // ----------------------------------------------------------------
+
+    // ffe.saveData(filename, table) -> true | (nil, error)
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        // Retrieve ScriptEngine pointer from registry.
+        lua_pushlightuserdata(state, &s_engineRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        auto* engine = static_cast<ffe::ScriptEngine*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        if (engine == nullptr) {
+            lua_pushnil(state);
+            lua_pushstring(state, "internal error");
+            return 2;
+        }
+
+        // Arg 1: filename (must be a string, not coerced)
+        if (lua_type(state, 1) != LUA_TSTRING) {
+            lua_pushnil(state);
+            lua_pushstring(state, "filename must be a string");
+            return 2;
+        }
+        const char* filename = lua_tostring(state, 1);
+
+        // Arg 2: data (must be a table)
+        if (lua_type(state, 2) != LUA_TTABLE) {
+            lua_pushnil(state);
+            lua_pushstring(state, "data must be a table");
+            return 2;
+        }
+
+        // Check save root is configured.
+        const char* root = engine->saveRoot();
+        if (root == nullptr) {
+            FFE_LOG_ERROR("ScriptEngine", "saveData: save root not configured");
+            lua_pushnil(state);
+            lua_pushstring(state, "save root not configured");
+            return 2;
+        }
+
+        // Validate filename (S1).
+        if (!isValidSaveFilename(filename)) {
+            FFE_LOG_WARN("ScriptEngine", "saveData: invalid filename '%s'", filename);
+            lua_pushnil(state);
+            lua_pushstring(state, "invalid filename");
+            return 2;
+        }
+
+        // Build saves directory path: <saveRoot>/saves/
+        char savesDir[PATH_MAX];
+        const int sdLen = std::snprintf(savesDir, sizeof(savesDir), "%s/saves", root);
+        if (sdLen < 0 || static_cast<std::size_t>(sdLen) >= sizeof(savesDir)) {
+            FFE_LOG_ERROR("ScriptEngine", "saveData: saves directory path too long");
+            lua_pushnil(state);
+            lua_pushstring(state, "write failed");
+            return 2;
+        }
+
+        // Create saves/ directory if it does not exist.
+        {
+            std::error_code ec;
+            std::filesystem::create_directories(savesDir, ec);
+            if (ec) {
+                FFE_LOG_ERROR("ScriptEngine", "saveData: failed to create saves directory: %s", ec.message().c_str());
+                lua_pushnil(state);
+                lua_pushstring(state, "write failed");
+                return 2;
+            }
+        }
+
+        // Check file count limit before writing a new file.
+        // Only check if the target file does not already exist (overwrite is ok).
+        char fullPath[PATH_MAX];
+        const int fpLen = std::snprintf(fullPath, sizeof(fullPath), "%s/%s", savesDir, filename);
+        if (fpLen < 0 || static_cast<std::size_t>(fpLen) >= sizeof(fullPath)) {
+            FFE_LOG_ERROR("ScriptEngine", "saveData: file path too long");
+            lua_pushnil(state);
+            lua_pushstring(state, "write failed");
+            return 2;
+        }
+
+        // S2 — resolved path validation.
+        // Validate saves dir is under save root. Use realpath on the directory
+        // (which exists now after create_directories).
+        {
+            char resolvedDir[PATH_MAX];
+            if (realpath(savesDir, resolvedDir) == nullptr) {
+                FFE_LOG_ERROR("ScriptEngine", "saveData: realpath failed for saves dir");
+                lua_pushnil(state);
+                lua_pushstring(state, "write failed");
+                return 2;
+            }
+
+            char resolvedRoot[PATH_MAX];
+            if (realpath(root, resolvedRoot) == nullptr) {
+                FFE_LOG_ERROR("ScriptEngine", "saveData: realpath failed for save root");
+                lua_pushnil(state);
+                lua_pushstring(state, "write failed");
+                return 2;
+            }
+
+            const std::size_t rootLen = std::strlen(resolvedRoot);
+            if (std::strncmp(resolvedDir, resolvedRoot, rootLen) != 0 ||
+                (resolvedDir[rootLen] != '/' && resolvedDir[rootLen] != '\0')) {
+                FFE_LOG_ERROR("ScriptEngine", "saveData: saves dir escapes save root");
+                lua_pushnil(state);
+                lua_pushstring(state, "invalid filename");
+                return 2;
+            }
+        }
+
+        // Check if this is a new file. If so, enforce file count limit.
+        {
+            struct stat st;
+            if (stat(fullPath, &st) != 0) {
+                // File does not exist — check count.
+                const int fileCount = countJsonFiles(savesDir);
+                if (fileCount >= MAX_SAVE_FILE_COUNT) {
+                    FFE_LOG_WARN("ScriptEngine", "saveData: save file limit (%d) reached", MAX_SAVE_FILE_COUNT);
+                    lua_pushnil(state);
+                    lua_pushstring(state, "too many save files");
+                    return 2;
+                }
+            }
+        }
+
+        // Serialize the Lua table to JSON.
+        nlohmann::json jsonData = luaTableToJson(state, 2, 0);
+        const std::string jsonStr = jsonData.dump(2); // pretty-print with indent=2
+
+        // S3 — check serialized size.
+        if (jsonStr.size() > MAX_SAVE_FILE_SIZE) {
+            FFE_LOG_WARN("ScriptEngine", "saveData: serialized data too large (%zu bytes, max %zu)",
+                         jsonStr.size(), MAX_SAVE_FILE_SIZE);
+            lua_pushnil(state);
+            lua_pushstring(state, "save data too large");
+            return 2;
+        }
+
+        // Atomic write: write to .tmp, then rename.
+        char tmpPath[PATH_MAX];
+        const int tpLen = std::snprintf(tmpPath, sizeof(tmpPath), "%s.tmp", fullPath);
+        if (tpLen < 0 || static_cast<std::size_t>(tpLen) >= sizeof(tmpPath)) {
+            lua_pushnil(state);
+            lua_pushstring(state, "write failed");
+            return 2;
+        }
+
+        {
+            FILE* f = std::fopen(tmpPath, "wb");
+            if (f == nullptr) {
+                FFE_LOG_ERROR("ScriptEngine", "saveData: failed to open tmp file for writing");
+                lua_pushnil(state);
+                lua_pushstring(state, "write failed");
+                return 2;
+            }
+
+            const std::size_t written = std::fwrite(jsonStr.data(), 1, jsonStr.size(), f);
+            std::fclose(f);
+
+            if (written != jsonStr.size()) {
+                FFE_LOG_ERROR("ScriptEngine", "saveData: incomplete write (%zu / %zu bytes)", written, jsonStr.size());
+                std::remove(tmpPath);
+                lua_pushnil(state);
+                lua_pushstring(state, "write failed");
+                return 2;
+            }
+        }
+
+        // Rename .tmp -> target (atomic on POSIX).
+        if (std::rename(tmpPath, fullPath) != 0) {
+            FFE_LOG_ERROR("ScriptEngine", "saveData: rename failed");
+            std::remove(tmpPath);
+            lua_pushnil(state);
+            lua_pushstring(state, "write failed");
+            return 2;
+        }
+
+        FFE_LOG_INFO("ScriptEngine", "saveData: saved '%s' (%zu bytes)", filename, jsonStr.size());
+        lua_pushboolean(state, 1);
+        return 1;
+    });
+    lua_setfield(L, -2, "saveData");
+
+    // ffe.loadData(filename) -> table | (nil, error)
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        // Retrieve ScriptEngine pointer from registry.
+        lua_pushlightuserdata(state, &s_engineRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        auto* engine = static_cast<ffe::ScriptEngine*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        if (engine == nullptr) {
+            lua_pushnil(state);
+            lua_pushstring(state, "internal error");
+            return 2;
+        }
+
+        // Arg 1: filename (must be a string, not coerced)
+        if (lua_type(state, 1) != LUA_TSTRING) {
+            lua_pushnil(state);
+            lua_pushstring(state, "filename must be a string");
+            return 2;
+        }
+        const char* filename = lua_tostring(state, 1);
+
+        // Check save root is configured.
+        const char* root = engine->saveRoot();
+        if (root == nullptr) {
+            FFE_LOG_ERROR("ScriptEngine", "loadData: save root not configured");
+            lua_pushnil(state);
+            lua_pushstring(state, "save root not configured");
+            return 2;
+        }
+
+        // Validate filename (S1).
+        if (!isValidSaveFilename(filename)) {
+            FFE_LOG_WARN("ScriptEngine", "loadData: invalid filename '%s'", filename);
+            lua_pushnil(state);
+            lua_pushstring(state, "invalid filename");
+            return 2;
+        }
+
+        // Build full path: <saveRoot>/saves/<filename>
+        char fullPath[PATH_MAX];
+        const int fpLen = std::snprintf(fullPath, sizeof(fullPath), "%s/saves/%s", root, filename);
+        if (fpLen < 0 || static_cast<std::size_t>(fpLen) >= sizeof(fullPath)) {
+            FFE_LOG_ERROR("ScriptEngine", "loadData: file path too long");
+            lua_pushnil(state);
+            lua_pushstring(state, "file not found");
+            return 2;
+        }
+
+        // S3 — stat the file for size check before reading.
+        struct stat st;
+        if (stat(fullPath, &st) != 0) {
+            lua_pushnil(state);
+            lua_pushstring(state, "file not found");
+            return 2;
+        }
+
+        if (static_cast<std::size_t>(st.st_size) > MAX_SAVE_FILE_SIZE) {
+            FFE_LOG_WARN("ScriptEngine", "loadData: file too large (%lld bytes, max %zu)",
+                         static_cast<long long>(st.st_size), MAX_SAVE_FILE_SIZE);
+            lua_pushnil(state);
+            lua_pushstring(state, "save file too large");
+            return 2;
+        }
+
+        // S2 — resolved path validation.
+        {
+            char resolvedPath[PATH_MAX];
+            if (realpath(fullPath, resolvedPath) == nullptr) {
+                FFE_LOG_ERROR("ScriptEngine", "loadData: realpath failed");
+                lua_pushnil(state);
+                lua_pushstring(state, "file not found");
+                return 2;
+            }
+
+            char resolvedRoot[PATH_MAX];
+            if (realpath(root, resolvedRoot) == nullptr) {
+                FFE_LOG_ERROR("ScriptEngine", "loadData: realpath failed for save root");
+                lua_pushnil(state);
+                lua_pushstring(state, "file not found");
+                return 2;
+            }
+
+            const std::size_t rootLen = std::strlen(resolvedRoot);
+            if (std::strncmp(resolvedPath, resolvedRoot, rootLen) != 0 ||
+                (resolvedPath[rootLen] != '/' && resolvedPath[rootLen] != '\0')) {
+                FFE_LOG_ERROR("ScriptEngine", "loadData: resolved path escapes save root");
+                lua_pushnil(state);
+                lua_pushstring(state, "invalid filename");
+                return 2;
+            }
+        }
+
+        // Read the file.
+        FILE* f = std::fopen(fullPath, "rb");
+        if (f == nullptr) {
+            lua_pushnil(state);
+            lua_pushstring(state, "file not found");
+            return 2;
+        }
+
+        const auto fileSize = static_cast<std::size_t>(st.st_size);
+        std::string contents;
+        contents.resize(fileSize);
+        const std::size_t bytesRead = std::fread(contents.data(), 1, fileSize, f);
+        std::fclose(f);
+
+        if (bytesRead != fileSize) {
+            FFE_LOG_ERROR("ScriptEngine", "loadData: incomplete read (%zu / %zu bytes)", bytesRead, fileSize);
+            lua_pushnil(state);
+            lua_pushstring(state, "corrupted save file");
+            return 2;
+        }
+
+        // Parse JSON (no-exception mode).
+        nlohmann::json parsed = nlohmann::json::parse(contents, nullptr, false);
+        if (parsed.is_discarded()) {
+            FFE_LOG_ERROR("ScriptEngine", "loadData: JSON parse failed for '%s'", filename);
+            lua_pushnil(state);
+            lua_pushstring(state, "corrupted save file");
+            return 2;
+        }
+
+        // Convert JSON to Lua table and push onto stack.
+        jsonToLuaTable(state, parsed);
+
+        FFE_LOG_INFO("ScriptEngine", "loadData: loaded '%s' (%zu bytes)", filename, fileSize);
+        return 1;
+    });
+    lua_setfield(L, -2, "loadData");
+
+    // ----------------------------------------------------------------
+    // TTF Font bindings — load, unload, draw, and measure TrueType fonts.
+    //
+    // ffe.loadFont(path, size)                        -> fontId or nil
+    // ffe.unloadFont(fontId)                          -> nothing
+    // ffe.drawFontText(fontId, text, x, y [, ...])    -> nothing
+    // ffe.measureText(fontId, text [, scale])          -> width, height
+    // ----------------------------------------------------------------
+
+    // ffe.loadFont(path, size) -> integer (1-8) or nil + error
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        // Retrieve World pointer for TextRenderer access.
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            lua_pushnil(state);
+            lua_pushstring(state, "no world");
+            return 2;
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        auto** trPtr = world->registry().ctx().find<ffe::renderer::TextRenderer*>();
+        if (trPtr == nullptr || *trPtr == nullptr) {
+            lua_pushnil(state);
+            lua_pushstring(state, "no text renderer");
+            return 2;
+        }
+
+        // Arg 1: relative path (string, not coerced).
+        if (lua_type(state, 1) != LUA_TSTRING) {
+            lua_pushnil(state);
+            lua_pushstring(state, "path must be a string");
+            return 2;
+        }
+        const char* relPath = lua_tostring(state, 1);
+
+        // Arg 2: pixel size (number).
+        const lua_Number size = luaL_checknumber(state, 2);
+        if (!std::isfinite(size) || size < 4.0 || size > 256.0) {
+            lua_pushnil(state);
+            lua_pushstring(state, "size must be between 4 and 256");
+            return 2;
+        }
+
+        // Validate path safety.
+        if (!isPathSafe(relPath)) {
+            FFE_LOG_ERROR("ScriptEngine", "loadFont: path traversal rejected: '%s'", relPath);
+            lua_pushnil(state);
+            lua_pushstring(state, "invalid path");
+            return 2;
+        }
+
+        // Resolve against asset root.
+        const char* assetRoot = ffe::renderer::getAssetRoot();
+        if (assetRoot == nullptr || assetRoot[0] == '\0') {
+            lua_pushnil(state);
+            lua_pushstring(state, "asset root not configured");
+            return 2;
+        }
+
+        char absPath[PATH_MAX];
+        const int pathLen = std::snprintf(absPath, sizeof(absPath), "%s/%s", assetRoot, relPath);
+        if (pathLen < 0 || static_cast<std::size_t>(pathLen) >= sizeof(absPath)) {
+            lua_pushnil(state);
+            lua_pushstring(state, "path too long");
+            return 2;
+        }
+
+        // Resolve with realpath and verify it is under asset root.
+        char resolvedPath[PATH_MAX];
+        if (realpath(absPath, resolvedPath) == nullptr) {
+            lua_pushnil(state);
+            lua_pushstring(state, "file not found");
+            return 2;
+        }
+
+        char resolvedRoot[PATH_MAX];
+        if (realpath(assetRoot, resolvedRoot) == nullptr) {
+            lua_pushnil(state);
+            lua_pushstring(state, "asset root invalid");
+            return 2;
+        }
+
+        const std::size_t rootLen = std::strlen(resolvedRoot);
+        if (std::strncmp(resolvedPath, resolvedRoot, rootLen) != 0 ||
+            (resolvedPath[rootLen] != '/' && resolvedPath[rootLen] != '\0')) {
+            FFE_LOG_ERROR("ScriptEngine", "loadFont: path escapes asset root");
+            lua_pushnil(state);
+            lua_pushstring(state, "invalid path");
+            return 2;
+        }
+
+        const ffe::u32 fontId = ffe::renderer::loadFont(**trPtr, resolvedPath,
+                                                         static_cast<ffe::f32>(size));
+        if (fontId == 0) {
+            lua_pushnil(state);
+            lua_pushstring(state, "failed to load font");
+            return 2;
+        }
+
+        lua_pushinteger(state, static_cast<lua_Integer>(fontId));
+        return 1;
+    });
+    lua_setfield(L, -2, "loadFont");
+
+    // ffe.unloadFont(fontId) -> nothing
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            return 0;
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        auto** trPtr = world->registry().ctx().find<ffe::renderer::TextRenderer*>();
+        if (trPtr == nullptr || *trPtr == nullptr) return 0;
+
+        const lua_Integer rawId = luaL_checkinteger(state, 1);
+        if (rawId < 1 || rawId > static_cast<lua_Integer>(ffe::renderer::MAX_FONTS)) {
+            return 0; // Out of range — no-op.
+        }
+
+        ffe::renderer::unloadFont(**trPtr, static_cast<ffe::u32>(rawId));
+        return 0;
+    });
+    lua_setfield(L, -2, "unloadFont");
+
+    // ffe.drawFontText(fontId, text, x, y [, scale, r, g, b, a]) -> nothing
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            return 0;
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        auto** trPtr = world->registry().ctx().find<ffe::renderer::TextRenderer*>();
+        if (trPtr == nullptr || *trPtr == nullptr) return 0;
+
+        const lua_Integer fontId = luaL_checkinteger(state, 1);
+        const char* text         = luaL_checkstring(state, 2);
+        const lua_Number x       = luaL_checknumber(state, 3);
+        const lua_Number y       = luaL_checknumber(state, 4);
+        const lua_Number scale   = luaL_optnumber(state, 5, 1.0);
+        const lua_Number r       = luaL_optnumber(state, 6, 1.0);
+        const lua_Number g       = luaL_optnumber(state, 7, 1.0);
+        const lua_Number b       = luaL_optnumber(state, 8, 1.0);
+        const lua_Number a       = luaL_optnumber(state, 9, 1.0);
+
+        // Reject NaN/Inf
+        if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(scale) ||
+            !std::isfinite(r) || !std::isfinite(g) || !std::isfinite(b) || !std::isfinite(a)) {
+            return 0;
+        }
+
+        if (fontId < 1 || fontId > static_cast<lua_Integer>(ffe::renderer::MAX_FONTS)) {
+            return 0; // Invalid font ID — silently ignore.
+        }
+
+        const auto clamp01 = [](lua_Number v) -> ffe::f32 {
+            return static_cast<ffe::f32>(v < 0.0 ? 0.0 : (v > 1.0 ? 1.0 : v));
+        };
+        const ffe::f32 clampedScale = static_cast<ffe::f32>(
+            scale < 0.1 ? 0.1 : (scale > 20.0 ? 20.0 : scale));
+
+        ffe::renderer::drawFontText(**trPtr, static_cast<ffe::u32>(fontId), text,
+            static_cast<ffe::f32>(x), static_cast<ffe::f32>(y), clampedScale,
+            clamp01(r), clamp01(g), clamp01(b), clamp01(a));
+        return 0;
+    });
+    lua_setfield(L, -2, "drawFontText");
+
+    // ffe.measureText(fontId, text [, scale]) -> width, height
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            lua_pushnumber(state, 0.0);
+            lua_pushnumber(state, 0.0);
+            return 2;
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        auto** trPtr = world->registry().ctx().find<ffe::renderer::TextRenderer*>();
+        if (trPtr == nullptr || *trPtr == nullptr) {
+            lua_pushnumber(state, 0.0);
+            lua_pushnumber(state, 0.0);
+            return 2;
+        }
+
+        const lua_Integer fontId = luaL_checkinteger(state, 1);
+        const char* text         = luaL_checkstring(state, 2);
+        const lua_Number scale   = luaL_optnumber(state, 3, 1.0);
+
+        if (!std::isfinite(scale) || fontId < 1 ||
+            fontId > static_cast<lua_Integer>(ffe::renderer::MAX_FONTS)) {
+            lua_pushnumber(state, 0.0);
+            lua_pushnumber(state, 0.0);
+            return 2;
+        }
+
+        const ffe::f32 clampedScale = static_cast<ffe::f32>(
+            scale < 0.1 ? 0.1 : (scale > 20.0 ? 20.0 : scale));
+
+        ffe::f32 w = 0.0f;
+        ffe::f32 h = 0.0f;
+        ffe::renderer::measureText(**trPtr, static_cast<ffe::u32>(fontId), text,
+                                   clampedScale, &w, &h);
+
+        lua_pushnumber(state, static_cast<lua_Number>(w));
+        lua_pushnumber(state, static_cast<lua_Number>(h));
+        return 2;
+    });
+    lua_setfield(L, -2, "measureText");
+
+    // ----------------------------------------------------------------
+    // Gamepad bindings — query gamepad state from Lua.
+    //
+    // ffe.isGamepadConnected(id)               -> bool
+    // ffe.isGamepadButtonPressed(id, button)   -> bool
+    // ffe.isGamepadButtonHeld(id, button)      -> bool
+    // ffe.isGamepadButtonReleased(id, button)  -> bool
+    // ffe.getGamepadAxis(id, axis)             -> number
+    // ffe.getGamepadName(id)                   -> string
+    // ffe.setGamepadDeadzone(value)            -> nothing
+    // ----------------------------------------------------------------
+
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const auto id = static_cast<ffe::i32>(luaL_checkinteger(state, 1));
+        lua_pushboolean(state, ffe::isGamepadConnected(id) ? 1 : 0);
+        return 1;
+    });
+    lua_setfield(L, -2, "isGamepadConnected");
+
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const auto id  = static_cast<ffe::i32>(luaL_checkinteger(state, 1));
+        const auto btn = static_cast<ffe::GamepadButton>(luaL_checkinteger(state, 2));
+        lua_pushboolean(state, ffe::isGamepadButtonPressed(id, btn) ? 1 : 0);
+        return 1;
+    });
+    lua_setfield(L, -2, "isGamepadButtonPressed");
+
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const auto id  = static_cast<ffe::i32>(luaL_checkinteger(state, 1));
+        const auto btn = static_cast<ffe::GamepadButton>(luaL_checkinteger(state, 2));
+        lua_pushboolean(state, ffe::isGamepadButtonHeld(id, btn) ? 1 : 0);
+        return 1;
+    });
+    lua_setfield(L, -2, "isGamepadButtonHeld");
+
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const auto id  = static_cast<ffe::i32>(luaL_checkinteger(state, 1));
+        const auto btn = static_cast<ffe::GamepadButton>(luaL_checkinteger(state, 2));
+        lua_pushboolean(state, ffe::isGamepadButtonReleased(id, btn) ? 1 : 0);
+        return 1;
+    });
+    lua_setfield(L, -2, "isGamepadButtonReleased");
+
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const auto id   = static_cast<ffe::i32>(luaL_checkinteger(state, 1));
+        const auto axis = static_cast<ffe::GamepadAxis>(luaL_checkinteger(state, 2));
+        lua_pushnumber(state, static_cast<lua_Number>(ffe::getGamepadAxis(id, axis)));
+        return 1;
+    });
+    lua_setfield(L, -2, "getGamepadAxis");
+
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const auto id = static_cast<ffe::i32>(luaL_checkinteger(state, 1));
+        const char* name = ffe::getGamepadName(id);
+        lua_pushstring(state, name);
+        return 1;
+    });
+    lua_setfield(L, -2, "getGamepadName");
+
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const auto dz = static_cast<ffe::f32>(luaL_checknumber(state, 1));
+        ffe::setGamepadDeadzone(dz);
+        return 0;
+    });
+    lua_setfield(L, -2, "setGamepadDeadzone");
+
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const ffe::f32 dz = ffe::getGamepadDeadzone();
+        lua_pushnumber(state, static_cast<lua_Number>(dz));
+        return 1;
+    });
+    lua_setfield(L, -2, "getGamepadDeadzone");
+
+    // Gamepad button constants
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::GamepadButton::A));             lua_setfield(L, -2, "GAMEPAD_A");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::GamepadButton::B));             lua_setfield(L, -2, "GAMEPAD_B");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::GamepadButton::X));             lua_setfield(L, -2, "GAMEPAD_X");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::GamepadButton::Y));             lua_setfield(L, -2, "GAMEPAD_Y");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::GamepadButton::LEFT_BUMPER));   lua_setfield(L, -2, "GAMEPAD_LEFT_BUMPER");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::GamepadButton::RIGHT_BUMPER));  lua_setfield(L, -2, "GAMEPAD_RIGHT_BUMPER");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::GamepadButton::BACK));          lua_setfield(L, -2, "GAMEPAD_BACK");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::GamepadButton::START));         lua_setfield(L, -2, "GAMEPAD_START");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::GamepadButton::DPAD_UP));       lua_setfield(L, -2, "GAMEPAD_DPAD_UP");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::GamepadButton::DPAD_DOWN));     lua_setfield(L, -2, "GAMEPAD_DPAD_DOWN");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::GamepadButton::DPAD_LEFT));     lua_setfield(L, -2, "GAMEPAD_DPAD_LEFT");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::GamepadButton::DPAD_RIGHT));    lua_setfield(L, -2, "GAMEPAD_DPAD_RIGHT");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::GamepadButton::GUIDE));         lua_setfield(L, -2, "GAMEPAD_GUIDE");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::GamepadButton::LEFT_STICK));    lua_setfield(L, -2, "GAMEPAD_LEFT_STICK");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::GamepadButton::RIGHT_STICK));   lua_setfield(L, -2, "GAMEPAD_RIGHT_STICK");
+
+    // Gamepad axis constants
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::GamepadAxis::LEFT_X));          lua_setfield(L, -2, "GAMEPAD_AXIS_LEFT_X");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::GamepadAxis::LEFT_Y));          lua_setfield(L, -2, "GAMEPAD_AXIS_LEFT_Y");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::GamepadAxis::RIGHT_X));         lua_setfield(L, -2, "GAMEPAD_AXIS_RIGHT_X");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::GamepadAxis::RIGHT_Y));         lua_setfield(L, -2, "GAMEPAD_AXIS_RIGHT_Y");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::GamepadAxis::LEFT_TRIGGER));    lua_setfield(L, -2, "GAMEPAD_AXIS_LEFT_TRIGGER");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::GamepadAxis::RIGHT_TRIGGER));   lua_setfield(L, -2, "GAMEPAD_AXIS_RIGHT_TRIGGER");
 
     // Set the 'ffe' table as a global.
     lua_setglobal(L, "ffe");

@@ -86,6 +86,12 @@ struct TextureDesc {
     TextureWrap wrap      = TextureWrap::CLAMP_TO_EDGE;
     bool generateMipmaps  = false;
     const void* pixelData = nullptr;
+
+    // When true, applies a swizzle mask so that GL_RED maps to alpha and
+    // RGB reads as (1,1,1). Used for single-channel font atlases rendered
+    // through the standard RGBA sprite shader.
+    // Only meaningful when format is R8. Requires OpenGL 3.3 (LEGACY tier).
+    bool swizzleRedToAlpha = false;
 };
 
 // --- Shader ---

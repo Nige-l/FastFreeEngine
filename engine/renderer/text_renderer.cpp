@@ -193,6 +193,14 @@ void shutdownTextRenderer(TextRenderer& tr) {
         rhi::destroyTexture(tr.fontAtlas);
         tr.fontAtlas = {};
     }
+
+    // Unload all TTF fonts.
+    for (u32 i = 0; i < MAX_FONTS; ++i) {
+        if (tr.fonts[i].occupied) {
+            unloadFont(tr, i + 1);
+        }
+    }
+
     std::free(tr.glyphs);
     tr.glyphs     = nullptr;
     tr.glyphCount = 0;
@@ -242,6 +250,7 @@ void drawText(TextRenderer& tr, const char* text,
         gq.g = g;
         gq.b = b;
         gq.a = a;
+        gq.texture = {}; // id=0 means bitmap font atlas
 
         x += glyphW;
     }
@@ -271,6 +280,7 @@ void drawRect(TextRenderer& tr,
     gq.g = g;
     gq.b = b;
     gq.a = a;
+    gq.texture = {}; // id=0 means bitmap font atlas
 }
 
 void flushText(TextRenderer& tr, SpriteBatch& batch,
@@ -300,7 +310,9 @@ void flushText(TextRenderer& tr, SpriteBatch& batch,
         sprite.rotation = 0.0f;
         sprite.depth    = 0.0f;
 
-        addSprite(batch, tr.fontAtlas, sprite);
+        // Use per-glyph texture if set (TTF fonts), otherwise bitmap atlas.
+        const rhi::TextureHandle tex = rhi::isValid(gq.texture) ? gq.texture : tr.fontAtlas;
+        addSprite(batch, tex, sprite);
     }
 
     endSpriteBatch(batch);

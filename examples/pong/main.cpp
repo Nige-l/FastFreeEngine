@@ -123,6 +123,12 @@ void pongSystem(ffe::World& world, const float dt)
         }
         ctx->scripts->setScriptRoot(scriptRootBuf);
 
+        // Set save root to project root — saves go in <projectRoot>/saves/
+        static char saveRootBuf[512];
+        if (demoProjectRoot(saveRootBuf, sizeof(saveRootBuf))) {
+            ctx->scripts->setSaveRoot(saveRootBuf);
+        }
+
         const bool ok = ctx->scripts->doFile("pong.lua", scriptRootBuf);
         if (!ok) {
             FFE_LOG_ERROR("Pong", "pong.lua failed to load");

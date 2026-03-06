@@ -11,6 +11,7 @@ set(RENDERER_SOURCES
     shader_library.cpp
     texture_loader.cpp
     text_renderer.cpp
+    font.cpp
 )
 
 # Backend selection based on tier

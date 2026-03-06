@@ -81,6 +81,32 @@ static f64 g_pendingScrollY = 0.0;
 
 static constexpr f64 MAX_SCROLL_ACCUMULATOR = 1000.0;
 
+// --- Pending gamepad button events (for test hooks in headless mode) ---
+
+inline constexpr i32 MAX_PENDING_GAMEPAD_BUTTON_EVENTS = 32;
+
+struct PendingGamepadButtonEvent {
+    i8 gamepadId;
+    i8 button;
+    bool down;
+};
+
+static PendingGamepadButtonEvent g_pendingGamepadButtonEvents[MAX_PENDING_GAMEPAD_BUTTON_EVENTS];
+static i32 g_pendingGamepadButtonCount = 0;
+
+// --- Gamepad state ---
+
+struct GamepadState {
+    bool connected = false;
+    bool currentButtons[MAX_GAMEPAD_BUTTONS];
+    bool previousButtons[MAX_GAMEPAD_BUTTONS];
+    f32  axes[MAX_GAMEPAD_AXES];
+    char name[64];
+};
+
+static GamepadState g_gamepads[MAX_GAMEPADS] = {};
+static f32 g_gamepadDeadzone = 0.15f;
+
 // --- GLFW callbacks ----------------------------------------------------------
 
 static void glfwKeyCallback(GLFWwindow* /*window*/, const int key, const int /*scancode*/,
@@ -138,8 +164,8 @@ static void glfwScrollCallback(GLFWwindow* /*window*/, const double xoffset, con
 
 void initInput(GLFWwindow* window) {
     std::memset(&g_keyboard, 0, sizeof(g_keyboard));
-    std::memset(&g_mouse, 0, sizeof(g_mouse));
-    std::memset(&g_actionMap, 0, sizeof(g_actionMap));
+    g_mouse = MouseState{};
+    g_actionMap = ActionMap{};
     std::memset(g_pendingKeyEvents, 0, sizeof(g_pendingKeyEvents));
     std::memset(g_pendingMouseButtonEvents, 0, sizeof(g_pendingMouseButtonEvents));
     g_pendingKeyCount = 0;
@@ -147,6 +173,10 @@ void initInput(GLFWwindow* window) {
     g_pendingScrollX = 0.0;
     g_pendingScrollY = 0.0;
     g_mouse.firstMouseInput = true;
+    for (auto& gp : g_gamepads) { gp = GamepadState{}; }
+    g_gamepadDeadzone = 0.15f;
+    std::memset(g_pendingGamepadButtonEvents, 0, sizeof(g_pendingGamepadButtonEvents));
+    g_pendingGamepadButtonCount = 0;
 
     g_window = window;
     if (window != nullptr) {
@@ -166,12 +196,15 @@ void shutdownInput() {
     }
     g_window = nullptr;
     std::memset(&g_keyboard, 0, sizeof(g_keyboard));
-    std::memset(&g_mouse, 0, sizeof(g_mouse));
-    std::memset(&g_actionMap, 0, sizeof(g_actionMap));
+    g_mouse = MouseState{};
+    g_actionMap = ActionMap{};
+    for (auto& gp : g_gamepads) { gp = GamepadState{}; }
+    g_gamepadDeadzone = 0.15f;
     g_pendingKeyCount = 0;
     g_pendingMouseButtonCount = 0;
     g_pendingScrollX = 0.0;
     g_pendingScrollY = 0.0;
+    g_pendingGamepadButtonCount = 0;
 }
 
 void updateInput() {
@@ -206,6 +239,78 @@ void updateInput() {
     g_mouse.scrollY = g_pendingScrollY;
     g_pendingScrollX = 0.0;
     g_pendingScrollY = 0.0;
+
+    // 7. Gamepads: copy current -> previous, then poll GLFW
+    for (i32 i = 0; i < MAX_GAMEPADS; ++i) {
+        auto& gp = g_gamepads[i];
+        std::memcpy(gp.previousButtons, gp.currentButtons, sizeof(gp.currentButtons));
+
+        if (g_window != nullptr) {
+            // GLFW joystick IDs map directly to our gamepad IDs (0..3)
+            if (glfwJoystickIsGamepad(i)) {
+                GLFWgamepadstate state;
+                if (glfwGetGamepadState(i, &state)) {
+                    gp.connected = true;
+
+                    // Copy button states
+                    for (i32 b = 0; b < MAX_GAMEPAD_BUTTONS; ++b) {
+                        gp.currentButtons[b] = (state.buttons[b] == GLFW_PRESS);
+                    }
+
+                    // Copy axis values with deadzone
+                    for (i32 a = 0; a < MAX_GAMEPAD_AXES; ++a) {
+                        f32 val = state.axes[a];
+                        // Triggers (axes 4 and 5) go from -1 to 1 in GLFW,
+                        // but we want 0..1 for triggers
+                        if (a == static_cast<i32>(GamepadAxis::LEFT_TRIGGER) ||
+                            a == static_cast<i32>(GamepadAxis::RIGHT_TRIGGER)) {
+                            val = (val + 1.0f) * 0.5f; // remap -1..1 to 0..1
+                            // Apply deadzone for triggers (only zero below deadzone)
+                            if (val < g_gamepadDeadzone) {
+                                val = 0.0f;
+                            }
+                        } else {
+                            // Stick axes: apply deadzone symmetrically
+                            if (val > -g_gamepadDeadzone && val < g_gamepadDeadzone) {
+                                val = 0.0f;
+                            }
+                        }
+                        // Clamp
+                        if (a == static_cast<i32>(GamepadAxis::LEFT_TRIGGER) ||
+                            a == static_cast<i32>(GamepadAxis::RIGHT_TRIGGER)) {
+                            val = std::clamp(val, 0.0f, 1.0f);
+                        } else {
+                            val = std::clamp(val, -1.0f, 1.0f);
+                        }
+                        gp.axes[a] = val;
+                    }
+
+                    // Store name (once, or whenever re-checked)
+                    const char* gpName = glfwGetGamepadName(i);
+                    if (gpName != nullptr) {
+                        std::snprintf(gp.name, sizeof(gp.name), "%s", gpName);
+                    }
+                } else {
+                    gp.connected = false;
+                    std::memset(gp.currentButtons, 0, sizeof(gp.currentButtons));
+                    std::memset(gp.axes, 0, sizeof(gp.axes));
+                }
+            } else {
+                gp.connected = false;
+                std::memset(gp.currentButtons, 0, sizeof(gp.currentButtons));
+                std::memset(gp.axes, 0, sizeof(gp.axes));
+            }
+        }
+        // In headless mode (g_window == nullptr), gamepad state is only changed
+        // via test hooks — no polling needed.
+    }
+
+    // 8. Apply pending gamepad button events (from test hooks)
+    for (i32 i = 0; i < g_pendingGamepadButtonCount; ++i) {
+        const auto& event = g_pendingGamepadButtonEvents[i];
+        g_gamepads[event.gamepadId].currentButtons[event.button] = event.down;
+    }
+    g_pendingGamepadButtonCount = 0;
 }
 
 // --- Keyboard queries --------------------------------------------------------
@@ -298,6 +403,56 @@ void setCursorCaptured(const bool captured) {
 }
 
 bool isCursorCaptured() { return g_mouse.cursorCaptured; }
+
+// --- Gamepad queries ---------------------------------------------------------
+
+bool isGamepadConnected(const i32 id) {
+    if (id < 0 || id >= MAX_GAMEPADS) return false;
+    return g_gamepads[id].connected;
+}
+
+bool isGamepadButtonPressed(const i32 id, const GamepadButton btn) {
+    if (id < 0 || id >= MAX_GAMEPADS) return false;
+    const i32 b = static_cast<i32>(btn);
+    if (b < 0 || b >= MAX_GAMEPAD_BUTTONS) return false;
+    return g_gamepads[id].currentButtons[b] && !g_gamepads[id].previousButtons[b];
+}
+
+bool isGamepadButtonHeld(const i32 id, const GamepadButton btn) {
+    if (id < 0 || id >= MAX_GAMEPADS) return false;
+    const i32 b = static_cast<i32>(btn);
+    if (b < 0 || b >= MAX_GAMEPAD_BUTTONS) return false;
+    return g_gamepads[id].currentButtons[b] && g_gamepads[id].previousButtons[b];
+}
+
+bool isGamepadButtonReleased(const i32 id, const GamepadButton btn) {
+    if (id < 0 || id >= MAX_GAMEPADS) return false;
+    const i32 b = static_cast<i32>(btn);
+    if (b < 0 || b >= MAX_GAMEPAD_BUTTONS) return false;
+    return !g_gamepads[id].currentButtons[b] && g_gamepads[id].previousButtons[b];
+}
+
+f32 getGamepadAxis(const i32 id, const GamepadAxis axis) {
+    if (id < 0 || id >= MAX_GAMEPADS) return 0.0f;
+    if (!g_gamepads[id].connected) return 0.0f;
+    const i32 a = static_cast<i32>(axis);
+    if (a < 0 || a >= MAX_GAMEPAD_AXES) return 0.0f;
+    return g_gamepads[id].axes[a];
+}
+
+const char* getGamepadName(const i32 id) {
+    if (id < 0 || id >= MAX_GAMEPADS) return "";
+    if (!g_gamepads[id].connected) return "";
+    return g_gamepads[id].name;
+}
+
+void setGamepadDeadzone(const f32 deadzone) {
+    g_gamepadDeadzone = std::clamp(deadzone, 0.0f, 1.0f);
+}
+
+f32 getGamepadDeadzone() {
+    return g_gamepadDeadzone;
+}
 
 // --- Action mapping ----------------------------------------------------------
 
@@ -462,6 +617,33 @@ void simulateScroll(const f64 dx, const f64 dy) {
     g_pendingScrollY += dy;
     g_pendingScrollX = std::clamp(g_pendingScrollX, -MAX_SCROLL_ACCUMULATOR, MAX_SCROLL_ACCUMULATOR);
     g_pendingScrollY = std::clamp(g_pendingScrollY, -MAX_SCROLL_ACCUMULATOR, MAX_SCROLL_ACCUMULATOR);
+}
+
+void simulateGamepadButton(const i32 id, const GamepadButton btn, const bool pressed) {
+    if (id < 0 || id >= MAX_GAMEPADS) return;
+    const i32 b = static_cast<i32>(btn);
+    if (b < 0 || b >= MAX_GAMEPAD_BUTTONS) return;
+    if (g_pendingGamepadButtonCount < MAX_PENDING_GAMEPAD_BUTTON_EVENTS) {
+        g_pendingGamepadButtonEvents[g_pendingGamepadButtonCount++] =
+            {static_cast<i8>(id), static_cast<i8>(b), pressed};
+    }
+}
+
+void simulateGamepadAxis(const i32 id, const GamepadAxis axis, const f32 value) {
+    if (id < 0 || id >= MAX_GAMEPADS) return;
+    const i32 a = static_cast<i32>(axis);
+    if (a < 0 || a >= MAX_GAMEPAD_AXES) return;
+    g_gamepads[id].axes[a] = value;
+}
+
+void simulateGamepadConnect(const i32 id, const bool connected) {
+    if (id < 0 || id >= MAX_GAMEPADS) return;
+    g_gamepads[id].connected = connected;
+    if (!connected) {
+        std::memset(g_gamepads[id].currentButtons, 0, sizeof(g_gamepads[id].currentButtons));
+        std::memset(g_gamepads[id].axes, 0, sizeof(g_gamepads[id].axes));
+        g_gamepads[id].name[0] = '\0';
+    }
 }
 
 } // namespace test
