@@ -2,7 +2,7 @@
 --
 -- Exercises every subsystem: ECS entity lifecycle, sprite rendering,
 -- sprite animation, collision detection, audio (music + SFX), input,
--- texture loading, and clean shutdown from Lua.
+-- texture loading, visual effects, and clean shutdown from Lua.
 --
 -- Controls:
 --   WASD       move the player
@@ -28,6 +28,11 @@ local HALF_W         = 640
 local HALF_H         = 360
 local VOLUME_STEP    = 0.05
 
+-- Pickup effect
+local MAX_RINGS      = 8
+local RING_LIFE      = 0.35
+local RING_SIZE      = 8
+
 -- ---------------------------------------------------------------------------
 -- State
 -- ---------------------------------------------------------------------------
@@ -38,8 +43,18 @@ local sfxHandle       = nil
 local musicHandle     = nil
 local spritesheetTex  = nil
 local playerTex       = nil
-local transformBuf    = {}  -- reusable table for fillTransform (zero-alloc reads)
+local whiteTex        = nil
+local transformBuf    = {}
 local musicPlaying    = false
+local gameTime        = 0
+local isMoving        = false
+
+-- Pickup ring effect pool
+local rings           = {}
+local ringCount       = 0
+
+-- Score flash
+local scoreFlashTimer = 0
 
 -- ---------------------------------------------------------------------------
 -- Helper: update the HUD text with current game state
@@ -47,7 +62,7 @@ local musicPlaying    = false
 local function updateHud()
     ffe.setHudText("Score: " .. score ..
                    "  |  Stars: " .. #stars ..
-                   "  |  WASD move  |  M music  |  Up/Down vol  |  ESC quit")
+                   "  |  WASD move  |  M music  |  Up/Down vol  |  F1 editor  |  ESC quit")
 end
 
 -- ---------------------------------------------------------------------------
@@ -65,15 +80,53 @@ local function spawnStar(x, y)
     local id = ffe.createEntity()
     if not id then return nil end
 
-    local rot = math.random() * 2 * math.pi  -- random rotation for visual variety
+    local rot = math.random() * 2 * math.pi
     ffe.addTransform(id, x, y, rot, 1, 1)
     ffe.addSprite(id, spritesheetTex or 1, 32, 32, 1, 1, 1, 1, 3)
     ffe.addPreviousTransform(id)
     ffe.addSpriteAnimation(id, 8, 4, 0.12, true)
     ffe.playAnimation(id)
-    ffe.addCollider(id, "circle", 16, 0)  -- circle collider, radius 16
+    ffe.addCollider(id, "circle", 16, 0)
 
     return id
+end
+
+-- ---------------------------------------------------------------------------
+-- Pickup effect: expanding ring
+-- ---------------------------------------------------------------------------
+local function spawnRing(x, y, r, g, b)
+    if ringCount >= MAX_RINGS then return end
+    local id = ffe.createEntity()
+    if not id then return end
+    ffe.addTransform(id, x, y, 0, 1, 1)
+    ffe.addSprite(id, whiteTex or 1, RING_SIZE, RING_SIZE, r, g, b, 0.8, 4)
+    ffe.addPreviousTransform(id)
+    ringCount = ringCount + 1
+    rings[ringCount] = {
+        id = id, life = RING_LIFE, maxLife = RING_LIFE,
+        x = x, y = y, r = r, g = g, b = b
+    }
+end
+
+local function updateRings(dt)
+    local i = 1
+    while i <= ringCount do
+        local ring = rings[i]
+        ring.life = ring.life - dt
+        if ring.life <= 0 then
+            ffe.destroyEntity(ring.id)
+            rings[i] = rings[ringCount]
+            rings[ringCount] = nil
+            ringCount = ringCount - 1
+        else
+            local t = 1 - (ring.life / ring.maxLife)  -- 0→1
+            local scale = 1 + t * 4  -- expand from 1x to 5x
+            local alpha = (1 - t) * 0.7
+            ffe.setTransform(ring.id, ring.x, ring.y, 0, scale, scale)
+            ffe.setSpriteColor(ring.id, ring.r, ring.g, ring.b, alpha)
+            i = i + 1
+        end
+    end
 end
 
 -- ---------------------------------------------------------------------------
@@ -85,14 +138,21 @@ ffe.setCollisionCallback(function(entityA, entityB)
            (entityB == playerEntity and entityA == starId) then
             -- Pickup!
             score = score + 1
-            ffe.log("Score: " .. tostring(score))
             updateHud()
+            scoreFlashTimer = 0.2
 
             if score % 10 == 0 then
                 ffe.log("Amazing! Score: " .. score)
             end
 
             if sfxHandle then ffe.playSound(sfxHandle, 0.8) end
+
+            -- Spawn pickup ring at star position
+            if ffe.fillTransform(starId, transformBuf) then
+                -- Gold-colored rings for star pickup
+                spawnRing(transformBuf.x, transformBuf.y, 1.0, 0.9, 0.3)
+                spawnRing(transformBuf.x, transformBuf.y, 1.0, 0.7, 0.2)
+            end
 
             ffe.destroyEntity(starId)
 
@@ -111,6 +171,7 @@ end)
 -- Load assets
 spritesheetTex = ffe.loadTexture("textures/spritesheet.png")
 playerTex      = ffe.loadTexture("textures/checkerboard.png")
+whiteTex       = ffe.loadTexture("textures/white.png")
 musicHandle    = ffe.loadMusic("audio/music_pixelcrown.ogg") or ffe.loadMusic("audio/music.ogg")
 sfxHandle      = ffe.loadSound("audio/sfx.wav")
 
@@ -125,10 +186,9 @@ if musicHandle then
     ffe.playMusic(musicHandle, true)
     ffe.setMusicVolume(0.3)
     musicPlaying = true
-    ffe.log("Music started (handle=" .. tostring(musicHandle) .. ", vol=0.3)")
-    ffe.log("Music controls: M to toggle, UP/DOWN arrows to adjust volume")
+    ffe.log("Music started (vol=0.3, M to toggle)")
 else
-    ffe.log("WARNING: music.ogg not loaded -- music disabled")
+    ffe.log("WARNING: music not loaded -- music disabled")
 end
 
 -- Spawn stars with deterministic seed for reproducibility
@@ -143,16 +203,15 @@ updateHud()
 
 -- ---------------------------------------------------------------------------
 -- update(entityId, dt) -- called per tick by the C++ host
--- entityId: the player entity created in C++ (integer)
--- dt: fixed timestep delta (1/60 for 60 Hz)
 -- ---------------------------------------------------------------------------
 function update(entityId, dt)
+    gameTime = gameTime + dt
+
     -- First-tick: remember the player entity, tint it light blue, add collider
     if playerEntity == nil then
         playerEntity = entityId
-        -- Re-add sprite with light blue tint (r=0.7, g=0.85, b=1.0) for visual distinction
         ffe.addSprite(entityId, playerTex or 1, 48, 48, 0.7, 0.85, 1.0, 1.0, 1)
-        ffe.addCollider(entityId, "aabb", 24, 24)  -- 48x48 sprite = 24 half-extents
+        ffe.addCollider(entityId, "aabb", 24, 24)
     end
 
     -- Read player transform (zero-alloc via fillTransform)
@@ -165,11 +224,29 @@ function update(entityId, dt)
     if ffe.isKeyHeld(ffe.KEY_W) then dy = dy + PLAYER_SPEED * dt end
     if ffe.isKeyHeld(ffe.KEY_S) then dy = dy - PLAYER_SPEED * dt end
 
+    isMoving = (dx ~= 0 or dy ~= 0)
+
     -- Clamp to screen bounds (with sprite margin)
     local nx = math.max(-616, math.min(616, transformBuf.x + dx))
     local ny = math.max(-336, math.min(336, transformBuf.y + dy))
     ffe.setTransform(entityId, nx, ny, transformBuf.rotation,
                      transformBuf.scaleX, transformBuf.scaleY)
+
+    -- Player color pulse when moving
+    if isMoving then
+        local pulse = 0.8 + 0.2 * math.sin(gameTime * 8)
+        ffe.setSpriteColor(entityId, 0.5 + pulse * 0.2, 0.7 + pulse * 0.15, 1.0, 1)
+    else
+        ffe.setSpriteColor(entityId, 0.7, 0.85, 1.0, 1)
+    end
+
+    -- Score flash effect
+    if scoreFlashTimer > 0 then
+        scoreFlashTimer = scoreFlashTimer - dt
+    end
+
+    -- Update pickup ring effects
+    updateRings(dt)
 
     -- Music controls: M toggles, UP/DOWN adjust volume
     if musicHandle then
@@ -177,22 +254,18 @@ function update(entityId, dt)
             if musicPlaying then
                 ffe.stopMusic()
                 musicPlaying = false
-                ffe.log("Music paused")
             else
                 ffe.playMusic(musicHandle, true)
                 musicPlaying = true
-                ffe.log("Music resumed")
             end
         end
         if ffe.isKeyPressed(ffe.KEY_UP) then
             local vol = math.min(1.0, ffe.getMusicVolume() + VOLUME_STEP)
             ffe.setMusicVolume(vol)
-            ffe.log("Music volume: " .. string.format("%.2f", vol))
         end
         if ffe.isKeyPressed(ffe.KEY_DOWN) then
             local vol = math.max(0.0, ffe.getMusicVolume() - VOLUME_STEP)
             ffe.setMusicVolume(vol)
-            ffe.log("Music volume: " .. string.format("%.2f", vol))
         end
     end
 
@@ -229,6 +302,10 @@ function shutdown()
     if playerTex then
         ffe.unloadTexture(playerTex)
         playerTex = nil
+    end
+    if whiteTex then
+        ffe.unloadTexture(whiteTex)
+        whiteTex = nil
     end
 
     ffe.log("Collect the Stars shutdown complete")
