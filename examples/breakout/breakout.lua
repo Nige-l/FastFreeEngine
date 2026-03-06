@@ -292,7 +292,7 @@ end
 local function loseLife()
     lives = lives - 1
     if sfxLose then ffe.playSound(sfxLose, 0.5) end
-    ffe.cameraShake(8, 0.25)
+    ffe.cameraShake(4, 0.15)
 
     -- Remove a life indicator
     if #lifeIndicators > 0 then

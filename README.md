@@ -196,6 +196,8 @@ Classic two-player Pong with visual effects -- ball trail, paddle flash on hit, 
 
 Classic brick-breaking game with particle effects -- brick destruction particles, ball trail, speed-based color shifting, paddle flash, life indicators, and a victory particle burst.
 
+![Breakout Screenshot](docs/screenshots/breakout.png)
+
 ```bash
 ./build/examples/breakout/ffe_breakout
 ```
