@@ -247,6 +247,29 @@ void ScriptEngine::tickTimers(const float dt) {
     }
 }
 
+bool ScriptEngine::setScriptRoot(const char* absolutePath) {
+    if (absolutePath == nullptr || absolutePath[0] == '\0') {
+        FFE_LOG_ERROR("ScriptEngine", "setScriptRoot: path is null or empty");
+        return false;
+    }
+    // Write-once: reject if already set.
+    if (m_assetRoot[0] != '\0') {
+        FFE_LOG_WARN("ScriptEngine", "setScriptRoot: already set to '%s'", m_assetRoot);
+        return false;
+    }
+    const std::size_t len = std::strlen(absolutePath);
+    if (len >= ASSET_ROOT_BUF_SIZE) {
+        FFE_LOG_ERROR("ScriptEngine", "setScriptRoot: path too long (%zu chars)", len);
+        return false;
+    }
+    std::memcpy(m_assetRoot, absolutePath, len + 1);
+    return true;
+}
+
+const char* ScriptEngine::scriptRoot() const {
+    return m_assetRoot[0] != '\0' ? m_assetRoot : nullptr;
+}
+
 bool ScriptEngine::doString(const char* script) {
     if (!m_initialised || m_luaState == nullptr) {
         FFE_LOG_ERROR("ScriptEngine", "doString() called before init()");
@@ -331,6 +354,10 @@ bool ScriptEngine::doFile(const char* path, const char* assetRoot) {
         lua_pop(L, 1);
         return false;
     }
+
+    // Reset instruction budget so each doFile gets a fresh 1M instructions.
+    // Without this, chained loadScene calls could share/exhaust a single budget.
+    lua_sethook(L, instructionHook, LUA_MASKCOUNT, 1'000'000);
 
     const int callResult = lua_pcall(L, 0, 0, 0);
     if (callResult != LUA_OK) {
@@ -2367,6 +2394,121 @@ void ScriptEngine::registerEcsBindings() {
         return 0;
     });
     lua_setfield(L, -2, "cancelTimer");
+
+    // ffe.destroyAllEntities() -> nothing
+    // Nuclear reset for scene transitions. Cleans up heap-owning components,
+    // clears collision callback, cancels all timers, then destroys all entities.
+    // NOTE: Update this function when new heap-owning components are added.
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        // 1. Free Tilemap heap allocations before clearing the registry.
+        auto tmView = world->view<ffe::Tilemap>();
+        for (auto entity : tmView) {
+            ffe::destroyTilemap(tmView.get<ffe::Tilemap>(entity));
+        }
+
+        // 2. Clear the collision callback Lua ref to prevent stale callbacks.
+        lua_pushlightuserdata(state, &s_collisionCallbackKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (!lua_isnil(state, -1)) {
+            const int oldRef = static_cast<int>(lua_tointeger(state, -1));
+            if (oldRef != -2) { // -2 = LUA_NOREF sentinel
+                luaL_unref(state, LUA_REGISTRYINDEX, oldRef);
+            }
+        }
+        lua_pop(state, 1);
+        lua_pushlightuserdata(state, &s_collisionCallbackKey);
+        lua_pushinteger(state, -2); // LUA_NOREF
+        lua_settable(state, LUA_REGISTRYINDEX);
+
+        if (world->registry().ctx().contains<ffe::CollisionCallbackRef>()) {
+            world->registry().ctx().get<ffe::CollisionCallbackRef>().luaRef = -2;
+        }
+
+        // 3. Cancel all active timers so callbacks don't fire on dead entities.
+        lua_pushlightuserdata(state, &s_engineRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (!lua_isnil(state, -1)) {
+            auto* engine = static_cast<ffe::ScriptEngine*>(lua_touserdata(state, -1));
+            for (ffe::u32 i = 0; i < engine->m_timerCount; ++i) {
+                auto& t = engine->m_timers[i];
+                if (t.active && t.luaRef != LUA_NOREF) {
+                    luaL_unref(state, LUA_REGISTRYINDEX, t.luaRef);
+                }
+                t = {};
+            }
+            engine->m_timerCount = 0;
+        }
+        lua_pop(state, 1);
+
+        // 4. Clear all entities and components from the ECS registry.
+        world->clearAllEntities();
+
+        return 0;
+    });
+    lua_setfield(L, -2, "destroyAllEntities");
+
+    // ffe.cancelAllTimers() -> nothing
+    // Cancels every active timer. Useful for scene transitions.
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_engineRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* engine = static_cast<ffe::ScriptEngine*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        for (ffe::u32 i = 0; i < engine->m_timerCount; ++i) {
+            auto& t = engine->m_timers[i];
+            if (t.active && t.luaRef != LUA_NOREF) {
+                luaL_unref(state, LUA_REGISTRYINDEX, t.luaRef);
+            }
+            t = {};
+        }
+        engine->m_timerCount = 0;
+        return 0;
+    });
+    lua_setfield(L, -2, "cancelAllTimers");
+
+    // ffe.loadScene(scriptPath) -> nothing
+    // Loads and executes a Lua script file for scene transitions.
+    // scriptPath is validated with the same safety checks as doFile.
+    // Re-entrancy is guarded: max depth of 4 nested loadScene calls.
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        if (!lua_isstring(state, 1)) {
+            FFE_LOG_ERROR("ScriptEngine", "loadScene: expected string argument");
+            return 0;
+        }
+        const char* scriptPath = lua_tostring(state, 1);
+
+        lua_pushlightuserdata(state, &s_engineRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* engine = static_cast<ffe::ScriptEngine*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        if (engine->scriptRoot() == nullptr) {
+            FFE_LOG_ERROR("ScriptEngine", "loadScene: script root not set");
+            return 0;
+        }
+
+        if (engine->m_loadSceneDepth >= ScriptEngine::MAX_LOAD_SCENE_DEPTH) {
+            FFE_LOG_ERROR("ScriptEngine", "loadScene: max re-entrancy depth (%u) exceeded",
+                          ScriptEngine::MAX_LOAD_SCENE_DEPTH);
+            return 0;
+        }
+
+        ++engine->m_loadSceneDepth;
+        engine->doFile(scriptPath, engine->m_assetRoot);
+        --engine->m_loadSceneDepth;
+
+        return 0;
+    });
+    lua_setfield(L, -2, "loadScene");
 
     // Set the 'ffe' table as a global.
     lua_setglobal(L, "ffe");

@@ -470,6 +470,43 @@ This tells the engine to stop the game loop after the current frame. Your `shutd
 
 ---
 
+## 18. Scene Transitions
+
+For larger games, you can split your game into multiple Lua files -- one per scene (title screen, gameplay, game over, etc.). Use `ffe.destroyAllEntities()` to wipe the current scene and `ffe.loadScene()` to load the next one.
+
+```lua
+-- title.lua
+local tex = ffe.loadTexture("textures/title.png")
+local bg = ffe.createEntity()
+ffe.addTransform(bg, 640, 360, 0, 1, 1)
+ffe.addSprite(bg, tex, 1280, 720, 1, 1, 1, 1, 0)
+
+function update(entityId, dt)
+    ffe.drawText("PRESS ENTER", 500, 500, 3, 1, 1, 1, 1)
+    if ffe.isKeyPressed(ffe.KEY_ENTER) then
+        ffe.unloadTexture(tex)  -- clean up title assets
+        ffe.destroyAllEntities()  -- wipe all entities, timers, collision callback
+        ffe.loadScene("gameplay.lua")  -- load and execute the next scene
+    end
+end
+```
+
+**What `ffe.destroyAllEntities()` does:**
+- Destroys all entities and components
+- Cancels all timers (`ffe.after` / `ffe.every`)
+- Clears the collision callback
+
+**What it does NOT do:**
+- Unload textures or sounds (call `ffe.unloadTexture()` / `ffe.unloadSound()` yourself)
+- Clear Lua globals (the new scene's `update()` replaces the old one)
+- Stop music playback
+
+You can also cancel timers without touching entities using `ffe.cancelAllTimers()`.
+
+**Note:** Your C++ `main.cpp` must call `scriptEngine.setScriptRoot(path)` before `ffe.loadScene()` will work. All three demo games already do this.
+
+---
+
 ## Complete Example
 
 Here's a minimal but complete game script:

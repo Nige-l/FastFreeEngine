@@ -147,6 +147,7 @@ void luaDemoSystem(ffe::World& world, const float dt)
             return;
         }
         const char* SCRIPT_ROOT = scriptRootBuf;
+        ctx->scripts->setScriptRoot(SCRIPT_ROOT);
 
         const bool ok = ctx->scripts->doFile("game.lua", SCRIPT_ROOT);
         if (!ok) {

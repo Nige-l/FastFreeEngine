@@ -236,3 +236,33 @@ TEST_CASE("Const World view and getComponent", "[ecs]") {
     }
     REQUIRE(count == 1);
 }
+
+TEST_CASE("World clearAllEntities removes all entities", "[ecs]") {
+    ffe::World world;
+
+    const ffe::EntityId e1 = world.createEntity();
+    const ffe::EntityId e2 = world.createEntity();
+    const ffe::EntityId e3 = world.createEntity();
+    world.addComponent<Position>(e1, 1.0f, 2.0f);
+    world.addComponent<Health>(e2, 100);
+    world.addComponent<Position>(e3, 3.0f, 4.0f);
+    world.addComponent<Health>(e3, 50);
+
+    world.clearAllEntities();
+
+    REQUIRE_FALSE(world.isValid(e1));
+    REQUIRE_FALSE(world.isValid(e2));
+    REQUIRE_FALSE(world.isValid(e3));
+
+    // Views should be empty
+    int count = 0;
+    for (auto entity : world.view<Position>()) {
+        (void)entity;
+        ++count;
+    }
+    REQUIRE(count == 0);
+
+    // Can create new entities after clearing
+    const ffe::EntityId e4 = world.createEntity();
+    REQUIRE(world.isValid(e4));
+}

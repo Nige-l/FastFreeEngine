@@ -2525,3 +2525,194 @@ TEST_CASE("Timer callback error cancels the timer", "[scripting][timer]") {
     fix.engine.tickTimers(0.02f);
     REQUIRE(fix.engine.doString("assert(g_err_count == 1)"));
 }
+
+// =============================================================================
+// Scene management: ffe.destroyAllEntities, ffe.cancelAllTimers
+// =============================================================================
+
+TEST_CASE("ffe.destroyAllEntities clears all entities", "[scripting][scene]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    // Create several entities
+    REQUIRE(fix.engine.doString(
+        "g_e1 = ffe.createEntity()\n"
+        "g_e2 = ffe.createEntity()\n"
+        "g_e3 = ffe.createEntity()\n"
+        "assert(ffe.getEntityCount() == 3)\n"
+    ));
+
+    REQUIRE(fix.engine.doString("ffe.destroyAllEntities()"));
+    REQUIRE(fix.engine.doString("assert(ffe.getEntityCount() == 0)"));
+}
+
+TEST_CASE("ffe.destroyAllEntities cancels all timers", "[scripting][scene]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    REQUIRE(fix.engine.doString(
+        "g_count = 0\n"
+        "ffe.every(0.01, function() g_count = g_count + 1 end)\n"
+        "ffe.every(0.01, function() g_count = g_count + 1 end)\n"
+    ));
+
+    // Tick once — both timers fire
+    fix.engine.tickTimers(0.02f);
+    REQUIRE(fix.engine.doString("assert(g_count == 2)"));
+
+    // Destroy all — timers should be cancelled
+    REQUIRE(fix.engine.doString("ffe.destroyAllEntities()"));
+
+    // Tick again — count should not increase
+    fix.engine.tickTimers(0.02f);
+    REQUIRE(fix.engine.doString("assert(g_count == 2)"));
+}
+
+TEST_CASE("ffe.destroyAllEntities with no world is a no-op", "[scripting][scene]") {
+    ScriptFixture fix;
+    // No world set — should not crash
+    REQUIRE(fix.engine.doString("ffe.destroyAllEntities()"));
+}
+
+TEST_CASE("ffe.cancelAllTimers cancels all active timers", "[scripting][scene]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    REQUIRE(fix.engine.doString(
+        "g_val = 0\n"
+        "ffe.every(0.01, function() g_val = g_val + 1 end)\n"
+        "ffe.after(0.01, function() g_val = g_val + 10 end)\n"
+    ));
+
+    fix.engine.tickTimers(0.02f);
+    REQUIRE(fix.engine.doString("assert(g_val == 11)"));
+
+    REQUIRE(fix.engine.doString("ffe.cancelAllTimers()"));
+
+    fix.engine.tickTimers(0.02f);
+    REQUIRE(fix.engine.doString("assert(g_val == 11)"));
+}
+
+TEST_CASE("ffe.destroyAllEntities allows new entities after clear", "[scripting][scene]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    REQUIRE(fix.engine.doString(
+        "ffe.createEntity()\n"
+        "ffe.createEntity()\n"
+    ));
+    REQUIRE(fix.engine.doString("assert(ffe.getEntityCount() == 2)"));
+
+    REQUIRE(fix.engine.doString("ffe.destroyAllEntities()"));
+    REQUIRE(fix.engine.doString("assert(ffe.getEntityCount() == 0)"));
+
+    // Create new entities after clearing
+    REQUIRE(fix.engine.doString(
+        "local e = ffe.createEntity()\n"
+        "assert(e ~= nil)\n"
+        "assert(ffe.getEntityCount() == 1)\n"
+    ));
+}
+
+TEST_CASE("ffe.destroyAllEntities clears collision callback", "[scripting][scene]") {
+    ScriptFixture fix;
+    ffe::World world;
+    world.registry().ctx().emplace<ffe::CollisionCallbackRef>();
+    fix.engine.setWorld(&world);
+
+    // Register a collision callback
+    REQUIRE(fix.engine.doString(
+        "g_cb_called = false\n"
+        "ffe.setCollisionCallback(function(a, b) g_cb_called = true end)\n"
+    ));
+
+    // Verify the callback ref is set in ECS context
+    REQUIRE(world.registry().ctx().get<ffe::CollisionCallbackRef>().luaRef != -2);
+
+    // Destroy all — collision callback should be cleared
+    REQUIRE(fix.engine.doString("ffe.destroyAllEntities()"));
+
+    // The collision callback ref in ECS context should be LUA_NOREF (-2)
+    REQUIRE(world.registry().ctx().get<ffe::CollisionCallbackRef>().luaRef == -2);
+}
+
+TEST_CASE("ffe.destroyAllEntities twice in a row is safe", "[scripting][scene]") {
+    ScriptFixture fix;
+    ffe::World world;
+    world.registry().ctx().emplace<ffe::CollisionCallbackRef>();
+    fix.engine.setWorld(&world);
+
+    REQUIRE(fix.engine.doString(
+        "ffe.createEntity()\n"
+        "ffe.createEntity()\n"
+    ));
+
+    REQUIRE(fix.engine.doString("ffe.destroyAllEntities()"));
+    REQUIRE(fix.engine.doString("ffe.destroyAllEntities()"));
+    REQUIRE(fix.engine.doString("assert(ffe.getEntityCount() == 0)"));
+}
+
+TEST_CASE("ffe.cancelAllTimers does not affect entities", "[scripting][scene]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    REQUIRE(fix.engine.doString(
+        "ffe.createEntity()\n"
+        "ffe.createEntity()\n"
+        "ffe.every(0.01, function() end)\n"
+    ));
+
+    REQUIRE(fix.engine.doString("ffe.cancelAllTimers()"));
+    REQUIRE(fix.engine.doString("assert(ffe.getEntityCount() == 2)"));
+}
+
+TEST_CASE("ffe.loadScene rejects path traversal", "[scripting][scene]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+    fix.engine.setScriptRoot("/tmp");
+
+    // These should all fail without crashing
+    REQUIRE(fix.engine.doString("ffe.loadScene('../../../etc/passwd')"));
+    REQUIRE(fix.engine.doString("ffe.loadScene('/absolute/path.lua')"));
+    REQUIRE(fix.engine.doString("ffe.loadScene('')"));
+}
+
+TEST_CASE("ffe.loadScene with non-string argument is a no-op", "[scripting][scene]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+    fix.engine.setScriptRoot("/tmp");
+
+    REQUIRE(fix.engine.doString("ffe.loadScene(42)"));
+    REQUIRE(fix.engine.doString("ffe.loadScene(nil)"));
+    REQUIRE(fix.engine.doString("ffe.loadScene({})"));
+}
+
+TEST_CASE("ffe.loadScene without script root is a no-op", "[scripting][scene]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+    // No setScriptRoot call — should log error and not crash
+    REQUIRE(fix.engine.doString("ffe.loadScene('test.lua')"));
+}
+
+TEST_CASE("setScriptRoot is write-once", "[scripting][scene]") {
+    ScriptFixture fix;
+    REQUIRE(fix.engine.setScriptRoot("/tmp/first"));
+    // Second call should fail (write-once)
+    REQUIRE_FALSE(fix.engine.setScriptRoot("/tmp/second"));
+    REQUIRE(std::string(fix.engine.scriptRoot()) == "/tmp/first");
+}
+
+TEST_CASE("setScriptRoot rejects null and empty", "[scripting][scene]") {
+    ScriptFixture fix;
+    REQUIRE_FALSE(fix.engine.setScriptRoot(nullptr));
+    REQUIRE_FALSE(fix.engine.setScriptRoot(""));
+    REQUIRE(fix.engine.scriptRoot() == nullptr);
+}

@@ -63,6 +63,7 @@ public:
     // --- Entity lifecycle ---
     EntityId createEntity();
     void destroyEntity(EntityId id);
+    void clearAllEntities();
     bool isValid(EntityId id) const;
 
     // --- Component access (templates — resolved at compile time, zero overhead) ---
@@ -112,6 +113,10 @@ inline EntityId World::createEntity() {
 
 inline void World::destroyEntity(const EntityId id) {
     m_registry.destroy(static_cast<entt::entity>(id));
+}
+
+inline void World::clearAllEntities() {
+    m_registry.clear();
 }
 
 inline bool World::isValid(const EntityId id) const {

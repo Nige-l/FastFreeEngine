@@ -121,6 +121,7 @@ void pongSystem(ffe::World& world, const float dt)
             FFE_LOG_ERROR("Pong", "Failed to resolve script root");
             return;
         }
+        ctx->scripts->setScriptRoot(scriptRootBuf);
 
         const bool ok = ctx->scripts->doFile("pong.lua", scriptRootBuf);
         if (!ok) {

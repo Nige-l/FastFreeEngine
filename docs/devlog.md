@@ -2017,3 +2017,46 @@ P0: Timer/scheduler API from Lua. P1-P2: Tilemap and scene management (deferred)
 
 ---
 
+## 2026-03-06 -- Session 31: Scene Management
+
+### Planned
+P0: Scene management (load/unload scenes, transitions) from Phase 1 roadmap.
+
+### Completed
+
+**Architecture:**
+- `docs/architecture/design-note-scene-management.md` written by architect
+- Security shift-left review: MINOR ISSUES (no blockers) -- collision callback clearing, re-entrancy guard, instruction budget reset all addressed
+
+**Implementation (4 new Lua bindings, 2 new C++ methods):**
+- `World::clearAllEntities()` -- delegates to `entt::registry::clear()`
+- `ScriptEngine::setScriptRoot()` / `scriptRoot()` -- write-once asset root for loadScene
+- `ffe.destroyAllEntities()` -- nuclear reset: frees Tilemap heap data, clears collision callback, cancels all timers, clears all entities
+- `ffe.cancelAllTimers()` -- cancels all active timers without touching entities
+- `ffe.loadScene(scriptPath)` -- validates path, executes Lua script file with fresh instruction budget
+- Re-entrancy guard (max depth 4) on loadScene
+- Instruction budget reset in doFile() so chained loadScene calls get fresh 1M budget
+- All three demo main.cpp files call setScriptRoot()
+
+**Agent Pipeline:**
+- performance-critic: **PASS** -- all new code is cold-path only, no heap allocations, no virtual calls
+- security-auditor (post-impl): **PASS** -- path traversal prevention via existing doFile, write-once setScriptRoot, re-entrancy guard, instruction budget reset all verified. One MINOR (m_loadSceneDepth public field, consistent with existing pattern)
+- api-designer: **APPROVED** -- engine/scripting/.context.md updated (3 new Lua bindings, 2 new C++ methods, usage pattern 8, anti-pattern for per-frame loadScene). engine/core/.context.md updated (clearAllEntities)
+- Tutorial: Section 18 (Scene Transitions) added to docs/tutorial.md
+- ROADMAP: scene management checked off
+
+### Test Results
+- **413 tests pass** on both Clang-18 and GCC-13, zero warnings (14 new tests)
+- 13 scene management tests: destroyAllEntities clears entities, cancels timers, clears collision callback, allows new entities after clear, safe to call twice, no-op without world; cancelAllTimers cancels without affecting entities; loadScene rejects path traversal, non-string args, missing script root; setScriptRoot write-once, rejects null/empty
+- 1 clearAllEntities ECS test
+
+### Deferred
+- game-dev-tester usage example with actual multi-file scene demo (needs a game with multiple scenes to test properly)
+
+### Next Session Should Start With
+- P0: Gamepad input support (SDL_GameController or similar)
+- P1: Particle system (engine-side, not Lua entity hacks)
+- P2: TTF font rendering (stb_truetype, scalable text)
+
+---
+

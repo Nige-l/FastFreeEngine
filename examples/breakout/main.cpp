@@ -101,6 +101,7 @@ void breakoutSystem(ffe::World& world, const float dt)
             FFE_LOG_ERROR("Breakout", "Failed to resolve script root");
             return;
         }
+        ctx->scripts->setScriptRoot(scriptRootBuf);
 
         const bool ok = ctx->scripts->doFile("breakout.lua", scriptRootBuf);
         if (!ok) {

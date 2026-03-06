@@ -30,7 +30,7 @@ The engine is developed in daily sessions. Each session should advance the curre
 - [x] Sprite rotation in render pipeline (Transform has rotation, DrawCommand passes it through)
 - [x] Sprite flipping (horizontal/vertical, for character facing direction)
 - [x] Tilemap rendering (efficient batch rendering of tile grids)
-- [ ] Scene management (load/unload scenes, transitions)
+- [x] Scene management (load/unload scenes, transitions)
 - [x] Timer/scheduler API from Lua (ffe.after, ffe.every)
 - [ ] Gamepad input (SDL_GameController or similar)
 - [ ] Particle system (engine-side, not Lua entity hacks)

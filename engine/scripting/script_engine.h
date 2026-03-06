@@ -101,6 +101,22 @@ public:
     // Allocate a timer slot. Returns slot index or -1 if full.
     i32 allocTimer();
 
+    // Store the script asset root for ffe.loadScene() binding.
+    // Write-once: set once during application setup, cannot be changed from Lua.
+    static constexpr u32 ASSET_ROOT_BUF_SIZE = 512u;
+    char m_assetRoot[ASSET_ROOT_BUF_SIZE] = {};
+
+    // Set the script asset root directory. Must be an absolute path.
+    // Returns true on success, false if null/empty or already set.
+    bool setScriptRoot(const char* absolutePath);
+
+    // Returns the stored script root, or nullptr if not set.
+    const char* scriptRoot() const;
+
+    // Re-entrancy depth for loadScene (security guard against recursive loading).
+    u32 m_loadSceneDepth = 0;
+    static constexpr u32 MAX_LOAD_SCENE_DEPTH = 4;
+
 private:
     // Stored as void* to avoid exposing lua_State in this header.
     // Cast to lua_State* in the .cpp file where lua.h is included.
