@@ -228,21 +228,26 @@ void EditorOverlay::drawEntityInspector(World& world) {
                     transform.rotation = rot;
                 }
 
-                // Read-only Sprite info
+                // Editable Sprite
                 if (world.hasComponent<Sprite>(entityId)) {
                     ImGui::Separator();
                     ImGui::Text("Sprite");
 
-                    const auto& sprite = world.getComponent<Sprite>(entityId);
+                    auto& sprite = world.getComponent<Sprite>(entityId);
                     ImGui::Text("Texture ID: %u", sprite.texture.id);
-                    ImGui::Text("Size: %.1f x %.1f",
-                        static_cast<double>(sprite.size.x),
-                        static_cast<double>(sprite.size.y));
-                    ImGui::Text("Color: (%.2f, %.2f, %.2f, %.2f)",
-                        static_cast<double>(sprite.color.r),
-                        static_cast<double>(sprite.color.g),
-                        static_cast<double>(sprite.color.b),
-                        static_cast<double>(sprite.color.a));
+
+                    float size[2] = {sprite.size.x, sprite.size.y};
+                    if (ImGui::DragFloat2("Size", size, 0.5f, 1.0f, 512.0f)) {
+                        sprite.size.x = size[0];
+                        sprite.size.y = size[1];
+                    }
+
+                    float col[4] = {sprite.color.r, sprite.color.g,
+                                    sprite.color.b, sprite.color.a};
+                    if (ImGui::ColorEdit4("Color", col)) {
+                        sprite.color = {col[0], col[1], col[2], col[3]};
+                    }
+
                     ImGui::Text("Layer: %d  SortOrder: %d",
                         static_cast<int>(sprite.layer),
                         static_cast<int>(sprite.sortOrder));
