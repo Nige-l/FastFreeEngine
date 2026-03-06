@@ -880,6 +880,33 @@ void ScriptEngine::registerEcsBindings() {
     });
     lua_setfield(L, -2, "destroyEntity");
 
+    // ffe.getEntityCount() -> integer
+    // Returns the number of alive entities (total - free list).
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            lua_pushinteger(state, 0);
+            return 1;
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+        if (world == nullptr) {
+            lua_pushinteger(state, 0);
+            return 1;
+        }
+        const auto& reg = world->registry();
+        const auto* storage = reg.storage<entt::entity>();
+        std::size_t count = 0;
+        if (storage != nullptr) {
+            count = storage->free_list();
+        }
+        lua_pushinteger(state, static_cast<lua_Integer>(count));
+        return 1;
+    });
+    lua_setfield(L, -2, "getEntityCount");
+
     // ffe.addTransform(entityId, x, y, rotation, scaleX, scaleY) -> bool
     lua_pushcfunction(L, [](lua_State* state) -> int {
         lua_pushlightuserdata(state, &s_worldRegistryKey);

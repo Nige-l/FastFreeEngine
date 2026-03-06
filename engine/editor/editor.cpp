@@ -143,7 +143,7 @@ void EditorOverlay::drawPerformancePanel(World& world) {
         const auto* storage = reg.storage<entt::entity>();
         std::size_t entityCount = 0;
         if (storage != nullptr) {
-            entityCount = storage->size() - storage->free_list();
+            entityCount = storage->free_list();
         }
         ImGui::Text("Entities: %zu", entityCount);
 

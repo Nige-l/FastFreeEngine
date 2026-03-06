@@ -2073,3 +2073,28 @@ TEST_CASE("Mouse button constants are defined", "[scripting][input]") {
     REQUIRE(fix.engine.doString("assert(ffe.MOUSE_RIGHT ~= nil)"));
     REQUIRE(fix.engine.doString("assert(ffe.MOUSE_MIDDLE ~= nil)"));
 }
+
+// =============================================================================
+// Entity count binding
+// =============================================================================
+
+TEST_CASE("ffe.getEntityCount returns 0 when no World is set", "[scripting][ecs]") {
+    ScriptFixture fix;
+    REQUIRE(fix.engine.doString("assert(ffe.getEntityCount() == 0)"));
+}
+
+TEST_CASE("ffe.getEntityCount returns correct count after creating entities", "[scripting][ecs]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    REQUIRE(fix.engine.doString("assert(ffe.getEntityCount() == 0)"));
+    REQUIRE(fix.engine.doString("ffe.createEntity()"));
+    REQUIRE(fix.engine.doString(
+        "local c = ffe.getEntityCount(); "
+        "if c ~= 1 then error('expected 1, got ' .. tostring(c)) end"));
+    REQUIRE(fix.engine.doString("ffe.createEntity()"));
+    REQUIRE(fix.engine.doString(
+        "local c = ffe.getEntityCount(); "
+        "if c ~= 2 then error('expected 2, got ' .. tostring(c)) end"));
+}
