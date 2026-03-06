@@ -148,8 +148,8 @@ Load and play sounds:
 
 ```lua
 -- Load sounds (WAV or OGG format)
-local sfx = ffe.loadSound("sfx.wav")
-local music = ffe.loadSound("music.ogg")
+local sfx = ffe.loadSound("sfx.wav")       -- fully decoded for playSound()
+local music = ffe.loadMusic("music.ogg")    -- streaming-only for playMusic()
 
 -- Play a one-shot sound effect (handle, volume 0.0-1.0)
 ffe.playSound(sfx, 0.8)
