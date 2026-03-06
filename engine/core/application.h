@@ -13,6 +13,10 @@
 
 #include <atomic>
 
+#ifdef FFE_EDITOR
+#include "editor/editor.h"
+#endif
+
 struct GLFWwindow;
 
 namespace ffe {
@@ -67,6 +71,10 @@ private:
     renderer::SpriteBatch m_spriteBatch;
     rhi::TextureHandle m_defaultWhiteTexture;
     glm::vec4 m_clearColor = {0.1f, 0.1f, 0.12f, 1.0f};
+
+#ifdef FFE_EDITOR
+    editor::EditorOverlay m_editorOverlay;
+#endif
 };
 
 } // namespace ffe

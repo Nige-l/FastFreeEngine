@@ -13,5 +13,5 @@ target_link_libraries(ffe_engine INTERFACE
     ffe_audio
     # ffe_physics    — added when physics is implemented
     ffe_scripting
-    # ffe_editor     — added when editor is implemented
+    ffe_editor
 )

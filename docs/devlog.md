@@ -1121,3 +1121,70 @@ Session 13 handover document written at `docs/session13-handover.md`.
 
 ---
 
+## Session 13 — [2026-03-06] — Dear ImGui Editor Overlay
+
+### Goals
+1. P0 — Dear ImGui editor overlay (F1 toggle, performance panel, entity inspector)
+2. P1 — SFX audio assets in assets/ directory
+3. P2 — Sprite animation/atlas design
+
+### Completed
+
+**Dear ImGui integration:**
+- Added **ImGui 1.91.9** via vcpkg with `glfw-binding` and `opengl3-binding` features.
+- New `engine/editor/` module: `editor.h` / `editor.cpp` — self-contained editor overlay.
+- **Performance panel:** FPS (1-second rolling average), frame time (ms), entity count, audio voice count.
+- **Entity inspector:** scrollable entity list, editable Transform components (DragFloat3 for position, rotation, scale), read-only Sprite info display.
+- **F1 toggle:** press F1 to show/hide the overlay. Input routing ensures ImGui captures mouse/keyboard when the overlay is active, preventing game input bleed-through.
+- Compiled behind `#ifdef FFE_EDITOR` — fully stripped from release builds.
+
+**Build system fixes:**
+- **CMake `FFE_BUILD_TESTS` ordering bug fixed:** the option was declared after `add_subdirectory(engine)`, meaning the engine CMakeLists could not see the variable. Moved declaration before `add_subdirectory`.
+
+**Design and security:**
+- `docs/architecture/design-note-imgui-editor.md` written — covers design rationale, panel layout, input routing, compile-time gating.
+- `docs/architecture/design-note-loadsound-lua.md` committed (from Session 12, was not yet in tree).
+- Security shift-left review for editor design: **PASS** — editor does not touch any attack surface (no file I/O, no networking, no scripting).
+
+**Integration with Application:**
+- `engine/core/application.h` / `application.cpp` updated to call editor init/shutdown/newFrame/render in the game loop, gated behind `FFE_EDITOR`.
+- Editor receives World pointer, renderer state, and audio voice count for its panels.
+
+**Testing:**
+- All **263 tests pass** on both Clang-18 and GCC-13, zero warnings.
+- `engine/editor/.context.md` written by api-designer.
+
+### Session 13 Stats
+- **New engine files:** engine/editor/editor.h, engine/editor/editor.cpp (2 files)
+- **New architecture docs:** design-note-imgui-editor.md
+- **Modified engine files:** engine/core/application.h, engine/core/application.cpp, engine/CMakeLists.txt, engine/editor/CMakeLists.txt
+- **Modified build files:** CMakeLists.txt (FFE_BUILD_TESTS ordering fix), vcpkg.json (imgui dependency)
+- **Modified docs:** docs/environment.md
+- **New .context.md:** engine/editor/.context.md
+- **New dependency:** imgui 1.91.9 (vcpkg, with glfw-binding + opengl3-binding features)
+- **Test count:** 263 (unchanged from Session 12)
+
+### Review Results
+- security-auditor (shift-left): **PASS** (editor does not touch attack surface)
+- test-engineer: **PASS** (263/263, zero warnings, both compilers)
+- api-designer: **APPROVED** (engine/editor/.context.md written)
+
+### Known Issues Updated
+- **No SFX audio file in assets/:** Still open — `ffe.playSound` works but no sfx.wav exists yet. Deferred from P1.
+- **Sprite animation/atlas design:** Not started — deferred from P2.
+- **Console/log viewer panel:** Stretch goal, not implemented this session.
+- **F1 input routing edge case:** F1 toggle uses `isKeyPressed` through the normal input system. If editor is consuming keyboard input, F1 might not reach the toggle. Needs verification.
+- **Editor not visually tested on GCC-13:** Only test suite verified; no windowed run on GCC build.
+- **M-1 getTransform GC pressure:** Still tracked (fillTransform available as mitigation).
+- **isAudioPathSafe() bare ".." check:** LOW — still tracked, non-exploitable.
+
+### Next Session Should Start With
+- Demo polish: add SFX audio assets, test editor overlay visually
+- Sprite animation/atlas design (architect ADR)
+- Physics system design (architect ADR)
+- Consider: what demo would best showcase FFE's capabilities?
+
+Session 14 handover document written at `docs/session14-handover.md`.
+
+---
+

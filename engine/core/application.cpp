@@ -62,6 +62,13 @@ int32_t Application::run() {
             glfwPollEvents();
         }
 
+#ifdef FFE_EDITOR
+        // F1 toggles editor overlay — checked before input system so F1 always works
+        if (ffe::isKeyPressed(ffe::Key::F1)) {
+            m_editorOverlay.toggle();
+        }
+#endif
+
         const auto currentTime = Clock::now();
         float frameTime = Duration(currentTime - previousTime).count();
         previousTime = currentTime;
@@ -210,6 +217,13 @@ Result Application::startup() {
     // 4b. Initialize the input system (handles nullptr window in headless mode)
     initInput(m_window);
 
+#ifdef FFE_EDITOR
+    // 4c. Initialize editor overlay (after window + GL, before renderer objects)
+    if (!m_config.headless) {
+        m_editorOverlay.init(m_window);
+    }
+#endif
+
     // 5. Initialize the renderer
     {
         rhi::RhiConfig rhiConfig;
@@ -330,6 +344,11 @@ void Application::shutdown() {
     // 5. Shutdown renderer
     rhi::shutdown();
 
+#ifdef FFE_EDITOR
+    // 4c. Shutdown editor overlay (before input and window destruction)
+    m_editorOverlay.shutdown();
+#endif
+
     // 4b. Shutdown input system (before window destruction)
     shutdownInput();
 
@@ -408,6 +427,12 @@ void Application::render(const float alpha) {
 
         renderer::endSpriteBatch(m_spriteBatch);
     }
+
+#ifdef FFE_EDITOR
+    // Editor overlay — renders ImGui on top of the sprite batch
+    m_editorOverlay.beginFrame();
+    m_editorOverlay.render(m_world);
+#endif
 
     // End frame — swap buffers
     rhi::endFrame(m_window);

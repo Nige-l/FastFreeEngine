@@ -6,7 +6,10 @@
     "joltphysics",
     "sol2",
     "glm",
-    "imgui",
+    {
+      "name": "imgui",
+      "features": ["glfw-binding", "opengl3-binding"]
+    },
     "stb",
     "nlohmann-json",
     "tracy",

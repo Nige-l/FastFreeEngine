@@ -24,6 +24,10 @@ set_property(CACHE FFE_TIER PROPERTY STRINGS RETRO LEGACY STANDARD MODERN)
 include(cmake/CompilerFlags.cmake)
 include(cmake/TierDefinitions.cmake)
 
+# --- Build options (declared before subdirectories so all targets see them) ---
+option(FFE_BUILD_EXAMPLES "Build example programs" ON)
+option(FFE_BUILD_TESTS "Build unit tests" ON)
+
 # --- Find dependencies ---
 find_package(EnTT CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
@@ -31,7 +35,8 @@ find_package(nlohmann_json CONFIG REQUIRED)
 find_package(Tracy CONFIG REQUIRED)
 find_package(sol2 CONFIG REQUIRED)
 find_package(Catch2 CONFIG REQUIRED)
-# imgui, stb, joltphysics, vulkan-memory-allocator found when needed
+find_package(imgui CONFIG REQUIRED)
+# stb, joltphysics, vulkan-memory-allocator found when needed
 
 # --- Third-party libraries ---
 add_subdirectory(third_party/glad)
@@ -40,13 +45,11 @@ add_subdirectory(third_party/glad)
 add_subdirectory(engine)
 
 # --- Examples ---
-option(FFE_BUILD_EXAMPLES "Build example programs" ON)
 if(FFE_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()
 
 # --- Tests ---
-option(FFE_BUILD_TESTS "Build unit tests" ON)
 if(FFE_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
