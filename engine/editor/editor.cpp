@@ -5,6 +5,8 @@
 #include "core/logging.h"
 #include "core/types.h"
 #include "renderer/render_system.h"
+#include "renderer/rhi.h"
+#include "physics/collider2d.h"
 #include "audio/audio.h"
 
 #include <imgui.h>
@@ -145,9 +147,23 @@ void EditorOverlay::drawPerformancePanel(World& world) {
         }
         ImGui::Text("Entities: %zu", entityCount);
 
+        // VRAM usage
+        const u32 vramBytes = ffe::rhi::textureVramUsed();
+        if (vramBytes < 1024 * 1024) {
+            ImGui::Text("Texture VRAM: %.1f KB", static_cast<double>(vramBytes) / 1024.0);
+        } else {
+            ImGui::Text("Texture VRAM: %.1f MB", static_cast<double>(vramBytes) / (1024.0 * 1024.0));
+        }
+
         // Audio voice count
         const u32 voices = ffe::audio::getActiveVoiceCount();
         ImGui::Text("Audio voices: %u", voices);
+
+        // Collision events this frame
+        const auto* collisionList = world.registry().ctx().find<CollisionEventList>();
+        if (collisionList != nullptr) {
+            ImGui::Text("Collisions: %u", collisionList->count);
+        }
     }
     ImGui::End();
 }
@@ -230,6 +246,37 @@ void EditorOverlay::drawEntityInspector(World& world) {
                     ImGui::Text("Layer: %d  SortOrder: %d",
                         static_cast<int>(sprite.layer),
                         static_cast<int>(sprite.sortOrder));
+                }
+
+                // SpriteAnimation info
+                if (world.hasComponent<SpriteAnimation>(entityId)) {
+                    ImGui::Separator();
+                    ImGui::Text("SpriteAnimation");
+
+                    const auto& anim = world.getComponent<SpriteAnimation>(entityId);
+                    ImGui::Text("Frame: %u / %u", anim.currentFrame, anim.frameCount);
+                    ImGui::Text("Frame time: %.3f s", static_cast<double>(anim.frameTime));
+                    ImGui::Text("Playing: %s  Loop: %s",
+                        anim.playing ? "yes" : "no",
+                        anim.looping ? "yes" : "no");
+                }
+
+                // Collider2D info
+                if (world.hasComponent<Collider2D>(entityId)) {
+                    ImGui::Separator();
+                    ImGui::Text("Collider2D");
+
+                    const auto& col = world.getComponent<Collider2D>(entityId);
+                    const char* shapeStr = (col.shape == ColliderShape::CIRCLE) ? "Circle" : "AABB";
+                    ImGui::Text("Shape: %s", shapeStr);
+                    if (col.shape == ColliderShape::CIRCLE) {
+                        ImGui::Text("Radius: %.1f", static_cast<double>(col.halfWidth));
+                    } else {
+                        ImGui::Text("Half-extents: %.1f x %.1f",
+                            static_cast<double>(col.halfWidth),
+                            static_cast<double>(col.halfHeight));
+                    }
+                    ImGui::Text("Trigger: %s", col.isTrigger ? "yes" : "no");
                 }
             } else {
                 m_hasSelection = false;
