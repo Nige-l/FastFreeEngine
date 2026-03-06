@@ -583,6 +583,26 @@ function update(entityId, dt)
         -- Update trail
         updateTrail(bx, by, dt)
     end
+
+    -- HUD: score and lives
+    ffe.drawText("SCORE: " .. tostring(score), 20, 20, 3, 1, 1, 1, 1)
+    -- Draw life indicators
+    local livesStr = "LIVES: "
+    for i = 1, lives do livesStr = livesStr .. "<3 " end
+    ffe.drawText(livesStr, 1020, 20, 3, 1, 0.3, 0.3, 1)
+
+    if not ballLaunched and not gameOver then
+        ffe.drawText("SPACE TO LAUNCH", 460, 500, 3, 0.7, 0.7, 0.8, 0.6 + 0.4 * math.sin(gameTime * 4))
+    end
+    if gameOver then
+        if gameWon then
+            ffe.drawText("YOU WIN!", 460, 320, 5, 0.3, 1, 0.3, 1)
+        else
+            ffe.drawText("GAME OVER", 430, 320, 5, 1, 0.3, 0.3, 1)
+        end
+        ffe.drawText("SPACE TO RESTART", 430, 420, 3, 0.7, 0.7, 0.8, 0.6 + 0.4 * math.sin(gameTime * 4))
+    end
+    ffe.drawText("A/D move | SPACE launch | M music | ESC quit", 280, 690, 2, 0.4, 0.4, 0.5, 0.6)
 end
 
 -- ---------------------------------------------------------------------------

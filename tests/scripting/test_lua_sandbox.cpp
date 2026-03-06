@@ -9,6 +9,7 @@
 #include "renderer/texture_loader.h"
 #include "audio/audio.h"
 #include "physics/collider2d.h"
+#include "renderer/text_renderer.h"
 
 #include <string>
 
@@ -2121,4 +2122,84 @@ TEST_CASE("ffe.getEntityCount returns correct count after creating entities", "[
     REQUIRE(fix.engine.doString(
         "local c = ffe.getEntityCount(); "
         "if c ~= 2 then error('expected 2, got ' .. tostring(c)) end"));
+}
+
+// =============================================================================
+// drawText binding
+// =============================================================================
+
+TEST_CASE("ffe.drawText is callable without World (no-op)", "[scripting][text]") {
+    ScriptFixture fix;
+    // Should not error even with no world
+    REQUIRE(fix.engine.doString("ffe.drawText('hello', 10, 20)"));
+}
+
+TEST_CASE("ffe.drawText queues glyphs when TextRenderer is available", "[scripting][text]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    // Create a TextRenderer and register it in ECS context
+    ffe::renderer::TextRenderer tr{};
+    // Manually set up minimal state (no GPU — headless)
+    tr.screenWidth  = 1280.0f;
+    tr.screenHeight = 720.0f;
+    tr.glyphCount   = 0;
+    tr.glyphs       = static_cast<ffe::renderer::GlyphQuad*>(
+        std::malloc(ffe::renderer::MAX_TEXT_GLYPHS * sizeof(ffe::renderer::GlyphQuad)));
+    world.registry().ctx().emplace<ffe::renderer::TextRenderer*>(&tr);
+
+    ffe::renderer::beginText(tr);
+    REQUIRE(fix.engine.doString("ffe.drawText('Hi', 10, 20, 2, 1, 0, 0, 1)"));
+    // "Hi" = 2 characters = 2 glyphs
+    REQUIRE(tr.glyphCount == 2);
+
+    std::free(tr.glyphs);
+    tr.glyphs = nullptr;
+}
+
+TEST_CASE("ffe.drawText rejects NaN values (no-op)", "[scripting][text]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    ffe::renderer::TextRenderer tr{};
+    tr.screenWidth  = 1280.0f;
+    tr.screenHeight = 720.0f;
+    tr.glyphCount   = 0;
+    tr.glyphs       = static_cast<ffe::renderer::GlyphQuad*>(
+        std::malloc(ffe::renderer::MAX_TEXT_GLYPHS * sizeof(ffe::renderer::GlyphQuad)));
+    world.registry().ctx().emplace<ffe::renderer::TextRenderer*>(&tr);
+
+    ffe::renderer::beginText(tr);
+    REQUIRE(fix.engine.doString("ffe.drawText('test', 0/0, 20)"));
+    REQUIRE(tr.glyphCount == 0); // NaN x rejected
+
+    std::free(tr.glyphs);
+    tr.glyphs = nullptr;
+}
+
+TEST_CASE("ffe.drawText clamps color values to [0,1]", "[scripting][text]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    ffe::renderer::TextRenderer tr{};
+    tr.screenWidth  = 1280.0f;
+    tr.screenHeight = 720.0f;
+    tr.glyphCount   = 0;
+    tr.glyphs       = static_cast<ffe::renderer::GlyphQuad*>(
+        std::malloc(ffe::renderer::MAX_TEXT_GLYPHS * sizeof(ffe::renderer::GlyphQuad)));
+    world.registry().ctx().emplace<ffe::renderer::TextRenderer*>(&tr);
+
+    ffe::renderer::beginText(tr);
+    // r=2.0 should be clamped to 1.0, g=-1.0 should be clamped to 0.0
+    REQUIRE(fix.engine.doString("ffe.drawText('A', 0, 0, 1, 2.0, -1.0, 0.5, 1.0)"));
+    REQUIRE(tr.glyphCount == 1);
+    REQUIRE(tr.glyphs[0].r == Catch::Approx(1.0f));
+    REQUIRE(tr.glyphs[0].g == Catch::Approx(0.0f));
+    REQUIRE(tr.glyphs[0].b == Catch::Approx(0.5f));
+
+    std::free(tr.glyphs);
+    tr.glyphs = nullptr;
 }

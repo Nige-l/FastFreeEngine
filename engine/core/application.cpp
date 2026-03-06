@@ -2,6 +2,7 @@
 #include "core/input.h"
 #include "renderer/rhi.h"
 #include "renderer/render_system.h"
+#include "renderer/text_renderer.h"
 #include "physics/collider2d.h"
 #include "physics/collision_system.h"
 
@@ -82,9 +83,9 @@ int32_t Application::run() {
             accumulator = fixedDt;
         }
 
-        // Reset render queue before the render call — renderPrepareSystem now runs
-        // during render(), not during tick(), so the queue is populated at render time.
+        // Reset render queue and text buffer for this frame.
         m_renderQueue.clear();
+        renderer::beginText(m_textRenderer);
 
         // --- Fixed-rate update ---
         while (accumulator >= fixedDt) {
@@ -274,6 +275,12 @@ Result Application::startup() {
         m_world.registry().ctx().emplace<rhi::TextureHandle>(m_defaultWhiteTexture);
     }
 
+    // 5cc2. Initialize text renderer for screen-space HUD text
+    renderer::initTextRenderer(m_textRenderer,
+        static_cast<f32>(m_config.windowWidth),
+        static_cast<f32>(m_config.windowHeight));
+    m_world.registry().ctx().emplace<renderer::TextRenderer*>(&m_textRenderer);
+
     // 5cd. Emplace HudTextBuffer into ECS context so Lua/systems can set HUD text
     // without a direct pointer to the editor overlay.
     m_world.registry().ctx().emplace<HudTextBuffer>();
@@ -369,6 +376,9 @@ void Application::shutdown() {
 
     // 5e. Destroy render queue
     renderer::destroyRenderQueue(m_renderQueue);
+
+    // 5cc2. Shutdown text renderer
+    renderer::shutdownTextRenderer(m_textRenderer);
 
     // 5cc. Destroy default white texture
     if (rhi::isValid(m_defaultWhiteTexture)) {
@@ -491,6 +501,10 @@ void Application::render(const float alpha) {
         }
 
         renderer::endSpriteBatch(m_spriteBatch);
+
+        // Flush queued HUD text in screen space.
+        // flushText sets its own screen-space VP matrix internally.
+        renderer::flushText(m_textRenderer, m_spriteBatch, staging);
     }
 
 #ifdef FFE_EDITOR

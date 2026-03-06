@@ -250,6 +250,17 @@ function update(entityId, dt)
     -- Update pickup ring effects
     updateRings(dt)
 
+    -- HUD text rendering
+    local scoreStr = "SCORE: " .. tostring(score)
+    local flashScale = 3
+    if scoreFlashTimer > 0 then
+        flashScale = 3 + scoreFlashTimer * 10  -- scale up briefly on pickup
+        ffe.drawText(scoreStr, 20, 20, flashScale, 1, 1, 0.2, 1)
+    else
+        ffe.drawText(scoreStr, 20, 20, flashScale, 1, 1, 1, 1)
+    end
+    ffe.drawText("WASD move | M music | ESC quit", 20, 690, 2, 0.5, 0.5, 0.6, 0.8)
+
     -- Music controls: M toggles, UP/DOWN adjust volume
     if musicHandle then
         if ffe.isKeyPressed(ffe.KEY_M) then

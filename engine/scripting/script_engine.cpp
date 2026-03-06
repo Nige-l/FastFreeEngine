@@ -14,6 +14,7 @@ extern "C" {
 #include "renderer/render_system.h"
 #include "renderer/texture_loader.h"
 #include "audio/audio.h"
+#include "renderer/text_renderer.h"
 #include "physics/collider2d.h"
 
 #include <algorithm>  // std::max, std::min
@@ -955,6 +956,49 @@ void ScriptEngine::registerEcsBindings() {
         return 1;
     });
     lua_setfield(L, -2, "getEntityCount");
+
+    // ffe.drawText(text, x, y, scale, r, g, b, a) — queue HUD text for rendering.
+    // Coordinates are screen pixels, origin top-left. scale=1 = 8px glyphs.
+    // Color components [0,1]. Clamped. NaN/Inf rejected (no-op).
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            return 0; // No world — silently ignore
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        auto** trPtr = world->registry().ctx().find<ffe::renderer::TextRenderer*>();
+        if (trPtr == nullptr || *trPtr == nullptr) return 0;
+
+        const char* text = luaL_checkstring(state, 1);
+        const lua_Number x     = luaL_checknumber(state, 2);
+        const lua_Number y     = luaL_checknumber(state, 3);
+        const lua_Number scale = luaL_optnumber(state, 4, 1.0);
+        const lua_Number r     = luaL_optnumber(state, 5, 1.0);
+        const lua_Number g     = luaL_optnumber(state, 6, 1.0);
+        const lua_Number b     = luaL_optnumber(state, 7, 1.0);
+        const lua_Number a     = luaL_optnumber(state, 8, 1.0);
+
+        // Reject NaN/Inf
+        if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(scale) ||
+            !std::isfinite(r) || !std::isfinite(g) || !std::isfinite(b) || !std::isfinite(a)) {
+            return 0;
+        }
+
+        const auto clamp01 = [](lua_Number v) -> ffe::f32 {
+            return static_cast<ffe::f32>(v < 0.0 ? 0.0 : (v > 1.0 ? 1.0 : v));
+        };
+        const ffe::f32 clampedScale = static_cast<ffe::f32>(scale < 0.1 ? 0.1 : (scale > 20.0 ? 20.0 : scale));
+
+        ffe::renderer::drawText(**trPtr, text,
+            static_cast<ffe::f32>(x), static_cast<ffe::f32>(y), clampedScale,
+            clamp01(r), clamp01(g), clamp01(b), clamp01(a));
+        return 0;
+    });
+    lua_setfield(L, -2, "drawText");
 
     // ffe.addTransform(entityId, x, y, rotation, scaleX, scaleY) -> bool
     lua_pushcfunction(L, [](lua_State* state) -> int {

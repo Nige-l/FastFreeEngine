@@ -427,6 +427,21 @@ function update(entityId, dt)
         -- Update trail
         updateTrail(bx, by, dt)
     end
+
+    -- HUD: score display
+    ffe.drawText(tostring(scoreLeft), 560, 30, 5, 0.4, 0.7, 1.0, 0.9)
+    ffe.drawText(tostring(scoreRight), 680, 30, 5, 1.0, 0.5, 0.4, 0.9)
+    ffe.drawText("-", 630, 30, 5, 0.5, 0.5, 0.5, 0.7)
+
+    if serving and not gameOver then
+        ffe.drawText("SPACE TO SERVE", 480, 400, 3, 0.7, 0.7, 0.8, 0.6 + 0.4 * math.sin(gameTime * 4))
+    end
+    if gameOver then
+        local winner = scoreLeft >= WIN_SCORE and "LEFT" or "RIGHT"
+        ffe.drawText(winner .. " WINS!", 440, 320, 5, 1, 1, 0.3, 1)
+        ffe.drawText("SPACE TO RESTART", 460, 420, 3, 0.7, 0.7, 0.8, 0.6 + 0.4 * math.sin(gameTime * 4))
+    end
+    ffe.drawText("W/S | UP/DOWN | M music | ESC quit", 330, 690, 2, 0.4, 0.4, 0.5, 0.6)
 end
 
 -- ---------------------------------------------------------------------------

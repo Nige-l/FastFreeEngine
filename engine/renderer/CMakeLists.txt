@@ -10,6 +10,7 @@ set(RENDERER_SOURCES
     render_system.cpp
     shader_library.cpp
     texture_loader.cpp
+    text_renderer.cpp
 )
 
 # Backend selection based on tier

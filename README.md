@@ -60,6 +60,7 @@ All subsystems below are implemented and working together in three demo games: "
 - **Editor Overlay** -- Dear ImGui debug overlay toggled with F1. Displays entity inspector, system timings, and engine state.
 - **Arena Allocator** -- Linear bump allocator with cache-line alignment and per-frame reset. Zero heap allocations in hot paths.
 - **Logging** -- printf-style logging with compile-time macro filtering and minimal lock scope.
+- **Bitmap Text Rendering** -- Built-in 8x8 pixel font with screen-space HUD text. `ffe.drawText()` from Lua with position, scale, and color. No external font files needed.
 - **Texture Loading** -- stb_image-based loader with path traversal prevention, write-once asset root, and configurable filter/wrap modes (LINEAR or NEAREST for pixel art).
 
 ---
@@ -145,7 +146,7 @@ cmake --build build-gcc
 
 ### Running Tests
 
-362 Catch2 tests covering core, renderer, scripting, audio, physics, and texture loading:
+369 Catch2 tests covering core, renderer, scripting, audio, physics, and texture loading:
 
 ```bash
 ctest --test-dir build --output-on-failure
@@ -231,7 +232,7 @@ engine/
   scripting/    Lua sandbox, ffe.* API bindings, instruction budget
   editor/       Dear ImGui overlay, entity inspector
 
-tests/          362 Catch2 tests (core, renderer, scripting, audio, physics)
+tests/          369 Catch2 tests (core, renderer, scripting, audio, physics)
 examples/       Demo games (lua_demo, pong, breakout, hello_sprites, interactive_demo, headless_test)
 assets/
   textures/     PNG textures and spritesheets
