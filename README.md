@@ -183,6 +183,8 @@ The flagship demo -- a complete mini-game written entirely in Lua exercising eve
 
 Classic two-player Pong with visual effects -- ball trail, paddle flash on hit, speed color shift, goal flash panels, and background music.
 
+![Pong Screenshot](docs/screenshots/pong.png)
+
 ```bash
 ./build/examples/pong/ffe_pong
 ```
