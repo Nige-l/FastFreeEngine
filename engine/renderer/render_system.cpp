@@ -150,4 +150,53 @@ void renderPrepareSystem(World& world, const float alpha) {
     }
 }
 
+void renderTilemaps(World& world, SpriteBatch& batch) {
+    ZoneScopedN("RenderTilemaps");
+
+    const auto view = world.registry().view<const Transform, const Tilemap>();
+    for (const auto entity : view) {
+        const auto& transform = view.get<const Transform>(entity);
+        const auto& tm        = view.get<const Tilemap>(entity);
+
+        if (tm.tiles == nullptr || tm.width == 0 || tm.height == 0) continue;
+        if (!rhi::isValid(tm.texture)) continue;
+
+        // Compute UV dimensions for one tile in the atlas.
+        const u16 rows    = (tm.tileCount + tm.columns - 1) / tm.columns;
+        const f32 uWidth  = 1.0f / static_cast<f32>(tm.columns);
+        const f32 vHeight = 1.0f / static_cast<f32>(rows);
+
+        // The entity's transform positions the top-left corner of the tilemap.
+        const f32 originX = transform.position.x;
+        const f32 originY = transform.position.y;
+
+        for (u16 row = 0; row < tm.height; ++row) {
+            for (u16 col = 0; col < tm.width; ++col) {
+                const u16 tileIndex = tm.tiles[static_cast<u32>(row) * tm.width + col];
+                if (tileIndex == 0) continue; // Empty tile
+
+                // Tile indices are 1-based for the atlas; subtract 1 for grid lookup.
+                const u16 atlasIdx = tileIndex - 1;
+                const u16 atlasCol = atlasIdx % tm.columns;
+                const u16 atlasRow = atlasIdx / tm.columns;
+
+                SpriteInstance sprite;
+                // Position: center of tile. Y increases downward for tilemap grids.
+                sprite.position.x = originX + (static_cast<f32>(col) + 0.5f) * tm.tileWidth;
+                sprite.position.y = originY - (static_cast<f32>(row) + 0.5f) * tm.tileHeight;
+                sprite.size       = {tm.tileWidth, tm.tileHeight};
+                sprite.uvMin.x    = static_cast<f32>(atlasCol) * uWidth;
+                sprite.uvMin.y    = static_cast<f32>(atlasRow) * vHeight;
+                sprite.uvMax.x    = sprite.uvMin.x + uWidth;
+                sprite.uvMax.y    = sprite.uvMin.y + vHeight;
+                sprite.color      = {1.0f, 1.0f, 1.0f, 1.0f};
+                sprite.rotation   = 0.0f;
+                sprite.depth      = 0.0f;
+
+                addSprite(batch, tm.texture, sprite);
+            }
+        }
+    }
+}
+
 } // namespace ffe::renderer

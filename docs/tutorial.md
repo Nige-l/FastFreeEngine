@@ -393,7 +393,42 @@ See the Pong and Breakout demos for polished examples of this pattern with anima
 
 ---
 
-## 15. Timers and Delays
+## 15. Tilemaps
+
+Render tile-based levels efficiently using tilemaps:
+
+```lua
+-- Load a tileset atlas (e.g., 4 columns x 4 rows = 16 tiles, each 16x16)
+local tileset = ffe.loadTexture("tileset.png")
+
+-- Create a tilemap entity
+local map = ffe.createEntity()
+ffe.addTransform(map, -200, 200, 0, 1, 1)  -- top-left corner position
+
+-- Create tilemap: 20 wide, 15 tall, 16x16px tiles, 4 columns, 16 total tiles
+ffe.addTilemap(map, 20, 15, 16, 16, tileset, 4, 16, 0)
+
+-- Fill in tiles (index 0 = empty, 1+ = atlas frame)
+for x = 0, 19 do
+    ffe.setTile(map, x, 14, 1)   -- ground row (tile 1)
+end
+ffe.setTile(map, 5, 12, 3)       -- a platform block
+ffe.setTile(map, 6, 12, 3)
+
+-- Read a tile back
+local t = ffe.getTile(map, 5, 12)  -- returns 3
+```
+
+**Rules:**
+- Tile index 0 is always empty/transparent
+- Indices 1+ map to your tileset atlas (1-based, left-to-right, top-to-bottom)
+- Maximum grid size: 1024x1024
+- Tilemaps bypass the render queue for efficiency — they render directly into the sprite batch
+- The entity's Transform positions the top-left corner of the tilemap
+
+---
+
+## 16. Timers and Delays
 
 Schedule actions to happen after a delay or at regular intervals:
 
@@ -423,7 +458,7 @@ ffe.cancelTimer(spawnTimer)
 
 ---
 
-## 16. Quitting Cleanly
+## 17. Quitting Cleanly
 
 ```lua
 if ffe.isKeyPressed(ffe.KEY_ESCAPE) then

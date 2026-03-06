@@ -501,6 +501,9 @@ void Application::render(const float alpha) {
             renderer::addSprite(m_spriteBatch, tex, sprite);
         }
 
+        // Render tilemaps directly into the sprite batch (bypasses render queue).
+        renderer::renderTilemaps(m_world, m_spriteBatch);
+
         renderer::endSpriteBatch(m_spriteBatch);
 
         // Flush queued HUD text in screen space.

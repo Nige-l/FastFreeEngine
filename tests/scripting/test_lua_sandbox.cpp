@@ -2311,6 +2311,93 @@ TEST_CASE("ffe.setSpriteFlip on invalid entity is a no-op", "[scripting][ecs][sp
 }
 
 // =============================================================================
+// Tilemap API: ffe.addTilemap, ffe.setTile, ffe.getTile
+// =============================================================================
+
+TEST_CASE("ffe.addTilemap creates a tilemap component", "[scripting][tilemap]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    const std::string script =
+        "ffe.addTransform(" + std::to_string(entity) + ", 0, 0, 0, 1, 1)\n"
+        "local ok = ffe.addTilemap(" + std::to_string(entity) + ", 8, 6, 16, 16, 1, 4, 16, 0)\n"
+        "assert(ok == true)\n";
+    REQUIRE(fix.engine.doString(script.c_str()));
+    REQUIRE(world.hasComponent<ffe::Tilemap>(entity));
+
+    const ffe::Tilemap& tm = world.getComponent<ffe::Tilemap>(entity);
+    REQUIRE(tm.width == 8);
+    REQUIRE(tm.height == 6);
+    REQUIRE(tm.tileWidth == Catch::Approx(16.0f));
+    REQUIRE(tm.tiles != nullptr);
+
+    ffe::destroyTilemap(world.getComponent<ffe::Tilemap>(entity));
+}
+
+TEST_CASE("ffe.setTile and ffe.getTile round-trip", "[scripting][tilemap]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    const std::string setup =
+        "ffe.addTransform(" + std::to_string(entity) + ", 0, 0, 0, 1, 1)\n"
+        "ffe.addTilemap(" + std::to_string(entity) + ", 4, 4, 16, 16, 1, 4, 16, 0)\n"
+        "ffe.setTile(" + std::to_string(entity) + ", 2, 3, 7)\n"
+        "local v = ffe.getTile(" + std::to_string(entity) + ", 2, 3)\n"
+        "assert(v == 7, 'expected 7, got ' .. tostring(v))\n";
+    REQUIRE(fix.engine.doString(setup.c_str()));
+
+    ffe::destroyTilemap(world.getComponent<ffe::Tilemap>(entity));
+}
+
+TEST_CASE("ffe.getTile returns 0 for unset tiles", "[scripting][tilemap]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    const std::string script =
+        "ffe.addTransform(" + std::to_string(entity) + ", 0, 0, 0, 1, 1)\n"
+        "ffe.addTilemap(" + std::to_string(entity) + ", 4, 4, 16, 16, 1, 4, 16, 0)\n"
+        "local v = ffe.getTile(" + std::to_string(entity) + ", 0, 0)\n"
+        "assert(v == 0)\n";
+    REQUIRE(fix.engine.doString(script.c_str()));
+
+    ffe::destroyTilemap(world.getComponent<ffe::Tilemap>(entity));
+}
+
+TEST_CASE("ffe.setTile out of bounds is a no-op", "[scripting][tilemap]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    const std::string script =
+        "ffe.addTransform(" + std::to_string(entity) + ", 0, 0, 0, 1, 1)\n"
+        "ffe.addTilemap(" + std::to_string(entity) + ", 4, 4, 16, 16, 1, 4, 16, 0)\n"
+        "ffe.setTile(" + std::to_string(entity) + ", 10, 10, 5)\n"; // out of bounds — no crash
+    REQUIRE(fix.engine.doString(script.c_str()));
+
+    ffe::destroyTilemap(world.getComponent<ffe::Tilemap>(entity));
+}
+
+TEST_CASE("ffe.addTilemap with zero texture returns false", "[scripting][tilemap]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    const std::string script =
+        "ffe.addTransform(" + std::to_string(entity) + ", 0, 0, 0, 1, 1)\n"
+        "local ok = ffe.addTilemap(" + std::to_string(entity) + ", 4, 4, 16, 16, 0, 4, 16, 0)\n"
+        "assert(ok == false)\n";
+    REQUIRE(fix.engine.doString(script.c_str()));
+}
+
+// =============================================================================
 // Timer API: ffe.after, ffe.every, ffe.cancelTimer
 // =============================================================================
 

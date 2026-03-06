@@ -856,6 +856,86 @@ TEST_CASE("renderPrepareSystem no flip leaves UVs unchanged", "[renderer][render
 }
 
 // =============================================================================
+// Tilemap — initTilemap, destroyTilemap, renderTilemaps
+// =============================================================================
+
+TEST_CASE("initTilemap allocates tile data initialised to zero", "[renderer][tilemap]") {
+    ffe::Tilemap tm;
+    REQUIRE(ffe::initTilemap(tm, 10, 8));
+    REQUIRE(tm.width == 10);
+    REQUIRE(tm.height == 8);
+    REQUIRE(tm.tiles != nullptr);
+
+    // All tiles should be zero (empty)
+    for (ffe::u32 i = 0; i < 10u * 8u; ++i) {
+        REQUIRE(tm.tiles[i] == 0);
+    }
+
+    ffe::destroyTilemap(tm);
+    REQUIRE(tm.tiles == nullptr);
+}
+
+TEST_CASE("initTilemap rejects zero dimensions", "[renderer][tilemap]") {
+    ffe::Tilemap tm;
+    REQUIRE_FALSE(ffe::initTilemap(tm, 0, 10));
+    REQUIRE_FALSE(ffe::initTilemap(tm, 10, 0));
+}
+
+TEST_CASE("initTilemap rejects oversized dimensions", "[renderer][tilemap]") {
+    ffe::Tilemap tm;
+    REQUIRE_FALSE(ffe::initTilemap(tm, 1025, 10));
+    REQUIRE_FALSE(ffe::initTilemap(tm, 10, 1025));
+}
+
+TEST_CASE("destroyTilemap is safe on uninitialised tilemap", "[renderer][tilemap]") {
+    ffe::Tilemap tm;
+    ffe::destroyTilemap(tm); // Should not crash
+    REQUIRE(tm.tiles == nullptr);
+}
+
+TEST_CASE("renderTilemaps produces no output for empty tilemap", "[renderer][tilemap]") {
+    RhiConfig rhiCfg;
+    rhiCfg.headless = true;
+    REQUIRE(init(rhiCfg) == RhiResult::OK);
+
+    ShaderLibrary shaderLib;
+    REQUIRE(initShaderLibrary(shaderLib));
+
+    ffe::World world;
+    world.registry().ctx().emplace<ShaderLibrary>(shaderLib);
+
+    const ffe::EntityId e = world.createEntity();
+    ffe::Transform& t = world.addComponent<ffe::Transform>(e);
+    t.position = {0.0f, 0.0f, 0.0f};
+
+    ffe::Tilemap& tm = world.addComponent<ffe::Tilemap>(e);
+    REQUIRE(ffe::initTilemap(tm, 4, 4));
+    tm.tileWidth  = 16.0f;
+    tm.tileHeight = 16.0f;
+    tm.texture    = rhi::TextureHandle{1};
+    tm.columns    = 4;
+    tm.tileCount  = 16;
+    // All tiles are 0 (empty) — nothing should be rendered
+
+    // Create a sprite batch for the test
+    SpriteBatch batch;
+    initSpriteBatch(batch, getShader(shaderLib, BuiltinShader::SPRITE));
+
+    rhi::SpriteVertex staging[MAX_BATCH_VERTICES];
+    beginSpriteBatch(batch, staging);
+    renderTilemaps(world, batch);
+    endSpriteBatch(batch);
+
+    // No sprites should have been added (all tiles empty)
+    REQUIRE(batch.drawCallCount == 0);
+
+    ffe::destroyTilemap(tm);
+    shutdownSpriteBatch(batch);
+    shutdownShaderLibrary(shaderLib);
+    shutdown();
+}
+
+// =============================================================================
 // animationUpdateSystem — frame advancement and UV computation
 // =============================================================================
 

@@ -1391,6 +1391,107 @@ void ScriptEngine::registerEcsBindings() {
     });
     lua_setfield(L, -2, "setSpriteFlip");
 
+    // ffe.addTilemap(entityId, width, height, tileW, tileH, textureHandle, columns, tileCount, layer) -> bool
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); lua_pushboolean(state, 0); return 1; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = luaL_checkinteger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) { lua_pushboolean(state, 0); return 1; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) { lua_pushboolean(state, 0); return 1; }
+
+        const auto w          = static_cast<ffe::u16>(luaL_checkinteger(state, 2));
+        const auto h          = static_cast<ffe::u16>(luaL_checkinteger(state, 3));
+        const auto tileW      = static_cast<ffe::f32>(luaL_checknumber(state, 4));
+        const auto tileH      = static_cast<ffe::f32>(luaL_checknumber(state, 5));
+        const auto texHandle  = static_cast<ffe::u32>(luaL_checkinteger(state, 6));
+        const auto columns    = static_cast<ffe::u16>(luaL_checkinteger(state, 7));
+        const auto tileCount  = static_cast<ffe::u16>(luaL_checkinteger(state, 8));
+        const auto layer      = static_cast<ffe::i16>(luaL_optinteger(state, 9, 0));
+
+        if (texHandle == 0 || w == 0 || h == 0 || columns == 0 || tileCount == 0) {
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+
+        ffe::Tilemap tm;
+        if (!ffe::initTilemap(tm, w, h)) {
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        tm.tileWidth  = tileW;
+        tm.tileHeight = tileH;
+        tm.texture    = ffe::rhi::TextureHandle{texHandle};
+        tm.columns    = columns;
+        tm.tileCount  = tileCount;
+        tm.layer      = layer;
+
+        // Destroy existing tilemap if present (prevents leak on overwrite).
+        if (world->hasComponent<ffe::Tilemap>(entityId)) {
+            ffe::destroyTilemap(world->getComponent<ffe::Tilemap>(entityId));
+        }
+        world->addComponent<ffe::Tilemap>(entityId) = tm;
+        lua_pushboolean(state, 1);
+        return 1;
+    });
+    lua_setfield(L, -2, "addTilemap");
+
+    // ffe.setTile(entityId, x, y, tileIndex) -> nothing
+    // x, y are 0-based grid coordinates. tileIndex 0 = empty.
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = luaL_checkinteger(state, 1);
+        if (rawId < 0) return 0;
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) return 0;
+        if (!world->hasComponent<ffe::Tilemap>(entityId)) return 0;
+
+        const auto x     = static_cast<ffe::u16>(luaL_checkinteger(state, 2));
+        const auto y     = static_cast<ffe::u16>(luaL_checkinteger(state, 3));
+        const auto index = static_cast<ffe::u16>(luaL_checkinteger(state, 4));
+
+        ffe::Tilemap& tm = world->getComponent<ffe::Tilemap>(entityId);
+        if (x >= tm.width || y >= tm.height) return 0;
+
+        tm.tiles[static_cast<ffe::u32>(y) * tm.width + x] = index;
+        return 0;
+    });
+    lua_setfield(L, -2, "setTile");
+
+    // ffe.getTile(entityId, x, y) -> tileIndex or nil
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); lua_pushnil(state); return 1; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = luaL_checkinteger(state, 1);
+        if (rawId < 0) { lua_pushnil(state); return 1; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) { lua_pushnil(state); return 1; }
+        if (!world->hasComponent<ffe::Tilemap>(entityId)) { lua_pushnil(state); return 1; }
+
+        const auto x = static_cast<ffe::u16>(luaL_checkinteger(state, 2));
+        const auto y = static_cast<ffe::u16>(luaL_checkinteger(state, 3));
+
+        const ffe::Tilemap& tm = world->getComponent<ffe::Tilemap>(entityId);
+        if (x >= tm.width || y >= tm.height) { lua_pushnil(state); return 1; }
+
+        lua_pushinteger(state, tm.tiles[static_cast<ffe::u32>(y) * tm.width + x]);
+        return 1;
+    });
+    lua_setfield(L, -2, "getTile");
+
     // ffe.addPreviousTransform(entityId) -> bool
     lua_pushcfunction(L, [](lua_State* state) -> int {
         lua_pushlightuserdata(state, &s_worldRegistryKey);

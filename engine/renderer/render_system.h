@@ -7,6 +7,7 @@
 #include "renderer/sprite_batch.h"
 
 #include <glm/glm.hpp>
+#include <new>
 
 namespace ffe {
 
@@ -60,6 +61,43 @@ struct SpriteAnimation {
     bool playing     = false;
 };
 
+// --- Tilemap component ---
+// Grid of tile indices rendered as a batch. Tile index 0 = empty (not rendered).
+// Indices 1+ map to frames in the tileset atlas (1-based for the atlas grid).
+// The entity's Transform positions the top-left corner of the tilemap in world space.
+// Tile data is heap-allocated once at creation time (cold path).
+// POD except for the tile data pointer. Must be freed via destroyTilemap().
+struct Tilemap {
+    u16* tiles     = nullptr;   // width * height tile indices (heap-allocated)
+    u16 width      = 0;         // Grid width in tiles
+    u16 height     = 0;         // Grid height in tiles
+    f32 tileWidth  = 16.0f;     // Tile size in world units
+    f32 tileHeight = 16.0f;
+    rhi::TextureHandle texture; // Tileset atlas texture
+    u16 columns    = 1;         // Columns in the tileset atlas
+    u16 tileCount  = 1;         // Total tiles in the tileset (for row calculation)
+    i16 layer      = 0;         // Render layer
+    i16 sortOrder  = 0;
+};
+
+// Allocate tile data for a tilemap. Initialises all tiles to 0 (empty).
+inline bool initTilemap(Tilemap& tm, const u16 w, const u16 h) {
+    if (w == 0 || h == 0 || w > 1024 || h > 1024) return false;
+    tm.tiles = new(std::nothrow) u16[static_cast<u32>(w) * h]();
+    if (tm.tiles == nullptr) return false;
+    tm.width  = w;
+    tm.height = h;
+    return true;
+}
+
+// Free tile data. Safe to call multiple times or on uninitialised tilemap.
+inline void destroyTilemap(Tilemap& tm) {
+    delete[] tm.tiles;
+    tm.tiles  = nullptr;
+    tm.width  = 0;
+    tm.height = 0;
+}
+
 } // namespace ffe
 
 namespace ffe::renderer {
@@ -85,5 +123,10 @@ inline constexpr i32 ANIMATION_UPDATE_PRIORITY = 50;
 // NOT registered in the system list. Accepts alpha (interpolation factor [0,1))
 // and lerps between PreviousTransform and Transform when building DrawCommands.
 void renderPrepareSystem(World& world, float alpha);
+
+// Render all Tilemap components directly into the sprite batch.
+// Called from Application::render() after the render queue sprites are drawn.
+// Bypasses the render queue to avoid filling it with thousands of tile commands.
+void renderTilemaps(World& world, SpriteBatch& batch);
 
 } // namespace ffe::renderer

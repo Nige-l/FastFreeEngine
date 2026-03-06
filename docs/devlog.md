@@ -1981,3 +1981,39 @@ P0: Timer/scheduler API from Lua. P1-P2: Tilemap and scene management (deferred)
 
 ---
 
+## 2026-03-06 — Session 30: Tilemap Rendering
+
+### Completed
+
+**Tilemap Component and Rendering**
+- `Tilemap` struct: grid dimensions (max 1024x1024), tile size, tileset texture/atlas info, layer
+- `initTilemap()` / `destroyTilemap()` — heap allocation at creation time (cold path), zero per-frame alloc
+- Tile index 0 = empty, 1+ = 1-based atlas frame (left-to-right, top-to-bottom)
+- `renderTilemaps()` — renders directly into SpriteBatch, bypasses the render queue
+  - Avoids filling the 8192-command render queue with thousands of tile entries
+  - Computes UV from atlas grid, positions each tile relative to entity Transform
+  - Y axis goes downward for natural tilemap layout
+
+**Lua Bindings:**
+- `ffe.addTilemap(entityId, w, h, tileW, tileH, texture, columns, tileCount [, layer])` → bool
+- `ffe.setTile(entityId, x, y, tileIndex)` → nothing (bounds-checked)
+- `ffe.getTile(entityId, x, y)` → integer or nil
+
+**Documentation:**
+- Tutorial Section 15: Tilemaps with usage example
+- `engine/scripting/.context.md`: tilemap bindings documented
+- ROADMAP: sprite rotation, sprite flipping, timer API, tilemap rendering all checked off
+
+### Test Results
+- **399 tests pass** on both Clang-18 and GCC-13, zero warnings (10 new tests)
+- initTilemap allocation, zero init, dimension rejection, destroy safety
+- renderTilemaps empty grid produces no output
+- Lua: addTilemap, setTile/getTile round-trip, out-of-bounds no-op, zero texture rejection
+
+### Next Session Should Start With
+- P0: Scene management (load/unload scenes, transitions)
+- P1: Gamepad input support
+- P2: Save/load system (serialise game state to disk)
+
+---
+
