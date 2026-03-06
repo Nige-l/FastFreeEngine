@@ -584,3 +584,79 @@ Session 6 handover document written at `docs/session6-handover.md`.
 
 ### Session opened
 Autonomous execution. User asleep — running continuously through multiple sessions.
+
+---
+
+## 2026-03-06 — Session 6 Outcomes
+
+### Completed
+
+**Phase 1 — Parallel (security shift-left, engine-dev fixes):**
+- **security-auditor** reviewed Lua ECS binding design shift-left: PASS WITH CONDITIONS — 2 MEDIUM findings (NaN/Inf in setTransform could corrupt transform state; asset root path leaked in error messages). Both addressed before implementation. 2 LOW findings tracked.
+- **engine-dev** fixed M-7: `updateBuffer` offset + sizeBytes now uses u64 checked arithmetic — no integer overflow possible.
+- **engine-dev** implemented `FFE_SYSTEM` macro — compile-time `nameLength` derived from string literal size, eliminating manual `sizeof("name") - 1` boilerplate. All existing system registrations updated.
+- **engine-dev** removed `submitRenderQueue()` dead code — sprite batch path is the sole rendering path.
+- **engine-dev** added `TextureLoadParams` struct to `loadTexture` — `filter` (LINEAR/NEAREST) and `wrap` (CLAMP_TO_EDGE/REPEAT) parameters with backward-compatible defaults. NEAREST is now available for pixel art.
+- **engine-dev** added `assets/textures/white.png` (1x1 solid white) and `assets/textures/checkerboard.png` (64x64 checkerboard) — first real PNG assets in the repository.
+
+**Phase 2 — Sequential (Lua ECS bindings):**
+- **engine-dev** implemented Lua ECS bindings in `engine/scripting/script_engine.cpp`:
+  - `ffe.isKeyHeld(key)`, `ffe.isKeyPressed(key)`, `ffe.isKeyReleased(key)` — key input from Lua
+  - `ffe.KEY_*` constants — full set of GLFW key codes exposed as named Lua constants
+  - `ffe.getMouseX()`, `ffe.getMouseY()` — mouse position from Lua
+  - `ffe.getTransform(entityId)` — returns table `{x, y, z, scaleX, scaleY, scaleZ, rotation}`
+  - `ffe.setTransform(entityId, x, y, rotation, scaleX, scaleY)` — writes back to ECS Transform; NaN/Inf inputs rejected before any write
+- **engine-dev** fixed DESIGN-1: `ShutdownSignal` component added to ECS registry context. Any system (C++ or Lua-driven) can set `ShutdownSignal::requested = true` to cleanly request engine shutdown. `Application::run()` checks this flag each tick.
+
+**Phase 3 — Reviews (parallel):**
+- **performance-critic: MINOR ISSUES** — `getTransform` allocates a Lua table per call (M-1), registry context probe on every `setTransform` call (M-2). Both documented in scripting/.context.md as known overhead. Non-blocking for current entity counts on LEGACY hardware.
+- **security-auditor reviewed Lua ECS implementation: PASS WITH CONDITIONS** — 2 MEDIUM findings addressed during implementation (NaN/Inf rejection in setTransform, asset root removed from error logs). 2 LOW findings tracked: entity ID integer truncation on 32-bit Lua (documented), key constant integer overflow guard (informational).
+- **test-engineer** wrote 4 new Catch2 tests. Total test count: **162 → 166**.
+
+**Phase 4 — API Review (api-designer):**
+- Reviewed Lua ECS binding surface. Approved.
+- Updated `engine/scripting/.context.md`: full ECS binding section with ffe.getTransform/setTransform patterns, ffe.isKeyHeld usage, KEY_* constants table, NaN/Inf rejection behaviour, getTransform table allocation warning.
+- Updated `engine/core/.context.md`: ShutdownSignal usage pattern, DESIGN-1 resolution.
+- Updated `engine/renderer/.context.md`: TextureLoadParams API, NEAREST filter pattern for pixel art.
+
+**Phase 5 — Demo (game-dev-tester):**
+- Built `examples/lua_demo/` — C++ host (~260 lines) loads `game.lua` which handles all player movement, WASD via `ffe.isKeyHeld` + `ffe.KEY_*`, transform update via `ffe.setTransform`, bounds clamping. Checkerboard PNG texture loaded via `loadTexture`. First confirmed end-to-end PNG loadTexture success.
+- Full usage report: `docs/game-dev-tester-session6-report.md`. Overall: no blockers. 3 friction points identified.
+
+### Session 6 Stats
+- **New engine files:** 1 (components.h for Transform moved from renderer)
+- **Modified engine files:** script_engine.h, script_engine.cpp, texture_loader.h, texture_loader.cpp, rhi_opengl.cpp, system.h, application.h/.cpp (~8 files)
+- **New example:** examples/lua_demo/ (main.cpp, game.lua, CMakeLists.txt)
+- **New assets:** assets/textures/white.png, assets/textures/checkerboard.png
+- **New tests:** 4 (total: 166)
+- **Security findings resolved:** 2 MEDIUM (NaN/Inf rejection, asset root path leak) — fixed before implementation
+- **Performance observations:** 2 MINOR (getTransform table alloc, registry probe) — documented, non-blocking
+
+### Review Results
+- performance-critic: **MINOR ISSUES** (getTransform table allocation M-1, registry probe M-2 — documented)
+- security-auditor Lua ECS design (shift-left): **PASS WITH CONDITIONS** (2 MEDIUM fixed pre-implementation)
+- security-auditor Lua ECS implementation: **PASS WITH CONDITIONS** (2 LOW tracked)
+- game-dev-tester: **No blockers** — FRICTION-1 HIGH (no callFunction API), FRICTION-2 MEDIUM (no ffe.requestShutdown), FRICTION-3 LOW (entity creation C++ only)
+
+### Known Issues Updated
+- **DESIGN-1:** FIXED — ShutdownSignal in ECS context, any system can request shutdown.
+- **M-3:** FIXED — FFE_SYSTEM macro eliminates manual nameLength.
+- **M-7:** FIXED — updateBuffer uses checked u64 arithmetic.
+- **F-2:** FIXED — assets/textures/ exists with white.png and checkerboard.png; loadTexture end-to-end validated.
+- **F-5:** FIXED — TextureLoadParams with filter/wrap params; NEAREST available.
+- **submitRenderQueue dead code:** REMOVED.
+- **FRICTION-1 (callFunction):** NEW — tracked for Session 7 (P0).
+- **FRICTION-2 (ffe.requestShutdown):** NEW — tracked for Session 7.
+- **FRICTION-3 (entity creation from Lua):** NEW — tracked for Session 7 (design needed).
+- **Performance getTransform table alloc (M-1):** Tracked for Session 8.
+- **Performance registry probe (M-2):** Tracked for Session 8.
+- **hello_sprites flickering:** Hardware (AMD driver) — user reboot needed to resolve.
+
+### Next Session Should Start With
+- Implement `ScriptEngine::callFunction()` — eliminates per-frame doString/luaL_loadstring overhead
+- Add `ffe.requestShutdown()` Lua binding — sets ShutdownSignal via World* in registry
+- Architect designs jitter fix (prev-frame position interpolation approach)
+- Fix M-7 (updateBuffer overflow) — already done this session (see above); verify no regression
+- game-dev-tester builds demo using callFunction + Lua-driven shutdown
+
+Session 7 handover document written at `docs/session7-handover.md`.
