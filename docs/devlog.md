@@ -961,3 +961,87 @@ Session 11 handover document written at `docs/session11-handover.md`.
 
 ---
 
+## Session 11 — [2026-03-06] — Audio Performance Fixes + Music Streaming
+
+### Goals
+1. P0 — Audio performance: M-1 (reduce callback mutex acquisitions N+1→1), M-2 (atomic voice count), M-3 (remove redundant modulo)
+2. P1 — Audio music streaming: playMusic, stopMusic, setMusicVolume, getMusicVolume, isMusicPlaying
+3. P2 — getTransform GC batching: architect design note
+
+### Pre-conditions
+- 228/228 tests passing (Clang-18 + GCC-13)
+- Audio M-1/M-2/M-3 performance issues tracked from Session 10
+- session11-handover.md written
+
+### Session opened
+Autonomous execution continuing.
+
+---
+
+## 2026-03-06 — Session 11 Outcomes
+
+### Completed
+
+**Phase 1 — Parallel (architect design + shift-left security):**
+- **architect** wrote `design-note-audio-streaming.md` — compared three strategies (decode-all-to-RAM, callback streaming, dedicated thread). Chose Option B: stb_vorbis streaming inside the audio callback. State machine: STOPPED ↔ PLAYING. Three new command types: PLAY_MUSIC, STOP_MUSIC, SET_MUSIC_VOLUME. `SoundBuffer.canonPath` populated at loadSound time for streaming reuse. One stb_vorbis stream at a time; last-write-wins on concurrent PLAY_MUSIC in same drain window.
+- **architect** wrote `design-note-gettransforms-batch.md` — analyzed `ffe.getTransforms({ids})` batch API. Conclusion: batch fetch does NOT reduce allocations (still N tables). Recommended `ffe.fillTransform(entityId, table)` as zero-allocation alternative (mutates existing table in-place). GC pressure becomes visible at ~500+ entities. Deferred fillTransform implementation to Session 12.
+- **security-auditor (shift-left)** reviewed audio streaming design: **PASS WITH CONSTRAINTS** — MEDIUM-1 (soundId bounds check before path retrieval in callback), MEDIUM-2 (stb_vorbis_seek_start return value must be checked), LOW-1 (stb_vorbis open error code must be logged). All three constraints required before implementation.
+
+**Phase 2 — Implementation (engine-dev):**
+- **engine-dev** rewrote `audioCallback` with two-phase structure:
+  - **Phase 1 (no mutex):** Drain ring into local arrays. PLAY_SOUND → local pending array; volume commands → atomic stores; PLAY_MUSIC → `pendingPlayMusic` staging (last-write-wins); STOP_MUSIC → `pendingStopMusic` flag.
+  - **Phase 2 (single mutex):** Stop music if flagged; start music (soundId bounds+occupancy+path check, stb_vorbis open, error logged); activate PLAY_SOUND voices (activeVoiceCount.fetch_add); mix SFX voices (fetch_sub on completion); mix music (stb_vorbis_get_samples_float_interleaved, loop via stb_vorbis_seek_start with return value check).
+  - Result: N+1 mutex acquisitions → 1 per callback (M-1 fix).
+- **engine-dev** replaced `getActiveVoiceCount()` mutex+linear scan with `std::atomic<u32> activeVoiceCount` maintained at activation/deactivation sites (M-2 fix).
+- **engine-dev** removed redundant `tail % CMD_RING_CAPACITY` in `postCommand` ring-full check (M-3 fix).
+- **engine-dev** added `char canonPath[PATH_MAX+1]` to `SoundBuffer`, populated at `loadSound` time, cleared on `unloadSound`.
+- **engine-dev** implemented 5 new public functions: `playMusic`, `stopMusic`, `setMusicVolume`, `getMusicVolume`, `isMusicPlaying`.
+- **engine-dev** added `playMusic`/`stopMusic`/`setMusicVolume`/`getMusicVolume`/`isMusicPlaying` Lua bindings to `script_engine.cpp`. Added `ffe.KEY_M` constant.
+- **engine-dev** added `ffe_audio` to `engine/scripting/CMakeLists.txt` PUBLIC link libraries (resolved undefined symbol link error for new music functions).
+- All 3 security constraints (MEDIUM-1, MEDIUM-2, LOW-1) implemented with code comments.
+
+**Phase 3 — Performance review:**
+- **performance-critic** reviewed M-1/M-2/M-3 fixes: **PASS** — M-2: O(1) atomic read replaces mutex+32-iteration scan; M-1: N+1 mutex acquisitions reduced to 1 per callback, 768-byte Phase 1 stack usage within budget; M-3: redundant modulo eliminated.
+
+**Phase 4 — Validation (security, tests, API, demo):**
+- **security-auditor post-impl** reviewed audio streaming implementation: **PASS** — all 3 shift-left constraints verified (soundId bounds+occupancy+path check; stb_vorbis_seek_start checked with stream close on failure; error code logged). Track switch cleanup, shutdown stream cleanup, canonPath population, static decode buffer safety all confirmed.
+- **test-engineer** added 10 new tests to `tests/audio/test_audio.cpp`: M-2 atomic path validation, music API no-op in headless mode, volume clamping, isMusicPlaying state, shutdown cleanup. **238/238 tests pass on Clang-18 and GCC-13. Zero warnings.**
+- **api-designer** updated `engine/audio/.context.md`: added Music Playback section with 5 function table, patterns 6–7 (looping music, track switching), music anti-patterns. Updated `engine/scripting/.context.md`: added Music Playback subsection, `ffe.KEY_M` constant, music usage example with g_musicHandle pattern.
+- **game-dev-tester** updated `examples/lua_demo/game.lua`: M-key toggle (play/stop), UP/DOWN arrow volume, first-tick auto-start from `g_musicHandle` global (set from C++), `shutdown()` updated to stop music before texture release.
+
+### Session 11 Stats
+- **Modified engine files:** engine/audio/audio.h, engine/audio/audio.cpp, engine/scripting/script_engine.cpp, engine/scripting/CMakeLists.txt (~4 files)
+- **Modified .context.md:** engine/audio/.context.md, engine/scripting/.context.md
+- **New architecture docs:** design-note-audio-streaming.md, design-note-gettransforms-batch.md, performance-review-audio-m1m2.md, security-review-audio-streaming-design.md, security-review-audio-streaming-impl.md
+- **Modified examples:** examples/lua_demo/game.lua (music controls)
+- **New tests:** 10 (total: 238, was 228 at session start)
+- **Security findings resolved:** MEDIUM-1, MEDIUM-2, LOW-1 (all shift-left, all implemented)
+- **Performance improvements:** M-1 (N+1→1 mutex), M-2 (O(n)→O(1) voice count), M-3 (redundant modulo removed)
+- **Link error fixed:** ffe_audio added to scripting CMakeLists.txt
+
+### Review Results
+- performance-critic: **PASS** (M-1, M-2, M-3 all fixed)
+- security-auditor streaming design (shift-left): **PASS WITH CONSTRAINTS** (3 constraints, all implemented)
+- security-auditor streaming impl: **PASS** (all constraints verified)
+- test-engineer: **PASS** (238/238, zero warnings, both compilers)
+- api-designer: **APPROVED** (.context.md updated — audio and scripting)
+- game-dev-tester: **No blockers** — music controls work as documented
+
+### Known Issues Updated
+- **Audio M-1 (mutex double-lock):** FIXED — single mutex per callback via two-phase drain.
+- **Audio M-2 (getActiveVoiceCount mutex):** FIXED — atomic counter, O(1), safe per-frame.
+- **Audio M-3 (redundant modulo):** FIXED — removed.
+- **Music streaming:** IMPLEMENTED — playMusic, stopMusic, setMusicVolume, getMusicVolume, isMusicPlaying.
+- **ffe.loadSound from Lua:** NOT IN SCOPE — music handle must be pre-loaded from C++ and passed as `g_musicHandle` global. Tracked for Session 12.
+- **fillTransform (zero-alloc getTransform alternative):** Design complete. Implementation deferred to Session 12.
+- **M-1 getTransform GC pressure:** Design note written. fillTransform implementation in Session 12.
+
+### Next Session Should Start With
+- Implement `ffe.loadSound(path)` Lua binding — allows scripts to load audio from Lua directly
+- Implement `ffe.fillTransform(entityId, table)` — zero-allocation getTransform alternative
+- game-dev-tester builds a demo where music is loaded entirely from Lua (no C++ pre-loading)
+
+Session 12 handover document written at `docs/session12-handover.md`.
+
+---
+

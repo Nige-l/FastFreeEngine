@@ -13,6 +13,7 @@ extern "C" {
 #include "core/input.h"
 #include "renderer/render_system.h"
 #include "renderer/texture_loader.h"
+#include "audio/audio.h"
 
 #include <algorithm>  // std::max, std::min
 #include <cinttypes>  // PRId64
@@ -443,6 +444,7 @@ void ScriptEngine::registerEcsBindings() {
     lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::A));      lua_setfield(L, -2, "KEY_A");
     lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::S));      lua_setfield(L, -2, "KEY_S");
     lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::D));      lua_setfield(L, -2, "KEY_D");
+    lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::M));      lua_setfield(L, -2, "KEY_M");
     lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::SPACE));  lua_setfield(L, -2, "KEY_SPACE");
     lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::ESCAPE)); lua_setfield(L, -2, "KEY_ESCAPE");
     lua_pushinteger(L, static_cast<lua_Integer>(ffe::Key::ENTER));  lua_setfield(L, -2, "KEY_ENTER");
@@ -910,6 +912,77 @@ void ScriptEngine::registerEcsBindings() {
         return 0;
     });
     lua_setfield(L, -2, "unloadTexture");
+
+    // ----------------------------------------------------------------
+    // Music playback bindings — wrap ffe::audio music API for Lua scripts.
+    //
+    // ffe.playMusic(soundHandle, loop)
+    //   soundHandle: integer returned by ffe.loadSound (not yet a Lua API —
+    //   currently music tracks must be loaded from C++ and the handle integer
+    //   passed in via a global variable or ffe.loadSound when that is added).
+    //   loop: boolean (default true if omitted)
+    //   No-op in headless mode.
+    //
+    // ffe.stopMusic()
+    //   Stop the currently playing music track.
+    //
+    // ffe.setMusicVolume(volume)
+    //   Set music volume [0.0, 1.0]. NaN/Inf -> 0.0.
+    //
+    // ffe.getMusicVolume() -> number
+    //   Query current music volume.
+    //
+    // ffe.isMusicPlaying() -> boolean
+    //   Returns true if a music track is currently active.
+    // ----------------------------------------------------------------
+
+    // ffe.playMusic(soundHandle, loop)
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const lua_Integer rawHandle = luaL_checkinteger(state, 1);
+        if (rawHandle <= 0 || rawHandle > static_cast<lua_Integer>(UINT32_MAX)) {
+            FFE_LOG_ERROR("ScriptEngine",
+                          "playMusic: invalid handle %" PRId64 " — no-op",
+                          static_cast<long long>(rawHandle));
+            return 0;
+        }
+        const ffe::audio::SoundHandle handle{static_cast<ffe::u32>(rawHandle)};
+        // Default loop = true if argument is omitted or nil.
+        const bool loop = (lua_gettop(state) < 2 || lua_isnil(state, 2))
+                        ? true
+                        : (lua_toboolean(state, 2) != 0);
+        ffe::audio::playMusic(handle, loop);
+        return 0;
+    });
+    lua_setfield(L, -2, "playMusic");
+
+    // ffe.stopMusic()
+    lua_pushcfunction(L, [](lua_State* /*state*/) -> int {
+        ffe::audio::stopMusic();
+        return 0;
+    });
+    lua_setfield(L, -2, "stopMusic");
+
+    // ffe.setMusicVolume(volume)
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const lua_Number vol = luaL_checknumber(state, 1);
+        ffe::audio::setMusicVolume(static_cast<float>(vol));
+        return 0;
+    });
+    lua_setfield(L, -2, "setMusicVolume");
+
+    // ffe.getMusicVolume() -> number
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushnumber(state, static_cast<lua_Number>(ffe::audio::getMusicVolume()));
+        return 1;
+    });
+    lua_setfield(L, -2, "getMusicVolume");
+
+    // ffe.isMusicPlaying() -> boolean
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushboolean(state, ffe::audio::isMusicPlaying() ? 1 : 0);
+        return 1;
+    });
+    lua_setfield(L, -2, "isMusicPlaying");
 
     // Set the 'ffe' table as a global.
     lua_setglobal(L, "ffe");

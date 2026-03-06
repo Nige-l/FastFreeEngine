@@ -1,9 +1,9 @@
--- game.lua -- player movement + entity lifecycle demo for FFE lua_demo
+-- game.lua -- player movement + entity lifecycle + audio music demo for FFE lua_demo
 --
 -- This script is loaded once at startup via scriptEngine.doFile().
 -- It defines a global update() function that the C++ host calls each tick.
 --
--- What this demo exercises (Session 8 + Session 9 bindings):
+-- What this demo exercises:
 --   - ffe.createEntity()          spawn entities from Lua
 --   - ffe.addTransform(...)       attach Transform component
 --   - ffe.addSprite(...)          attach Sprite component
@@ -11,38 +11,42 @@
 --   - ffe.destroyEntity()         not demonstrated here (no pickup/death yet)
 --   - ffe.loadTexture(path)       load a GPU texture from the asset root (Session 9)
 --   - ffe.unloadTexture(handle)   release a GPU texture; called in shutdown() (Session 10)
+--   - ffe.playMusic(handle, loop) start looping background music (Session 11)
+--   - ffe.stopMusic()             stop music track (Session 11)
+--   - ffe.setMusicVolume(v)       adjust music volume (Session 11)
+--   - ffe.isMusicPlaying()        query music state (Session 11)
 --
 -- Controls:
 --   WASD       move the player
 --   SPACE      spawn a static marker at the player's position (up to 5)
+--   M          toggle music on/off (if a music track was loaded from C++)
+--   +/-        increase/decrease music volume (UP/DOWN arrow keys)
 --   ESC        quit cleanly via ffe.requestShutdown()
 --
 -- Coordinate system: centered origin, -640..640 (x), -360..360 (y).
 -- Window: 1280x720.
 --
--- Texture handle note (Session 9 + 10 update):
---   On the first update tick, ffe.loadTexture("checkerboard.png") is called once.
---   If the load succeeds, the returned integer handle is used for the follower
---   sprite instead of the hardcoded stub constant 1.
---   If the load fails (e.g. because renderer::setAssetRoot() was not called from
---   C++ before this script runs), a warning is logged and the stub handle 1 is
---   used as a fallback -- the demo continues to work in headless mode.
+-- Music note (Session 11):
+--   Music must be loaded from C++ via ffe::audio::loadSound() and the handle
+--   integer passed as a global variable (g_musicHandle) before this script runs.
+--   If g_musicHandle is nil or 0, music controls are silently skipped.
+--   This is a temporary limitation until ffe.loadSound() Lua bindings are added.
 --
---   shutdown() (Session 10): ScriptEngine::shutdown() now calls the Lua global
---   shutdown() if it exists. This script defines shutdown() to call
---   ffe.unloadTexture(textureHandle) when the handle was successfully loaded,
---   ensuring the GPU texture is released cleanly before the Lua state closes.
+-- Texture handle note (Session 9 + 10):
+--   On the first update tick, ffe.loadTexture("checkerboard.png") is called once.
+--   Falls back to stub handle 1 on failure (headless-safe).
 
-local SPEED        = 150.0      -- pixels per second
+local SPEED          = 150.0    -- pixels per second
 local FOLLOWER_SPEED = 80.0     -- pixels per second, follower chases player
-local HALF_W       = 640.0      -- visible half-width
-local HALF_H       = 360.0      -- visible half-height
-local HALF_SPRITE  = 24.0       -- half-size of the 48px player sprite
-local MAX_MARKERS  = 5          -- maximum spawned static markers
-local MARKER_TEX   = 1          -- stub texture handle (headless-safe fallback)
-local FOLLOWER_TEX = 1          -- stub texture handle; replaced at first tick if loadTexture succeeds
+local HALF_W         = 640.0    -- visible half-width
+local HALF_H         = 360.0    -- visible half-height
+local HALF_SPRITE    = 24.0     -- half-size of the 48px player sprite
+local MAX_MARKERS    = 5        -- maximum spawned static markers
+local MARKER_TEX     = 1        -- stub texture handle (headless-safe fallback)
+local FOLLOWER_TEX   = 1        -- stub texture handle; replaced at first tick if loadTexture succeeds
+local MUSIC_VOL_STEP = 0.1      -- volume change per keypress
 
-ffe.log("lua_demo: script loaded. WASD=move, SPACE=spawn marker, ESC=quit")
+ffe.log("lua_demo: script loaded. WASD=move, SPACE=marker, M=music, arrows=volume, ESC=quit")
 
 -- ---------------------------------------------------------------------------
 -- Module-level state
@@ -62,6 +66,11 @@ local markerCount = 0
 -- markers: table of entity IDs for spawned static sprites.
 -- Declared here so that spawn logic inside update() can append to it.
 local markers = {}
+
+-- musicStarted: true once we have called ffe.playMusic on the first tick.
+-- g_musicHandle is a global set from C++ before game.lua is loaded.
+-- If g_musicHandle is nil or 0, music features are silently disabled.
+local musicStarted = false
 
 -- ---------------------------------------------------------------------------
 -- Internal: clamp a value into [lo, hi]
@@ -242,6 +251,50 @@ function update(entityId, dt)
     end
 
     -- ------------------------------------------------------------------
+    -- Music: start looping on first tick if a handle was provided from C++.
+    -- g_musicHandle is set as a global from lua_demo/main.cpp before game.lua
+    -- is loaded. If absent or invalid, this block is silently skipped.
+    -- ------------------------------------------------------------------
+    if not musicStarted and g_musicHandle and g_musicHandle ~= 0 then
+        ffe.playMusic(g_musicHandle, true)
+        ffe.setMusicVolume(0.5)
+        musicStarted = true
+        ffe.log("lua_demo: music started (handle=" .. tostring(g_musicHandle) .. ", vol=0.5)")
+    end
+
+    -- ------------------------------------------------------------------
+    -- M: toggle music on/off
+    -- UP/DOWN arrows: increase/decrease music volume
+    -- ------------------------------------------------------------------
+    if musicStarted then
+        if ffe.isKeyPressed(ffe.KEY_M) then
+            if ffe.isMusicPlaying() then
+                ffe.stopMusic()
+                ffe.log("lua_demo: music stopped")
+            else
+                ffe.playMusic(g_musicHandle, true)
+                ffe.log("lua_demo: music resumed")
+            end
+        end
+
+        if ffe.isKeyPressed(ffe.KEY_UP) then
+            local vol = ffe.getMusicVolume()
+            local newVol = vol + MUSIC_VOL_STEP
+            if newVol > 1.0 then newVol = 1.0 end
+            ffe.setMusicVolume(newVol)
+            ffe.log("lua_demo: music volume -> " .. string.format("%.1f", newVol))
+        end
+
+        if ffe.isKeyPressed(ffe.KEY_DOWN) then
+            local vol = ffe.getMusicVolume()
+            local newVol = vol - MUSIC_VOL_STEP
+            if newVol < 0.0 then newVol = 0.0 end
+            ffe.setMusicVolume(newVol)
+            ffe.log("lua_demo: music volume -> " .. string.format("%.1f", newVol))
+        end
+    end
+
+    -- ------------------------------------------------------------------
     -- ESC: clean shutdown
     -- ------------------------------------------------------------------
     if ffe.isKeyPressed(ffe.KEY_ESCAPE) then
@@ -261,7 +314,15 @@ end
 -- boolean sentinel or nil into ffe.unloadTexture.
 -- ---------------------------------------------------------------------------
 function shutdown()
-    ffe.log("lua_demo: Lua shutdown() called -- cleaning up textures")
+    ffe.log("lua_demo: Lua shutdown() called -- cleaning up resources")
+
+    -- Stop music before cleanup
+    if musicStarted and ffe.isMusicPlaying() then
+        ffe.stopMusic()
+        ffe.log("lua_demo: music stopped on shutdown")
+    end
+
+    -- Release GPU texture
     if textureHandle and textureHandle ~= false then
         ffe.unloadTexture(textureHandle)
         ffe.log("lua_demo: ffe.unloadTexture called for handle=" .. tostring(textureHandle))

@@ -114,7 +114,7 @@ SoundHandle loadSound(const char* path, const char* assetRoot);
 void unloadSound(SoundHandle handle);
 
 // ---------------------------------------------------------------------------
-// Playback
+// Playback — sound effects
 // ---------------------------------------------------------------------------
 
 // Play a one-shot sound effect. Fire-and-forget — no way to stop it
@@ -130,6 +130,40 @@ void unloadSound(SoundHandle handle);
 // Thread safety: may be called from the main thread. Do NOT call from within
 // the audio callback.
 void playSound(SoundHandle handle, float volume = 1.0f);
+
+// ---------------------------------------------------------------------------
+// Playback — music
+// ---------------------------------------------------------------------------
+//
+// One music track at a time. Music runs as a streaming decode directly in the
+// audio callback thread (stb_vorbis per-callback decode). Low memory overhead:
+// ~64 KB working memory per open track.
+//
+// Music volume is independent of the master (sound effects) volume. Both are
+// applied multiplicatively in the mixer.
+//
+// All music functions are no-ops if audio is unavailable or in headless mode.
+
+// Play a music track loaded by loadSound().
+//
+// If a track is already playing it is stopped first, then the new track starts.
+// loop: if true, the track loops indefinitely; if false, it plays once.
+//
+// No-op if: handle is invalid, audio is unavailable, or in headless mode.
+void playMusic(SoundHandle handle, bool loop = true);
+
+// Stop the currently playing music track immediately.
+// No-op if no music is playing.
+void stopMusic();
+
+// Set/get music volume, independent of the sound-effects master volume.
+// Clamped to [0.0, 1.0]. NaN/Inf -> 0.0.
+void setMusicVolume(float volume);
+float getMusicVolume();
+
+// Returns true if a music track is currently playing or looping.
+// Reads an atomic — safe to call per-frame.
+bool isMusicPlaying();
 
 // ---------------------------------------------------------------------------
 // Volume control
@@ -154,6 +188,7 @@ float getMasterVolume();
 bool isAudioAvailable();
 
 // Returns the number of sound voices currently active [0, MAX_AUDIO_VOICES].
+// Reads an atomic counter — no mutex, safe to call per-frame for diagnostics.
 u32 getActiveVoiceCount();
 
 } // namespace ffe::audio

@@ -152,12 +152,17 @@ namespace ffe::audio {
 // ---------------------------------------------------------------------------
 
 // A loaded sound: PCM data decoded into float32, mono or stereo.
+//
+// canonPath stores the realpath()-verified absolute path used at load time.
+// This allows playMusic() to open the file for streaming without re-running
+// path validation — the path was already hardened by loadSound().
 struct SoundBuffer {
     float*  data        = nullptr;  // heap-allocated decoded PCM (float32)
     u64     frameCount  = 0u;       // number of sample frames
     u32     channels    = 0u;       // 1 = mono, 2 = stereo
     u32     sampleRate  = 0u;       // samples per second (e.g. 44100)
     bool    inUse       = false;    // slot occupied?
+    char    canonPath[PATH_MAX + 1] = {};  // validated canonical path (for music streaming)
 };
 
 // An active voice: a sound currently being mixed into the output.
@@ -178,11 +183,17 @@ struct AudioCommand {
     enum class Type : u8 {
         PLAY_SOUND,
         SET_MASTER_VOLUME,
+        PLAY_MUSIC,         // start/restart music streaming (soundId + flags)
+        STOP_MUSIC,         // stop current music track
+        SET_MUSIC_VOLUME,   // update music volume atomic
     };
-    Type        type    = Type::PLAY_SOUND;
-    u32         soundId = 0u;   // index into s_sounds (for PLAY_SOUND)
-    float       volume  = 1.0f; // per-instance volume (for PLAY_SOUND)
-                                // or new volume (for SET_MASTER_VOLUME)
+    Type  type    = Type::PLAY_SOUND;
+    u8    flags   = 0u;     // PLAY_MUSIC: bit 0 = loop (1=loop, 0=once)
+    u8    _pad0   = 0u;     // reserved
+    u8    _pad1   = 0u;     // reserved
+    u32   soundId = 0u;     // for PLAY_SOUND / PLAY_MUSIC: 1-based sound slot index
+    float volume  = 1.0f;   // for PLAY_SOUND: per-instance volume
+                            // for SET_MASTER_VOLUME / SET_MUSIC_VOLUME: new volume
 };
 
 static constexpr u32 CMD_RING_CAPACITY = 64u;
@@ -219,6 +230,23 @@ static struct {
 
     // Volume — stored as atomic for lock-free reads in the callback
     std::atomic<float> masterVolume{1.0f};
+
+    // Active voice counter — maintained atomically alongside voice activation and
+    // deactivation. Allows getActiveVoiceCount() to read without acquiring the mutex.
+    // All writes happen under m_mutex (or after ma_device_stop in shutdown), so there
+    // is no data race; memory_order_relaxed suffices for this diagnostic counter.
+    // M-2 fix: replaces the previous mutex + linear scan in getActiveVoiceCount().
+    std::atomic<u32> activeVoiceCount{0u};
+
+    // Music streaming state — only accessed from the audio callback thread,
+    // except for musicVolume and musicPlaying which are atomics for main-thread reads.
+    //
+    // musicStream is opened/closed by the callback when processing PLAY_MUSIC /
+    // STOP_MUSIC commands. It is always null when the device is stopped (shutdown).
+    stb_vorbis*        musicStream   = nullptr;  // non-null when music is playing
+    bool               musicLoop     = false;    // current track looping?
+    std::atomic<float> musicVolume{1.0f};        // music volume [0,1], read by main thread
+    std::atomic<bool>  musicPlaying{false};      // true while track is active
 
     // Mutex protecting voice pool and sound buffer deactivation
     std::mutex      mutex;
@@ -301,6 +329,23 @@ static bool validateAssetRoot(const char* const absPath) {
 
 // ---------------------------------------------------------------------------
 // Audio callback (runs on miniaudio's audio thread)
+//
+// M-1 fix: Previously the mutex was acquired once per PLAY_SOUND command in
+// the ring-drain loop, then once more for the mixing loop (N+1 acquisitions
+// per callback where N = number of PLAY_SOUND commands). This refactor takes
+// the mutex exactly once per callback regardless of command count.
+//
+// Structure:
+//   Phase 1: Drain the SPSC ring buffer WITHOUT holding the mutex.
+//     - PLAY_SOUND: stage in pendingPlay[]
+//     - SET_MASTER_VOLUME / SET_MUSIC_VOLUME: atomic stores, no mutex
+//     - PLAY_MUSIC: record last command (last write wins)
+//     - STOP_MUSIC: set pendingStop flag
+//   Phase 2: Acquire mutex ONCE for:
+//     - Music command dispatch (stop / start stream)
+//     - PLAY_SOUND voice activation
+//     - SFX mixing
+//     - Music decode and mixing
 // ---------------------------------------------------------------------------
 static void audioCallback(ma_device* pDevice, void* pOutput, const void* /*pInput*/,
                            ma_uint32 frameCount) {
@@ -311,54 +356,133 @@ static void audioCallback(ma_device* pDevice, void* pOutput, const void* /*pInpu
     // Zero the output buffer first.
     memset(out, 0, static_cast<size_t>(outFrames) * 2u * sizeof(float));
 
-    // --- Drain the SPSC command ring buffer ---
-    // LOW-2: tail read uses memory_order_acquire to see command payload fields
-    // written by the main thread with memory_order_release on cmdHead.
-    u32 head = s_state.cmdHead.load(std::memory_order_acquire);
+    // -----------------------------------------------------------------------
+    // Phase 1: Drain the SPSC command ring buffer (no mutex required).
+    //
+    // LOW-2: tail read uses memory_order_acquire to see payload fields written
+    // by the main thread with memory_order_release on cmdHead.
+    // -----------------------------------------------------------------------
+    const u32 head = s_state.cmdHead.load(std::memory_order_acquire);
     u32 tail = s_state.cmdTail.load(std::memory_order_relaxed);
+
+    // Staging for PLAY_SOUND commands (activated in Phase 2 under mutex).
+    AudioCommand pendingPlay[CMD_RING_CAPACITY];
+    u32 pendingCount = 0u;
+
+    // Staging for music commands. PLAY_MUSIC uses last-write-wins — only
+    // the most recent PLAY_MUSIC in a single callback period is acted on.
+    bool hasPendingPlayMusic = false;
+    AudioCommand pendingPlayMusic;          // last PLAY_MUSIC command seen
+    bool pendingStopMusic = false;
 
     while (tail != head) {
         const AudioCommand& cmd = s_state.cmdRing[tail % CMD_RING_CAPACITY];
         switch (cmd.type) {
-            case AudioCommand::Type::PLAY_SOUND: {
-                // Acquire mutex to modify voice pool
-                std::lock_guard<std::mutex> lock(s_state.mutex);
-                // Find a free voice slot
-                bool placed = false;
-                for (u32 i = 0u; i < MAX_AUDIO_VOICES; ++i) {
-                    if (!s_state.voices[i].active) {
-                        // Map soundId to buffer index (soundId is 1-based slot index)
-                        const u32 idx = cmd.soundId - 1u;
-                        if (idx < MAX_SOUNDS && s_state.sounds[idx].inUse) {
-                            s_state.voices[i].buffer  = &s_state.sounds[idx];
-                            s_state.voices[i].cursor  = 0u;
-                            s_state.voices[i].volume  = cmd.volume;
-                            s_state.voices[i].active  = true;
-                            placed = true;
-                        }
-                        break;
-                    }
-                }
-                if (!placed) {
-                    FFE_LOG_WARN("Audio", "audioCallback: all %u voice slots occupied — sound dropped",
-                                 MAX_AUDIO_VOICES);
+            case AudioCommand::Type::PLAY_SOUND:
+                if (pendingCount < CMD_RING_CAPACITY) {
+                    pendingPlay[pendingCount++] = cmd;
                 }
                 break;
-            }
             case AudioCommand::Type::SET_MASTER_VOLUME:
-                // Volume is stored as atomic — no mutex needed
                 s_state.masterVolume.store(cmd.volume, std::memory_order_relaxed);
+                break;
+            case AudioCommand::Type::SET_MUSIC_VOLUME:
+                s_state.musicVolume.store(cmd.volume, std::memory_order_relaxed);
+                break;
+            case AudioCommand::Type::PLAY_MUSIC:
+                hasPendingPlayMusic = true;
+                pendingPlayMusic = cmd;
+                pendingStopMusic = false;   // PLAY supersedes a pending STOP
+                break;
+            case AudioCommand::Type::STOP_MUSIC:
+                pendingStopMusic = true;
+                hasPendingPlayMusic = false; // STOP supersedes a pending PLAY
                 break;
         }
         tail = (tail + 1u) % CMD_RING_CAPACITY;
         s_state.cmdTail.store(tail, std::memory_order_release);
     }
 
-    // --- Mix active voices into output ---
-    const float master = s_state.masterVolume.load(std::memory_order_relaxed);
+    // -----------------------------------------------------------------------
+    // Phase 2: Single mutex acquisition — music dispatch + SFX + music mixing.
+    // -----------------------------------------------------------------------
+    const float master   = s_state.masterVolume.load(std::memory_order_relaxed);
+    const float musicVol = s_state.musicVolume.load(std::memory_order_relaxed);
 
     {
         std::lock_guard<std::mutex> lock(s_state.mutex);
+
+        // --- Music command dispatch ---
+
+        // Process STOP_MUSIC
+        if (pendingStopMusic && s_state.musicStream != nullptr) {
+            stb_vorbis_close(s_state.musicStream);
+            s_state.musicStream = nullptr;
+            s_state.musicPlaying.store(false, std::memory_order_relaxed);
+        }
+
+        // Process PLAY_MUSIC (last-write-wins for rapid track switches)
+        if (hasPendingPlayMusic) {
+            // Close existing stream first (track switch or replay)
+            if (s_state.musicStream != nullptr) {
+                stb_vorbis_close(s_state.musicStream);
+                s_state.musicStream = nullptr;
+            }
+
+            // MEDIUM-1 (security): bounds-check soundId before path retrieval.
+            const u32 idx = pendingPlayMusic.soundId - 1u;
+            if (idx < MAX_SOUNDS && s_state.sounds[idx].inUse &&
+                s_state.sounds[idx].canonPath[0] != '\0')
+            {
+                // LOW-1 (security): check stb_vorbis error code on open failure.
+                int vorbisError = 0;
+                stb_vorbis* stream = stb_vorbis_open_filename(
+                    s_state.sounds[idx].canonPath, &vorbisError, nullptr);
+
+                if (stream) {
+                    s_state.musicStream = stream;
+                    s_state.musicLoop   = (pendingPlayMusic.flags & 0x01u) != 0u;
+                    s_state.musicPlaying.store(true, std::memory_order_relaxed);
+                } else {
+                    FFE_LOG_ERROR("Audio",
+                        "audioCallback: stb_vorbis_open_filename() failed "
+                        "(error=%d) for \"%s\"",
+                        vorbisError, s_state.sounds[idx].canonPath);
+                    s_state.musicPlaying.store(false, std::memory_order_relaxed);
+                }
+            } else {
+                FFE_LOG_ERROR("Audio",
+                    "audioCallback: PLAY_MUSIC with invalid/unloaded soundId=%u",
+                    pendingPlayMusic.soundId);
+            }
+        }
+
+        // --- Activate queued PLAY_SOUND commands ---
+        for (u32 c = 0u; c < pendingCount; ++c) {
+            const AudioCommand& cmd = pendingPlay[c];
+            bool placed = false;
+            for (u32 i = 0u; i < MAX_AUDIO_VOICES; ++i) {
+                if (!s_state.voices[i].active) {
+                    const u32 idx = cmd.soundId - 1u;
+                    if (idx < MAX_SOUNDS && s_state.sounds[idx].inUse) {
+                        s_state.voices[i].buffer  = &s_state.sounds[idx];
+                        s_state.voices[i].cursor  = 0u;
+                        s_state.voices[i].volume  = cmd.volume;
+                        s_state.voices[i].active  = true;
+                        s_state.activeVoiceCount.fetch_add(1u, std::memory_order_relaxed);
+                        placed = true;
+                    }
+                    break;
+                }
+            }
+            if (!placed) {
+                FFE_LOG_WARN("Audio",
+                    "audioCallback: all %u voice slots occupied — sound dropped",
+                    MAX_AUDIO_VOICES);
+            }
+        }
+
+        // --- Mix active SFX voices ---
         for (u32 v = 0u; v < MAX_AUDIO_VOICES; ++v) {
             Voice& voice = s_state.voices[v];
             if (!voice.active) { continue; }
@@ -366,6 +490,7 @@ static void audioCallback(ma_device* pDevice, void* pOutput, const void* /*pInpu
             const SoundBuffer* const buf = voice.buffer;
             if (!buf || !buf->data) {
                 voice.active = false;
+                s_state.activeVoiceCount.fetch_sub(1u, std::memory_order_relaxed);
                 continue;
             }
 
@@ -375,20 +500,65 @@ static void audioCallback(ma_device* pDevice, void* pOutput, const void* /*pInpu
             for (u32 f = 0u; f < outFrames; ++f) {
                 if (voice.cursor >= buf->frameCount) {
                     voice.active = false;
+                    s_state.activeVoiceCount.fetch_sub(1u, std::memory_order_relaxed);
                     break;
                 }
 
                 if (buf->channels == 2u) {
-                    // Stereo source
                     out[f * 2u + 0u] += buf->data[voice.cursor * 2u + 0u] * gainLeft;
                     out[f * 2u + 1u] += buf->data[voice.cursor * 2u + 1u] * gainRight;
                 } else {
-                    // Mono source — duplicate to both channels
                     const float sample = buf->data[voice.cursor] * gainLeft;
                     out[f * 2u + 0u] += sample;
                     out[f * 2u + 1u] += sample;
                 }
                 ++voice.cursor;
+            }
+        }
+
+        // --- Music streaming decode and mix ---
+        if (s_state.musicStream != nullptr) {
+            // Decode up to outFrames of float stereo PCM into a static buffer.
+            // Static: avoids VLA or large stack allocation; safe here because
+            // the audio callback runs on a single dedicated thread.
+            //
+            // 4096 frames × 2 channels × 4 bytes = 32 KB.
+            // Typical callback size is 256–1024 frames; 4096 is a defensive cap.
+            static constexpr u32 MUSIC_DECODE_CAP = 4096u;
+            static float musicDecBuf[MUSIC_DECODE_CAP * 2u];
+
+            const u32 decodeFrames = outFrames < MUSIC_DECODE_CAP
+                                   ? outFrames : MUSIC_DECODE_CAP;
+
+            const int decoded = stb_vorbis_get_samples_float_interleaved(
+                s_state.musicStream, 2, musicDecBuf,
+                static_cast<int>(decodeFrames * 2u));
+
+            if (decoded > 0) {
+                const float musicGain = musicVol * master;
+                for (u32 f = 0u; f < static_cast<u32>(decoded); ++f) {
+                    out[f * 2u + 0u] += musicDecBuf[f * 2u + 0u] * musicGain;
+                    out[f * 2u + 1u] += musicDecBuf[f * 2u + 1u] * musicGain;
+                }
+            }
+
+            // End-of-track: decoded < decodeFrames means the stream exhausted.
+            if (static_cast<u32>(decoded) < decodeFrames) {
+                if (s_state.musicLoop) {
+                    // MEDIUM-2 (security): check seek return value — can fail on corrupt OGG.
+                    const int seekOk = stb_vorbis_seek_start(s_state.musicStream);
+                    if (!seekOk) {
+                        FFE_LOG_ERROR("Audio",
+                            "audioCallback: stb_vorbis_seek_start() failed — stopping music");
+                        stb_vorbis_close(s_state.musicStream);
+                        s_state.musicStream = nullptr;
+                        s_state.musicPlaying.store(false, std::memory_order_relaxed);
+                    }
+                } else {
+                    stb_vorbis_close(s_state.musicStream);
+                    s_state.musicStream = nullptr;
+                    s_state.musicPlaying.store(false, std::memory_order_relaxed);
+                }
             }
         }
     }
@@ -406,7 +576,9 @@ static bool postCommand(const AudioCommand& cmd) {
     const u32 head = s_state.cmdHead.load(std::memory_order_relaxed);
     const u32 tail = s_state.cmdTail.load(std::memory_order_acquire);
     const u32 nextHead = (head + 1u) % CMD_RING_CAPACITY;
-    if (nextHead == tail % CMD_RING_CAPACITY) {
+    // M-3 fix: tail is always stored as (tail + 1) % CMD_RING_CAPACITY so it is
+    // already in [0, CMD_RING_CAPACITY) — the modulo here was redundant.
+    if (nextHead == tail) {
         // Ring buffer full — this is extremely unlikely in practice
         FFE_LOG_WARN("Audio", "postCommand: command ring buffer full — command dropped");
         return false;
@@ -434,6 +606,11 @@ bool init(const bool headless) {
     s_state.cmdHead.store(0u, std::memory_order_relaxed);
     s_state.cmdTail.store(0u, std::memory_order_relaxed);
     s_state.masterVolume.store(1.0f, std::memory_order_relaxed);
+    s_state.activeVoiceCount.store(0u, std::memory_order_relaxed);
+    s_state.musicVolume.store(1.0f, std::memory_order_relaxed);
+    s_state.musicPlaying.store(false, std::memory_order_relaxed);
+    s_state.musicStream  = nullptr;
+    s_state.musicLoop    = false;
 
     if (headless) {
         // Headless mode: no real device. loadSound() still works for path testing.
@@ -477,6 +654,13 @@ void shutdown() {
         s_state.deviceOpen = false;
     }
 
+    // Device is now stopped — callback is not running. Safe to close music stream directly.
+    if (s_state.musicStream != nullptr) {
+        stb_vorbis_close(s_state.musicStream);
+        s_state.musicStream = nullptr;
+    }
+    s_state.musicPlaying.store(false, std::memory_order_relaxed);
+
     // Free all loaded sound buffers.
     // LOW-4: acquire mutex so no in-flight callback can access freed buffers.
     {
@@ -487,6 +671,7 @@ void shutdown() {
             s_state.voices[i].active = false;
             s_state.voices[i].buffer = nullptr;
         }
+        s_state.activeVoiceCount.store(0u, std::memory_order_relaxed);
 
         // Free all PCM buffers (after voices deactivated — no use-after-free)
         for (u32 i = 0u; i < MAX_SOUNDS; ++i) {
@@ -753,6 +938,10 @@ SoundHandle loadSound(const char* const path, const char* const assetRoot) {
         buf.channels    = static_cast<u32>(channels);
         buf.sampleRate  = static_cast<u32>(sampleRate);
         buf.inUse       = true;
+        // Store validated canonical path so playMusic() can open a stb_vorbis
+        // stream without repeating path validation.
+        const size_t canonLen = strnlen(canonPath, static_cast<size_t>(PATH_MAX));
+        memcpy(buf.canonPath, canonPath, canonLen + 1u);  // +1 for null terminator
     }
 
     // The handle id is (slotIndex + 1): id 0 is invalid, id 1 maps to slot 0.
@@ -788,6 +977,7 @@ void unloadSound(const SoundHandle handle) {
         if (s_state.voices[v].active && s_state.voices[v].buffer == &buf) {
             s_state.voices[v].active = false;
             s_state.voices[v].buffer = nullptr;
+            s_state.activeVoiceCount.fetch_sub(1u, std::memory_order_relaxed);
         }
     }
 
@@ -797,10 +987,11 @@ void unloadSound(const SoundHandle handle) {
         buf.data = nullptr;
     }
 
-    buf.frameCount = 0u;
-    buf.channels   = 0u;
-    buf.sampleRate = 0u;
-    buf.inUse      = false;
+    buf.frameCount    = 0u;
+    buf.channels      = 0u;
+    buf.sampleRate    = 0u;
+    buf.inUse         = false;
+    buf.canonPath[0]  = '\0';
 }
 
 void playSound(const SoundHandle handle, const float volume) {
@@ -820,6 +1011,52 @@ void playSound(const SoundHandle handle, const float volume) {
     cmd.soundId = handle.id;
     cmd.volume  = clampedVolume;
     postCommand(cmd);
+}
+
+void playMusic(const SoundHandle handle, const bool loop) {
+    if (!isValid(handle)) {
+        return;
+    }
+    if (!s_state.initialised || s_state.headless || !s_state.deviceOpen) {
+        return;
+    }
+
+    AudioCommand cmd;
+    cmd.type    = AudioCommand::Type::PLAY_MUSIC;
+    cmd.soundId = handle.id;
+    cmd.flags   = loop ? 0x01u : 0x00u;
+    cmd.volume  = 0.0f; // unused for PLAY_MUSIC
+    postCommand(cmd);
+}
+
+void stopMusic() {
+    if (!s_state.initialised || s_state.headless || !s_state.deviceOpen) {
+        return;
+    }
+
+    AudioCommand cmd;
+    cmd.type = AudioCommand::Type::STOP_MUSIC;
+    postCommand(cmd);
+}
+
+void setMusicVolume(const float volume) {
+    const float clamped = clampVolume(volume);
+    s_state.musicVolume.store(clamped, std::memory_order_relaxed);
+
+    if (s_state.initialised && !s_state.headless && s_state.deviceOpen) {
+        AudioCommand cmd;
+        cmd.type   = AudioCommand::Type::SET_MUSIC_VOLUME;
+        cmd.volume = clamped;
+        postCommand(cmd);
+    }
+}
+
+float getMusicVolume() {
+    return s_state.musicVolume.load(std::memory_order_relaxed);
+}
+
+bool isMusicPlaying() {
+    return s_state.musicPlaying.load(std::memory_order_relaxed);
 }
 
 void setMasterVolume(const float volume) {
@@ -850,12 +1087,9 @@ bool isAudioAvailable() {
 
 u32 getActiveVoiceCount() {
     if (!s_state.initialised) { return 0u; }
-    std::lock_guard<std::mutex> lock(s_state.mutex);
-    u32 count = 0u;
-    for (u32 i = 0u; i < MAX_AUDIO_VOICES; ++i) {
-        if (s_state.voices[i].active) { ++count; }
-    }
-    return count;
+    // M-2 fix: activeVoiceCount is maintained as a std::atomic<u32> alongside
+    // voice pool operations. No mutex required — safe to call per-frame.
+    return s_state.activeVoiceCount.load(std::memory_order_relaxed);
 }
 
 } // namespace ffe::audio

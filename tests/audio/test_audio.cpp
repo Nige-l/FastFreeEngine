@@ -294,3 +294,143 @@ TEST_CASE("audio::shutdown without init is a no-op", "[audio]") {
     // Do NOT call init — shutdown must be safe to call at any time
     ffe::audio::shutdown();
 }
+
+// =============================================================================
+// Test 15: getActiveVoiceCount uses atomic (M-2 fix) — returns 0 after init
+//          (same as test 12 but explicitly exercises the atomic path)
+// =============================================================================
+
+TEST_CASE("audio::getActiveVoiceCount atomic path returns 0 with no active sounds",
+          "[audio][m2]") {
+    REQUIRE(ffe::audio::init(true));
+    // After init the counter must be exactly zero
+    REQUIRE(ffe::audio::getActiveVoiceCount() == 0u);
+    // Calling it multiple times must be idempotent
+    REQUIRE(ffe::audio::getActiveVoiceCount() == 0u);
+    ffe::audio::shutdown();
+}
+
+TEST_CASE("audio::getActiveVoiceCount returns 0 after shutdown", "[audio][m2]") {
+    REQUIRE(ffe::audio::init(true));
+    ffe::audio::shutdown();
+    // After shutdown, getActiveVoiceCount must not crash (init check returns 0)
+    REQUIRE(ffe::audio::getActiveVoiceCount() == 0u);
+}
+
+// =============================================================================
+// Test 16: playMusic in headless mode is a no-op (does not crash)
+// =============================================================================
+
+TEST_CASE("audio::playMusic in headless mode is a no-op", "[audio][music][headless]") {
+    REQUIRE(ffe::audio::init(true));
+    REQUIRE_FALSE(ffe::audio::isMusicPlaying());
+    // playMusic with invalid handle must not crash
+    ffe::audio::playMusic(ffe::audio::SoundHandle{0});
+    // playMusic in headless mode is a no-op — isMusicPlaying stays false
+    // (headless guard fires before command is queued)
+    REQUIRE_FALSE(ffe::audio::isMusicPlaying());
+    ffe::audio::shutdown();
+}
+
+// =============================================================================
+// Test 17: stopMusic in headless mode is a no-op (does not crash)
+// =============================================================================
+
+TEST_CASE("audio::stopMusic in headless mode is a no-op", "[audio][music][headless]") {
+    REQUIRE(ffe::audio::init(true));
+    // stopMusic when no music is playing must not crash
+    ffe::audio::stopMusic();
+    REQUIRE_FALSE(ffe::audio::isMusicPlaying());
+    ffe::audio::shutdown();
+}
+
+// =============================================================================
+// Test 18: isMusicPlaying returns false after init
+// =============================================================================
+
+TEST_CASE("audio::isMusicPlaying returns false after init", "[audio][music][headless]") {
+    REQUIRE(ffe::audio::init(true));
+    REQUIRE_FALSE(ffe::audio::isMusicPlaying());
+    ffe::audio::shutdown();
+}
+
+// =============================================================================
+// Test 19: setMusicVolume / getMusicVolume clamp behaviour
+// =============================================================================
+
+TEST_CASE("audio::setMusicVolume clamps to [0.0, 1.0]", "[audio][music][volume]") {
+    REQUIRE(ffe::audio::init(true));
+
+    ffe::audio::setMusicVolume(0.75f);
+    REQUIRE(std::fabs(ffe::audio::getMusicVolume() - 0.75f) < 1e-6f);
+
+    ffe::audio::setMusicVolume(-1.0f);
+    REQUIRE(std::fabs(ffe::audio::getMusicVolume() - 0.0f) < 1e-6f);
+
+    ffe::audio::setMusicVolume(2.0f);
+    REQUIRE(std::fabs(ffe::audio::getMusicVolume() - 1.0f) < 1e-6f);
+
+    ffe::audio::setMusicVolume(std::numeric_limits<float>::quiet_NaN());
+    REQUIRE(std::fabs(ffe::audio::getMusicVolume() - 0.0f) < 1e-6f);
+
+    ffe::audio::setMusicVolume(std::numeric_limits<float>::infinity());
+    REQUIRE(std::fabs(ffe::audio::getMusicVolume() - 0.0f) < 1e-6f);
+
+    ffe::audio::shutdown();
+}
+
+// =============================================================================
+// Test 20: getMusicVolume returns 1.0 after init (default)
+// =============================================================================
+
+TEST_CASE("audio::getMusicVolume returns 1.0 after init", "[audio][music][volume]") {
+    REQUIRE(ffe::audio::init(true));
+    REQUIRE(std::fabs(ffe::audio::getMusicVolume() - 1.0f) < 1e-6f);
+    ffe::audio::shutdown();
+}
+
+// =============================================================================
+// Test 21: playMusic with a valid WAV loads and dispatches command (headless guard)
+// =============================================================================
+
+TEST_CASE("audio::playMusic in headless mode does not open stream",
+          "[audio][music][headless][requires_file]") {
+    if (!writeTestWav()) {
+        WARN("Could not write test WAV — skipping");
+        return;
+    }
+
+    REQUIRE(ffe::audio::init(true));
+    const ffe::audio::SoundHandle h = ffe::audio::loadSound(k_testWavRelPath, SAFE_ROOT);
+    REQUIRE(ffe::audio::isValid(h));
+
+    // playMusic in headless mode must not crash or open a stream
+    ffe::audio::playMusic(h, true);
+    REQUIRE_FALSE(ffe::audio::isMusicPlaying()); // headless = no device = no-op
+
+    ffe::audio::unloadSound(h);
+    ffe::audio::shutdown();
+}
+
+// =============================================================================
+// Test 22: stopMusic without active music is a no-op
+// =============================================================================
+
+TEST_CASE("audio::stopMusic without active music does not crash", "[audio][music][headless]") {
+    REQUIRE(ffe::audio::init(true));
+    REQUIRE_FALSE(ffe::audio::isMusicPlaying());
+    ffe::audio::stopMusic();
+    REQUIRE_FALSE(ffe::audio::isMusicPlaying());
+    ffe::audio::shutdown();
+}
+
+// =============================================================================
+// Test 23: shutdown resets isMusicPlaying to false
+// =============================================================================
+
+TEST_CASE("audio::isMusicPlaying returns false after shutdown", "[audio][music]") {
+    REQUIRE(ffe::audio::init(true));
+    ffe::audio::shutdown();
+    // Not initialised after shutdown — isMusicPlaying uses atomic, must not crash
+    REQUIRE_FALSE(ffe::audio::isMusicPlaying());
+}
