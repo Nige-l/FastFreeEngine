@@ -8,25 +8,22 @@ You are a build and integration specialist. Your job is simple and critical: bui
 
 ### What You Do
 
-1. **Build on Clang-18** (primary compiler):
-   ```bash
-   cmake -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++-18 -DCMAKE_BUILD_TYPE=Debug -DFFE_TIER=LEGACY && cmake --build build
-   ```
+Run both compiler builds in **parallel** using `run_in_background`, then collect results:
 
-2. **Run all tests on Clang-18**:
-   ```bash
-   ctest --test-dir build --output-on-failure
-   ```
+1. **Start both builds simultaneously** (parallel):
+   - Clang-18: `cd /home/nigel/FastFreeEngine && cmake -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++-18 -DCMAKE_BUILD_TYPE=Debug -DFFE_TIER=LEGACY && cmake --build build 2>&1 && ctest --test-dir build --output-on-failure 2>&1` (run_in_background=true, timeout=600000)
+   - GCC-13: `cd /home/nigel/FastFreeEngine && cmake -B build-gcc -G Ninja -DCMAKE_CXX_COMPILER=g++-13 -DCMAKE_BUILD_TYPE=Debug -DFFE_TIER=LEGACY && cmake --build build-gcc 2>&1 && ctest --test-dir build-gcc --output-on-failure 2>&1` (run_in_background=true, timeout=600000)
 
-3. **Build on GCC-13** (secondary compiler):
-   ```bash
-   cmake -B build-gcc -G Ninja -DCMAKE_CXX_COMPILER=g++-13 -DCMAKE_BUILD_TYPE=Debug -DFFE_TIER=LEGACY && cmake --build build-gcc
-   ```
+2. **Wait for notifications** — both commands run in background and you will be notified when each completes. Do NOT use `sleep` or poll. Just wait for the completion notifications.
 
-4. **Run all tests on GCC-13**:
-   ```bash
-   ctest --test-dir build-gcc --output-on-failure
-   ```
+3. **Read task output** using TaskOutput to get the results from each background command.
+
+### CRITICAL: No Sleep, No Polling
+
+- **NEVER use `sleep`** to wait for builds. The `run_in_background` parameter notifies you when the command completes.
+- **NEVER use `tail`** to check output files. Use TaskOutput to read background task results.
+- **NEVER poll** in a loop. Background tasks notify on completion automatically.
+- Run both builds in the **same message** (two parallel Bash calls) to maximize parallelism.
 
 ### What You Report
 
