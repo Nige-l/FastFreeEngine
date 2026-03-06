@@ -701,6 +701,44 @@ void ScriptEngine::registerEcsBindings() {
     lua_setfield(L, -2, "requestShutdown");
 
     // ----------------------------------------------------------------
+    // ffe.cameraShake(intensity, duration) — trigger a camera shake effect.
+    // intensity: max pixel offset (clamped to [0, 100])
+    // duration: seconds (clamped to [0, 5])
+    // If a shake is already active, the new one replaces it.
+    // ----------------------------------------------------------------
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        if (lua_gettop(state) < 2) {
+            luaL_error(state, "cameraShake requires 2 arguments: intensity, duration");
+            return 0;
+        }
+        const auto intensity = static_cast<float>(luaL_checknumber(state, 1));
+        const auto duration  = static_cast<float>(luaL_checknumber(state, 2));
+
+        // Reject NaN/Inf
+        if (std::isnan(intensity) || std::isinf(intensity) ||
+            std::isnan(duration)  || std::isinf(duration)) {
+            return 0;
+        }
+
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            return 0;
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+        if (world == nullptr) { return 0; }
+
+        auto& shake = world->registry().ctx().get<ffe::CameraShake>();
+        shake.intensity = std::max(0.0f, std::min(100.0f, intensity));
+        shake.duration  = std::max(0.0f, std::min(5.0f, duration));
+        shake.elapsed   = 0.0f;
+        return 0;
+    });
+    lua_setfield(L, -2, "cameraShake");
+
+    // ----------------------------------------------------------------
     // Entity lifecycle bindings
     //
     // ffe.createEntity()

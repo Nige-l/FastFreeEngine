@@ -291,6 +291,7 @@ end
 local function loseLife()
     lives = lives - 1
     if sfxLose then ffe.playSound(sfxLose, 0.5) end
+    ffe.cameraShake(8, 0.25)
 
     -- Remove a life indicator
     if #lifeIndicators > 0 then
@@ -525,8 +526,9 @@ function update(entityId, dt)
                 brickCount = brickCount - 1
                 score = score + (ROW_POINTS[brick.row] or 1)
 
-                -- Spawn particles
+                -- Spawn particles and screen shake
                 spawnParticles(brick.x, brick.y, brick.r, brick.g, brick.b, 5)
+                ffe.cameraShake(3, 0.1)
 
                 -- Speed up ball slightly
                 ballSpeed = math.min(BALL_MAX_SPEED, ballSpeed + 3)

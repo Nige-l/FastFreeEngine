@@ -35,6 +35,17 @@ struct HudTextBuffer {
     char text[HUD_TEXT_BUFFER_SIZE] = "";
 };
 
+// ---------------------------------------------------------------------------
+// CameraShake — stored in the ECS registry context. Lua (or any system) sets
+// intensity and duration; the render path applies a random offset to the
+// camera each frame, decaying over the duration.
+// ---------------------------------------------------------------------------
+struct CameraShake {
+    f32 intensity = 0.0f; // max pixel offset
+    f32 duration  = 0.0f; // seconds remaining
+    f32 elapsed   = 0.0f; // time since shake started
+};
+
 class World {
 public:
     World() { m_systems.reserve(32); }

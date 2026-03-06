@@ -6,6 +6,7 @@
 #include "physics/collision_system.h"
 
 #include <chrono>
+#include <cmath>
 
 // GLFW/glad — must define GLFW_INCLUDE_NONE to prevent GLFW from pulling in system GL headers
 #include <glad/glad.h>
@@ -282,6 +283,9 @@ Result Application::startup() {
     // after every tick and exits the loop if requested = true.
     m_world.registry().ctx().emplace<ShutdownSignal>();
 
+    // 5ce2. Emplace CameraShake into ECS context for Lua-driven camera effects.
+    m_world.registry().ctx().emplace<CameraShake>();
+
     // 5cf. Emplace frame arena pointer into ECS context so systems (e.g. collision)
     // can use per-frame arena allocation without holding an Application pointer.
     m_world.registry().ctx().emplace<ArenaAllocator*>(&m_frameAllocator);
@@ -406,6 +410,18 @@ void Application::tick(const float dt) {
         ZoneName(system.name, system.nameLength);
         system.updateFn(m_world, dt);
     }
+
+    // Tick camera shake timer
+    auto& shake = m_world.registry().ctx().get<CameraShake>();
+    if (shake.duration > 0.0f) {
+        shake.elapsed += dt;
+        shake.duration -= dt;
+        if (shake.duration <= 0.0f) {
+            shake.duration = 0.0f;
+            shake.intensity = 0.0f;
+            shake.elapsed = 0.0f;
+        }
+    }
 }
 
 void Application::render(const float alpha) {
@@ -422,8 +438,19 @@ void Application::render(const float alpha) {
     // Begin frame
     rhi::beginFrame(m_clearColor);
 
-    // Set camera matrices
-    const glm::mat4 vp = renderer::computeViewProjectionMatrix(m_camera);
+    // Apply camera shake (if active) and compute VP matrix.
+    // Shake decays linearly over its duration. Offset is computed from
+    // sin/cos of elapsed time scaled to high frequency for jitter.
+    auto& shake = m_world.registry().ctx().get<CameraShake>();
+    renderer::Camera shakeCamera = m_camera;
+    if (shake.duration > 0.0f) {
+        const f32 t = shake.elapsed / (shake.elapsed + shake.duration);
+        const f32 strength = shake.intensity * (1.0f - t);
+        const f32 freq = shake.elapsed * 37.0f; // high-frequency jitter
+        shakeCamera.position.x += strength * std::sin(freq * 7.3f);
+        shakeCamera.position.y += strength * std::cos(freq * 13.1f);
+    }
+    const glm::mat4 vp = renderer::computeViewProjectionMatrix(shakeCamera);
     rhi::setViewProjection(vp);
 
     // Use the sprite batch to submit 2D geometry from the render queue.

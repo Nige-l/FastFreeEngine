@@ -146,6 +146,7 @@ ffe.setCollisionCallback(function(entityA, entityB)
             end
 
             if sfxHandle then ffe.playSound(sfxHandle, 0.8) end
+            ffe.cameraShake(4, 0.12)
 
             -- Spawn pickup ring at star position
             if ffe.fillTransform(starId, transformBuf) then

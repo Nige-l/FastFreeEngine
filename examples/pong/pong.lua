@@ -181,6 +181,7 @@ local function scorePoint(side)
     goalFlashTimer = 0.3
 
     if sfxScore then ffe.playSound(sfxScore, 0.6) end
+    ffe.cameraShake(6, 0.15)
 
     if scoreLeft >= WIN_SCORE or scoreRight >= WIN_SCORE then
         gameOver = true
