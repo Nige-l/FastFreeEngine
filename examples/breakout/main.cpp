@@ -117,6 +117,7 @@ void breakoutSystem(ffe::World& world, const float dt)
         ctx->scripts->callFunction("update",
                                    static_cast<ffe::i64>(ctx->paddle),
                                    static_cast<double>(dt));
+        ctx->scripts->tickTimers(dt);
         ctx->scripts->deliverCollisionEvents(world);
     }
 }

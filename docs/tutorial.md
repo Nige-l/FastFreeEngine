@@ -393,7 +393,37 @@ See the Pong and Breakout demos for polished examples of this pattern with anima
 
 ---
 
-## 15. Quitting Cleanly
+## 15. Timers and Delays
+
+Schedule actions to happen after a delay or at regular intervals:
+
+```lua
+-- One-shot: flash the screen red after 2 seconds
+ffe.after(2.0, function()
+    ffe.setBackgroundColor(1, 0, 0)
+end)
+
+-- Repeating: spawn an enemy every 3 seconds
+local spawnTimer = ffe.every(3.0, function()
+    local enemy = ffe.createEntity()
+    ffe.addTransform(enemy, math.random(-600, 600), 400, 0, 1, 1)
+    ffe.addSprite(enemy, enemyTex, 32, 32, 1, 0, 0, 1, 1)
+end)
+
+-- Cancel a timer when you no longer need it
+ffe.cancelTimer(spawnTimer)
+```
+
+**Rules:**
+- `ffe.after(seconds, callback)` fires once, then auto-cancels
+- `ffe.every(seconds, callback)` fires repeatedly until cancelled
+- Both return a timer ID (integer) you can pass to `ffe.cancelTimer()`
+- Maximum 256 concurrent timers
+- If a callback errors, the timer is auto-cancelled (no error spam)
+
+---
+
+## 16. Quitting Cleanly
 
 ```lua
 if ffe.isKeyPressed(ffe.KEY_ESCAPE) then

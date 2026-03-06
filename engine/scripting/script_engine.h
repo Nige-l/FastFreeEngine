@@ -76,8 +76,30 @@ public:
     // No-op if no callback is registered or no events exist.
     void deliverCollisionEvents(World& world);
 
+    // Tick all active timers by dt seconds. Call once per fixed tick.
+    // Fires callbacks for expired timers. One-shot timers are auto-cancelled.
+    void tickTimers(float dt);
+
     // Returns true if init() has been called successfully.
     bool isInitialised() const;
+
+    // Maximum number of concurrent timers.
+    static constexpr u32 MAX_TIMERS = 256;
+
+    // --- Timer storage (fixed-size, no heap per timer) ---
+    // Public because Lua C-function bindings access these via ScriptEngine*.
+    struct Timer {
+        f32 remaining = 0.0f;   // Seconds until next fire
+        f32 interval  = 0.0f;   // Original interval (for repeating timers)
+        i32 luaRef    = -1;     // LUA_NOREF sentinel = -1
+        bool active   = false;
+        bool repeating = false;
+    };
+    Timer m_timers[MAX_TIMERS] = {};
+    u32 m_timerCount = 0;       // High-water mark for scan optimisation
+
+    // Allocate a timer slot. Returns slot index or -1 if full.
+    i32 allocTimer();
 
 private:
     // Stored as void* to avoid exposing lua_State in this header.

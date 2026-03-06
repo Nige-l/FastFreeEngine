@@ -33,6 +33,9 @@ extern "C" {
 // The value stored at this key is a light userdata pointing to the World.
 static int s_worldRegistryKey = 0;
 
+// Registry key for the ScriptEngine pointer (for timer bindings).
+static int s_engineRegistryKey = 0;
+
 // Registry key for the collision callback Lua function reference.
 // Stores an integer (luaL_ref result) as light userdata.
 static int s_collisionCallbackKey = 0;
@@ -142,6 +145,11 @@ bool ScriptEngine::init() {
     // Step 5: Register ffe.* bindings.
     registerEcsBindings();
 
+    // Step 6: Store ScriptEngine pointer in Lua registry for timer bindings.
+    lua_pushlightuserdata(L, &s_engineRegistryKey);
+    lua_pushlightuserdata(L, this);
+    lua_settable(L, LUA_REGISTRYINDEX);
+
     m_initialised = true;
     FFE_LOG_INFO("ScriptEngine", "Lua scripting initialised (budget: 1,000,000 instructions/call)");
     return true;
@@ -170,10 +178,73 @@ void ScriptEngine::shutdown() {
         lua_pop(L, 1); // pop the non-function value
     }
 
+    // Release all timer Lua references before closing the state.
+    for (u32 i = 0; i < m_timerCount; ++i) {
+        if (m_timers[i].active && m_timers[i].luaRef != LUA_NOREF) {
+            luaL_unref(L, LUA_REGISTRYINDEX, m_timers[i].luaRef);
+        }
+        m_timers[i] = {};
+    }
+    m_timerCount = 0;
+
     lua_close(L);
     m_luaState   = nullptr;
     m_initialised = false;
     FFE_LOG_INFO("ScriptEngine", "Lua scripting shut down");
+}
+
+i32 ScriptEngine::allocTimer() {
+    // First try to reuse an inactive slot within the high-water mark.
+    for (u32 i = 0; i < m_timerCount; ++i) {
+        if (!m_timers[i].active) {
+            return static_cast<i32>(i);
+        }
+    }
+    // Expand if below capacity.
+    if (m_timerCount < MAX_TIMERS) {
+        return static_cast<i32>(m_timerCount++);
+    }
+    return -1;
+}
+
+void ScriptEngine::tickTimers(const float dt) {
+    if (!m_initialised || m_luaState == nullptr) return;
+
+    lua_State* L = static_cast<lua_State*>(m_luaState);
+
+    for (u32 i = 0; i < m_timerCount; ++i) {
+        Timer& t = m_timers[i];
+        if (!t.active) continue;
+
+        t.remaining -= dt;
+        if (t.remaining > 0.0f) continue;
+
+        // Timer fired — call the callback.
+        lua_rawgeti(L, LUA_REGISTRYINDEX, t.luaRef);
+        if (lua_pcall(L, 0, 0, 0) != 0) {
+            const char* err = lua_tostring(L, -1);
+            FFE_LOG_ERROR("ScriptEngine", "Timer callback error: %s",
+                          err != nullptr ? err : "(no message)");
+            lua_pop(L, 1);
+            // Cancel the timer on error to prevent repeated error spam.
+            luaL_unref(L, LUA_REGISTRYINDEX, t.luaRef);
+            t = {};
+            continue;
+        }
+
+        if (t.repeating) {
+            // Reset for next interval. Accumulate overshoot so timing stays accurate.
+            t.remaining += t.interval;
+            // Guard against dt >> interval causing runaway catch-up.
+            if (t.remaining < 0.0f) {
+                t.remaining = t.interval;
+            }
+        } else {
+            // One-shot: release the Lua reference and deactivate.
+            luaL_unref(L, LUA_REGISTRYINDEX, t.luaRef);
+            t = {};
+        }
+    }
 }
 
 bool ScriptEngine::doString(const char* script) {
@@ -2087,6 +2158,114 @@ void ScriptEngine::registerEcsBindings() {
         return 0;
     });
     lua_setfield(L, -2, "setHudText");
+
+    // ----------------------------------------------------------------
+    // Timer API
+    // ----------------------------------------------------------------
+
+    // ffe.after(seconds, callback) -> timerId or nil
+    // Schedules a one-shot timer. The callback fires once after 'seconds'.
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_engineRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* engine = static_cast<ffe::ScriptEngine*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Number seconds = luaL_checknumber(state, 1);
+        luaL_checktype(state, 2, LUA_TFUNCTION);
+
+        if (!std::isfinite(seconds) || seconds < 0.0) {
+            lua_pushnil(state);
+            return 1;
+        }
+
+        const i32 slot = engine->allocTimer();
+        if (slot < 0) {
+            FFE_LOG_WARN("ScriptEngine", "ffe.after: max timers reached (%u)", ScriptEngine::MAX_TIMERS);
+            lua_pushnil(state);
+            return 1;
+        }
+
+        // Store the callback function in the Lua registry.
+        lua_pushvalue(state, 2);
+        const int ref = luaL_ref(state, LUA_REGISTRYINDEX);
+
+        auto& t = engine->m_timers[slot];
+        t.remaining = static_cast<f32>(seconds);
+        t.interval  = static_cast<f32>(seconds);
+        t.luaRef    = ref;
+        t.active    = true;
+        t.repeating = false;
+
+        lua_pushinteger(state, slot);
+        return 1;
+    });
+    lua_setfield(L, -2, "after");
+
+    // ffe.every(seconds, callback) -> timerId or nil
+    // Schedules a repeating timer. The callback fires every 'seconds'.
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_engineRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* engine = static_cast<ffe::ScriptEngine*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Number seconds = luaL_checknumber(state, 1);
+        luaL_checktype(state, 2, LUA_TFUNCTION);
+
+        if (!std::isfinite(seconds) || seconds <= 0.0) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.every: interval must be > 0");
+            lua_pushnil(state);
+            return 1;
+        }
+
+        const i32 slot = engine->allocTimer();
+        if (slot < 0) {
+            FFE_LOG_WARN("ScriptEngine", "ffe.every: max timers reached (%u)", ScriptEngine::MAX_TIMERS);
+            lua_pushnil(state);
+            return 1;
+        }
+
+        lua_pushvalue(state, 2);
+        const int ref = luaL_ref(state, LUA_REGISTRYINDEX);
+
+        auto& t = engine->m_timers[slot];
+        t.remaining = static_cast<f32>(seconds);
+        t.interval  = static_cast<f32>(seconds);
+        t.luaRef    = ref;
+        t.active    = true;
+        t.repeating = true;
+
+        lua_pushinteger(state, slot);
+        return 1;
+    });
+    lua_setfield(L, -2, "every");
+
+    // ffe.cancelTimer(timerId) -> nothing
+    // Cancels an active timer. No-op for invalid or already-cancelled IDs.
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_engineRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* engine = static_cast<ffe::ScriptEngine*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = luaL_checkinteger(state, 1);
+        if (rawId < 0 || rawId >= static_cast<lua_Integer>(ScriptEngine::MAX_TIMERS)) {
+            return 0;
+        }
+
+        const u32 slot = static_cast<u32>(rawId);
+        auto& t = engine->m_timers[slot];
+        if (t.active && t.luaRef != LUA_NOREF) {
+            luaL_unref(state, LUA_REGISTRYINDEX, t.luaRef);
+        }
+        t = {};
+        return 0;
+    });
+    lua_setfield(L, -2, "cancelTimer");
 
     // Set the 'ffe' table as a global.
     lua_setglobal(L, "ffe");

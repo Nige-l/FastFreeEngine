@@ -139,6 +139,7 @@ void pongSystem(ffe::World& world, const float dt)
                                    static_cast<ffe::i64>(ctx->paddle),
                                    static_cast<double>(dt));
 
+        ctx->scripts->tickTimers(dt);
         ctx->scripts->deliverCollisionEvents(world);
     }
 }

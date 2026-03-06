@@ -2309,3 +2309,132 @@ TEST_CASE("ffe.setSpriteFlip on invalid entity is a no-op", "[scripting][ecs][sp
     // Invalid entity ID — should not crash
     REQUIRE(fix.engine.doString("ffe.setSpriteFlip(999999, true, false)"));
 }
+
+// =============================================================================
+// Timer API: ffe.after, ffe.every, ffe.cancelTimer
+// =============================================================================
+
+TEST_CASE("ffe.after fires callback once after elapsed time", "[scripting][timer]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    REQUIRE(fix.engine.doString(
+        "g_fired = 0\n"
+        "ffe.after(0.1, function() g_fired = g_fired + 1 end)\n"
+    ));
+
+    // Tick 5 times at 1/60 = 0.0833s total — should not fire yet
+    for (int i = 0; i < 5; ++i) fix.engine.tickTimers(1.0f / 60.0f);
+    REQUIRE(fix.engine.doString("assert(g_fired == 0)"));
+
+    // Tick 2 more = 7 ticks = 0.1167s — should fire once
+    for (int i = 0; i < 2; ++i) fix.engine.tickTimers(1.0f / 60.0f);
+    REQUIRE(fix.engine.doString("assert(g_fired == 1)"));
+
+    // Tick 10 more — should NOT fire again (one-shot)
+    for (int i = 0; i < 10; ++i) fix.engine.tickTimers(1.0f / 60.0f);
+    REQUIRE(fix.engine.doString("assert(g_fired == 1)"));
+}
+
+TEST_CASE("ffe.every fires callback repeatedly", "[scripting][timer]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    REQUIRE(fix.engine.doString(
+        "g_count = 0\n"
+        "ffe.every(0.05, function() g_count = g_count + 1 end)\n"
+    ));
+
+    // Tick 6 times at 1/60 = 0.1s total — should fire twice (0.05 and 0.1)
+    for (int i = 0; i < 6; ++i) fix.engine.tickTimers(1.0f / 60.0f);
+    REQUIRE(fix.engine.doString("assert(g_count == 2, 'expected 2, got ' .. g_count)"));
+}
+
+TEST_CASE("ffe.cancelTimer stops a repeating timer", "[scripting][timer]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    REQUIRE(fix.engine.doString(
+        "g_val = 0\n"
+        "g_tid = ffe.every(0.05, function() g_val = g_val + 1 end)\n"
+    ));
+
+    // Tick to fire once
+    for (int i = 0; i < 4; ++i) fix.engine.tickTimers(1.0f / 60.0f);
+    REQUIRE(fix.engine.doString("assert(g_val == 1)"));
+
+    // Cancel and tick more — should not fire again
+    REQUIRE(fix.engine.doString("ffe.cancelTimer(g_tid)"));
+    for (int i = 0; i < 10; ++i) fix.engine.tickTimers(1.0f / 60.0f);
+    REQUIRE(fix.engine.doString("assert(g_val == 1)"));
+}
+
+TEST_CASE("ffe.after returns timer ID as integer", "[scripting][timer]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    REQUIRE(fix.engine.doString(
+        "local id = ffe.after(1.0, function() end)\n"
+        "assert(type(id) == 'number')\n"
+        "assert(id >= 0)\n"
+    ));
+}
+
+TEST_CASE("ffe.after with zero delay fires on next tick", "[scripting][timer]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    REQUIRE(fix.engine.doString(
+        "g_zero = false\n"
+        "ffe.after(0, function() g_zero = true end)\n"
+    ));
+
+    fix.engine.tickTimers(1.0f / 60.0f);
+    REQUIRE(fix.engine.doString("assert(g_zero == true)"));
+}
+
+TEST_CASE("ffe.cancelTimer with invalid ID is a no-op", "[scripting][timer]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    // Should not crash
+    REQUIRE(fix.engine.doString("ffe.cancelTimer(-1)"));
+    REQUIRE(fix.engine.doString("ffe.cancelTimer(999)"));
+}
+
+TEST_CASE("ffe.after with negative delay returns nil", "[scripting][timer]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    REQUIRE(fix.engine.doString(
+        "local id = ffe.after(-1, function() end)\n"
+        "assert(id == nil)\n"
+    ));
+}
+
+TEST_CASE("Timer callback error cancels the timer", "[scripting][timer]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    REQUIRE(fix.engine.doString(
+        "g_err_count = 0\n"
+        "ffe.every(0.01, function() g_err_count = g_err_count + 1; error('boom') end)\n"
+    ));
+
+    // First tick fires and errors — timer should be cancelled
+    fix.engine.tickTimers(0.02f);
+    REQUIRE(fix.engine.doString("assert(g_err_count == 1)"));
+
+    // More ticks — should NOT fire again (cancelled on error)
+    fix.engine.tickTimers(0.02f);
+    fix.engine.tickTimers(0.02f);
+    REQUIRE(fix.engine.doString("assert(g_err_count == 1)"));
+}

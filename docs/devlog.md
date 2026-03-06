@@ -1936,3 +1936,48 @@ P0: Sprite rotation in render pipeline. P1: Tutorial documentation update. P2: S
 
 ---
 
+## 2026-03-06 — Session 29: Timer/Scheduler API
+
+### Planned
+P0: Timer/scheduler API from Lua. P1-P2: Tilemap and scene management (deferred).
+
+### Completed
+
+**Timer/Scheduler API**
+- Fixed-size timer array in ScriptEngine (256 max, no heap per timer)
+- Each timer stores: remaining time, interval, Lua function reference (luaL_ref), active/repeating flags
+- `ScriptEngine::tickTimers(float dt)` — linear scan, fires expired callbacks, auto-cancels one-shots
+- `ScriptEngine::allocTimer()` — slot reuse with high-water mark optimisation
+- ScriptEngine pointer stored in Lua registry for C-function binding access
+- Timer cleanup on shutdown: all active Lua references properly unreffed
+
+**Lua Bindings:**
+- `ffe.after(seconds, callback)` → one-shot timer, returns timer ID
+- `ffe.every(seconds, callback)` → repeating timer, returns timer ID
+- `ffe.cancelTimer(timerId)` → cancel by ID, no-op for invalid IDs
+- Negative/NaN/Inf seconds rejected (returns nil)
+- Zero delay fires on next tick
+- Callback errors auto-cancel the timer (prevents error spam)
+- Overshoot accumulated for repeating timers (timing stays accurate)
+- Guard against dt >> interval causing runaway catch-up
+
+**Integration:**
+- All three demos (lua_demo, pong, breakout) now call `tickTimers(dt)` after `callFunction("update", ...)`
+
+**Documentation:**
+- `engine/scripting/.context.md`: Timer API (after, every, cancelTimer) documented
+- `docs/tutorial.md`: Section 15 — Timers and Delays with examples
+
+### Test Results
+- **389 tests pass** on both Clang-18 and GCC-13, zero warnings (8 new tests)
+- One-shot fire-once, repeating fire-multiple, cancel stops repeating
+- Timer ID type check, zero delay, negative delay rejection
+- Invalid cancelTimer no-op, callback error auto-cancels
+
+### Next Session Should Start With
+- P0: Tilemap rendering (efficient batch rendering of tile grids)
+- P1: Scene management (load/unload scenes, transitions)
+- P2: Gamepad input support
+
+---
+

@@ -173,6 +173,8 @@ void luaDemoSystem(ffe::World& world, const float dt)
                                    static_cast<ffe::i64>(ctx->player),
                                    static_cast<double>(dt));
 
+        ctx->scripts->tickTimers(dt);
+
         // Deliver collision events from the previous tick's collisionSystem
         // (priority 200) to the Lua callback registered via
         // ffe.setCollisionCallback(). This must happen after callFunction so
