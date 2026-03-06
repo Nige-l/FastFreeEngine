@@ -243,7 +243,23 @@ Call this whenever the text should change. Pass `""` to clear it.
 
 ---
 
-## 10. Quitting Cleanly
+## 10. Camera Effects
+
+Trigger screen shake for impact moments:
+
+```lua
+-- Small shake on hit (4 pixels, 0.12 seconds)
+ffe.cameraShake(4, 0.12)
+
+-- Big shake on explosion (12 pixels, 0.3 seconds)
+ffe.cameraShake(12, 0.3)
+```
+
+The shake decays linearly. A new shake replaces any active one.
+
+---
+
+## 11. Quitting Cleanly
 
 ```lua
 if ffe.isKeyPressed(ffe.KEY_ESCAPE) then
@@ -255,7 +271,7 @@ This tells the engine to stop the game loop after the current frame. Your `shutd
 
 ---
 
-## 11. Editor Overlay
+## 12. Editor Overlay
 
 Press **F1** at any time to toggle the debug editor:
 
@@ -306,6 +322,7 @@ end
 ## What's Next?
 
 - Look at `examples/lua_demo/game.lua` — "Collect the Stars" demo using all engine features
-- Look at `examples/pong/pong.lua` — classic Pong showing a different game genre
+- Look at `examples/pong/pong.lua` — classic Pong with visual effects and camera shake
+- Look at `examples/breakout/breakout.lua` — Breakout with particles, ball trail, and screen shake
 - Read `engine/scripting/.context.md` for the complete API reference
 - Check out the other `.context.md` files in each engine subdirectory for detailed system documentation
