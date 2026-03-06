@@ -1605,3 +1605,38 @@ Session 21 handover document written at `docs/session21-handover.md`.
 
 ---
 
+## 2026-03-06 — Session 21: Console/Log Viewer Panel
+
+### Planned
+- P0: Console/log viewer panel (long-standing stretch goal since Session 13)
+- P1: Tests for the log ring buffer
+
+### Completed
+- **Log ring buffer** added to `logging.h/.cpp`:
+  - `LogEntry` struct: 256-byte message + 32-byte system tag + LogLevel (all fixed-size, no heap)
+  - `LogRingBuffer`: 256-entry circular buffer, saturating count
+  - Writes happen under existing log mutex — no additional synchronisation needed
+  - `getLogRingBuffer()` accessor for editor to read
+- **Console panel** added to `editor.cpp`:
+  - Scrollable ImGui window at bottom of screen, part of F1 overlay
+  - Color-coded by log level: grey (TRACE/DEBUG), white (INFO), yellow (WARN), red (ERROR/FATAL)
+  - Auto-scrolls to newest messages
+  - Shows `[LEVEL] [system] message` format
+- **4 new test sections** for ring buffer: empty after init, captures messages, wraps at capacity, filtered messages not captured
+- **Test count: 352** (349 + 3 new sections) — all pass on both compilers, zero warnings
+
+### Architecture Notes
+- Ring buffer is pre-allocated at file scope (no heap allocation on write)
+- Editor reads the ring buffer on the main thread during render — safe because logMessage holds the mutex only for the write
+- The console panel is only visible when the editor overlay is open (F1)
+
+### Next Session Should Start With
+- P0: API quick-start tutorial
+- P1: Third example game (Breakout)
+- P2: Screenshots/GIFs for README
+- P3: Contributing guide
+
+Session 22 handover document written at `docs/session22-handover.md`.
+
+---
+

@@ -9,6 +9,7 @@
 static ffe::LogLevel s_minLevel = ffe::LogLevel::TRACE;
 static FILE* s_output = stdout;
 static std::mutex s_logMutex; // Only lock for writes, never in hot path
+static ffe::LogRingBuffer s_ringBuffer;
 
 namespace ffe {
 
@@ -66,12 +67,28 @@ void logMessage(const LogLevel level, const char* system, const char* fmt, ...) 
         if (level == LogLevel::FATAL) {
             fflush(s_output);
         }
+
+        // Write to ring buffer (same lock, no additional allocation)
+        auto& entry = s_ringBuffer.entries[s_ringBuffer.writeIndex];
+        entry.level = level;
+        snprintf(entry.system, LogEntry::MAX_SYS_LEN, "%s", system);
+        snprintf(entry.message, LogEntry::MAX_MSG_LEN, "%s", messageBuffer);
+        s_ringBuffer.writeIndex = (s_ringBuffer.writeIndex + 1u) % LOG_RING_CAPACITY;
+        if (s_ringBuffer.count < LOG_RING_CAPACITY) {
+            ++s_ringBuffer.count;
+        }
     }
 }
 
 void initLogging() {
     s_minLevel = LogLevel::TRACE;
     s_output = stdout;
+    s_ringBuffer.writeIndex = 0;
+    s_ringBuffer.count = 0;
+}
+
+LogRingBuffer* getLogRingBuffer() {
+    return &s_ringBuffer;
 }
 
 void shutdownLogging() {

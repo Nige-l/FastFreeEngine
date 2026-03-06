@@ -2,6 +2,7 @@
 
 #include "editor/editor.h"
 #include "core/ecs.h"
+#include "core/logging.h"
 #include "core/types.h"
 #include "renderer/render_system.h"
 #include "audio/audio.h"
@@ -62,6 +63,7 @@ void EditorOverlay::render(World& world) {
     if (m_visible) {
         drawPerformancePanel(world);
         drawEntityInspector(world);
+        drawConsolePanel();
     }
 
     // HUD is always drawn (even when inspector panels are hidden).
@@ -236,6 +238,62 @@ void EditorOverlay::drawEntityInspector(World& world) {
         } else {
             ImGui::TextDisabled("Select an entity");
         }
+        ImGui::EndChild();
+    }
+    ImGui::End();
+}
+
+void EditorOverlay::drawConsolePanel() {
+    const auto* ring = ffe::getLogRingBuffer();
+    if (ring == nullptr) { return; }
+
+    const ImGuiIO& io = ImGui::GetIO();
+    ImGui::SetNextWindowPos(
+        ImVec2(10.0f, io.DisplaySize.y - 260.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x - 20.0f, 250.0f),
+                             ImGuiCond_FirstUseEver);
+
+    if (ImGui::Begin("Console", nullptr, ImGuiWindowFlags_NoCollapse)) {
+        // Scrollable log area
+        ImGui::BeginChild("LogScroll", ImVec2(0.0f, 0.0f), ImGuiChildFlags_None,
+                          ImGuiWindowFlags_HorizontalScrollbar);
+
+        const uint32_t count = ring->count;
+        const uint32_t start = (count < LOG_RING_CAPACITY)
+            ? 0u
+            : ring->writeIndex;  // oldest entry when buffer is full
+
+        for (uint32_t i = 0; i < count; ++i) {
+            const uint32_t idx = (start + i) % LOG_RING_CAPACITY;
+            const auto& entry = ring->entries[idx];
+
+            // Color by level
+            ImVec4 color;
+            switch (entry.level) {
+                case LogLevel::TRACE: color = ImVec4(0.5f, 0.5f, 0.5f, 1.0f); break;
+                case LogLevel::DEBUG: color = ImVec4(0.7f, 0.7f, 0.7f, 1.0f); break;
+                case LogLevel::INFO:  color = ImVec4(0.9f, 0.9f, 0.9f, 1.0f); break;
+                case LogLevel::WARN:  color = ImVec4(1.0f, 0.9f, 0.4f, 1.0f); break;
+                case LogLevel::ERR:   color = ImVec4(1.0f, 0.4f, 0.4f, 1.0f); break;
+                case LogLevel::FATAL: color = ImVec4(1.0f, 0.2f, 0.2f, 1.0f); break;
+                default:              color = ImVec4(1.0f, 1.0f, 1.0f, 1.0f); break;
+            }
+
+            static constexpr const char* LEVEL_TAGS[] = {
+                "TRACE", "DEBUG", "INFO ", "WARN ", "ERROR", "FATAL"
+            };
+            const char* tag = LEVEL_TAGS[static_cast<uint8_t>(entry.level)];
+
+            ImGui::PushStyleColor(ImGuiCol_Text, color);
+            ImGui::Text("[%s] [%s] %s", tag, entry.system, entry.message);
+            ImGui::PopStyleColor();
+        }
+
+        // Auto-scroll to bottom
+        if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 20.0f) {
+            ImGui::SetScrollHereY(1.0f);
+        }
+
         ImGui::EndChild();
     }
     ImGui::End();

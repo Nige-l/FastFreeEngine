@@ -29,6 +29,7 @@ public:
 private:
     void drawPerformancePanel(World& world);
     void drawEntityInspector(World& world);
+    void drawConsolePanel();
 
     bool m_visible = false;
     bool m_initialised = false;

@@ -30,6 +30,30 @@ void logMessage(LogLevel level, const char* system, const char* fmt, ...);
 void initLogging();
 void shutdownLogging();
 
+// ---------------------------------------------------------------------------
+// Log ring buffer — captures recent log messages for the editor console.
+// Pre-allocated fixed-size entries, no heap allocation on write.
+// ---------------------------------------------------------------------------
+struct LogEntry {
+    static constexpr uint32_t MAX_MSG_LEN = 256;
+    static constexpr uint32_t MAX_SYS_LEN = 32;
+
+    LogLevel level;
+    char     system[MAX_SYS_LEN];
+    char     message[MAX_MSG_LEN];
+};
+
+static constexpr uint32_t LOG_RING_CAPACITY = 256;
+
+struct LogRingBuffer {
+    LogEntry entries[LOG_RING_CAPACITY];
+    uint32_t writeIndex = 0;  // next slot to write (wraps around)
+    uint32_t count      = 0;  // total entries written (saturates at capacity)
+};
+
+// Access the global log ring buffer. Returns nullptr if logging not initialised.
+LogRingBuffer* getLogRingBuffer();
+
 } // namespace ffe
 
 // --- Compile-time filtering macros ---

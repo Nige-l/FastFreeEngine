@@ -47,6 +47,54 @@ TEST_CASE("Logging level filtering", "[logging]") {
     ffe::shutdownLogging();
 }
 
+TEST_CASE("Log ring buffer captures messages", "[logging]") {
+    ffe::initLogging();
+
+    // Redirect output to tmpfile so we don't spam stdout
+    FILE* tmp = tmpfile();
+    REQUIRE(tmp != nullptr);
+    ffe::setLogFile(tmp);
+    ffe::setLogLevel(ffe::LogLevel::TRACE);
+
+    auto* ring = ffe::getLogRingBuffer();
+    REQUIRE(ring != nullptr);
+
+    SECTION("Ring buffer starts empty after init") {
+        REQUIRE(ring->count == 0);
+    }
+
+    SECTION("Messages are captured in ring buffer") {
+        FFE_LOG_INFO("RingTest", "hello ring");
+        REQUIRE(ring->count >= 1);
+
+        // Find the entry we just wrote (it's the most recent)
+        const uint32_t idx = (ring->writeIndex + ffe::LOG_RING_CAPACITY - 1) % ffe::LOG_RING_CAPACITY;
+        REQUIRE(ring->entries[idx].level == ffe::LogLevel::INFO);
+        REQUIRE(std::strstr(ring->entries[idx].system, "RingTest") != nullptr);
+        REQUIRE(std::strstr(ring->entries[idx].message, "hello ring") != nullptr);
+    }
+
+    SECTION("Ring buffer wraps at capacity") {
+        for (uint32_t i = 0; i < ffe::LOG_RING_CAPACITY + 10; ++i) {
+            FFE_LOG_INFO("Wrap", "msg %u", i);
+        }
+        // Count saturates at capacity
+        REQUIRE(ring->count == ffe::LOG_RING_CAPACITY);
+    }
+
+    SECTION("Filtered messages are not captured") {
+        const uint32_t before = ring->count;
+        ffe::setLogLevel(ffe::LogLevel::ERR);
+        FFE_LOG_INFO("Filter", "should not capture");
+        REQUIRE(ring->count == before);
+        ffe::setLogLevel(ffe::LogLevel::TRACE);
+    }
+
+    fclose(tmp);
+    ffe::setLogFile(nullptr);
+    ffe::shutdownLogging();
+}
+
 TEST_CASE("Logging format string with arguments", "[logging]") {
     ffe::initLogging();
 
