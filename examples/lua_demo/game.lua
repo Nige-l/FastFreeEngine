@@ -55,6 +55,7 @@ local ringCount       = 0
 
 -- Score flash
 local scoreFlashTimer = 0
+local gameState       = "title"  -- "title", "playing"
 
 -- ---------------------------------------------------------------------------
 -- Helper: update the HUD text with current game state
@@ -214,6 +215,25 @@ function update(entityId, dt)
         playerEntity = entityId
         ffe.addSprite(entityId, playerTex or 1, 48, 48, 0.7, 0.85, 1.0, 1.0, 1)
         ffe.addCollider(entityId, "aabb", 24, 24)
+    end
+
+    -- Title screen
+    if gameState == "title" then
+        local sw = ffe.getScreenWidth()
+        ffe.drawText("COLLECT THE STARS", sw / 2 - 272, 180, 4, 1, 0.9, 0.3, 1)
+        ffe.drawText("A FastFreeEngine Demo", sw / 2 - 168, 250, 2, 0.6, 0.6, 0.7, 0.8)
+        ffe.drawText("WASD to move", sw / 2 - 96, 340, 2, 0.7, 0.85, 1.0, 0.9)
+        ffe.drawText("Collect spinning stars for points!", sw / 2 - 272, 370, 2, 1, 0.9, 0.3, 0.9)
+        local alpha = 0.5 + 0.5 * math.sin(gameTime * 3)
+        ffe.drawText("PRESS SPACE TO START", sw / 2 - 160, 440, 2, 1, 1, 1, alpha)
+        ffe.drawText("M music | UP/DOWN vol | F1 editor | ESC quit", sw / 2 - 180 * 2, 520, 2, 0.4, 0.4, 0.5, 0.6)
+        if ffe.isKeyPressed(ffe.KEY_SPACE) then
+            gameState = "playing"
+        end
+        if ffe.isKeyPressed(ffe.KEY_ESCAPE) then
+            ffe.requestShutdown()
+        end
+        return
     end
 
     -- Read player transform (zero-alloc via fillTransform)

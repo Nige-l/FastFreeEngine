@@ -50,6 +50,7 @@ local serving        = true      -- waiting for SPACE
 local serveDir       = 1         -- 1 = serve right, -1 = serve left
 local gameOver       = false
 local gameTime       = 0
+local gameState      = "title"  -- "title", "playing"
 
 local transformBuf   = {}        -- reusable table for fillTransform
 
@@ -275,6 +276,22 @@ function update(entityId, dt)
             ffe.playMusic(musicHandle, true)
             musicPlaying = true
         end
+    end
+
+    -- Title screen
+    if gameState == "title" then
+        local sw = ffe.getScreenWidth()
+        ffe.drawText("PONG", sw / 2 - 80, 160, 5, 0.4, 0.7, 1.0, 1)
+        ffe.drawText("A FastFreeEngine Demo", sw / 2 - 168, 240, 2, 0.6, 0.6, 0.7, 0.8)
+        ffe.drawText("Player 1: W / S", sw / 2 - 120, 320, 2, 0.4, 0.7, 1.0, 0.9)
+        ffe.drawText("Player 2: UP / DOWN", sw / 2 - 152, 350, 2, 1.0, 0.5, 0.4, 0.9)
+        local alpha = 0.5 + 0.5 * math.sin(gameTime * 3)
+        ffe.drawText("PRESS SPACE TO START", sw / 2 - 160, 440, 2, 1, 1, 1, alpha)
+        ffe.drawText("M music | ESC quit", sw / 2 - 144, 520, 2, 0.4, 0.4, 0.5, 0.6)
+        if ffe.isKeyPressed(ffe.KEY_SPACE) then
+            gameState = "playing"
+        end
+        return
     end
 
     -- SPACE to serve or restart
