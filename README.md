@@ -145,7 +145,7 @@ cmake --build build-gcc
 
 ### Running Tests
 
-349 Catch2 tests covering core, renderer, scripting, audio, physics, and texture loading:
+360 Catch2 tests covering core, renderer, scripting, audio, physics, and texture loading:
 
 ```bash
 ctest --test-dir build --output-on-failure
@@ -231,7 +231,7 @@ engine/
   scripting/    Lua sandbox, ffe.* API bindings, instruction budget
   editor/       Dear ImGui overlay, entity inspector
 
-tests/          349 Catch2 tests (core, renderer, scripting, audio, physics)
+tests/          360 Catch2 tests (core, renderer, scripting, audio, physics)
 examples/       Demo games (lua_demo, pong, breakout, hello_sprites, interactive_demo, headless_test)
 assets/
   textures/     PNG textures and spritesheets
