@@ -21,6 +21,7 @@
 #include "renderer/rhi_types.h"
 #include "renderer/texture_loader.h"
 #include "scripting/script_engine.h"
+#include "../demo_paths.h"
 
 #include <cstdint>
 
@@ -77,9 +78,12 @@ void pongSystem(ffe::World& world, const float dt)
     // Scene setup: create a dummy entity for the Lua script to key off of,
     // and load the white texture for paddles/ball.
     if (!ctx->sceneReady) {
-        static constexpr const char* ASSET_ROOT =
-            "/home/nigel/FastFreeEngine/assets";
-        ffe::renderer::setAssetRoot(ASSET_ROOT);
+        static char assetRootBuf[512];
+        if (!demoAssetRoot(assetRootBuf, sizeof(assetRootBuf))) {
+            FFE_LOG_ERROR("Pong", "Failed to resolve asset root");
+            return;
+        }
+        ffe::renderer::setAssetRoot(assetRootBuf);
 
         ffe::rhi::TextureHandle loaded =
             ffe::renderer::loadTexture("textures/white.png");
@@ -112,10 +116,13 @@ void pongSystem(ffe::World& world, const float dt)
     {
         ctx->scripts->setWorld(&world);
 
-        static constexpr const char* SCRIPT_ROOT =
-            "/home/nigel/FastFreeEngine/examples/pong";
+        static char scriptRootBuf[512];
+        if (!demoScriptRoot("pong", scriptRootBuf, sizeof(scriptRootBuf))) {
+            FFE_LOG_ERROR("Pong", "Failed to resolve script root");
+            return;
+        }
 
-        const bool ok = ctx->scripts->doFile("pong.lua", SCRIPT_ROOT);
+        const bool ok = ctx->scripts->doFile("pong.lua", scriptRootBuf);
         if (!ok) {
             FFE_LOG_ERROR("Pong", "pong.lua failed to load");
         } else {

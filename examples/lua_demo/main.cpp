@@ -21,6 +21,7 @@
 #include "renderer/rhi_types.h"
 #include "renderer/texture_loader.h"
 #include "scripting/script_engine.h"
+#include "../demo_paths.h"
 
 #include <cstdint>
 
@@ -86,9 +87,12 @@ void luaDemoSystem(ffe::World& world, const float dt)
     if (!ctx->sceneReady) {
         // Set the global asset root so that ffe.loadTexture() works from Lua.
         // setAssetRoot() is write-once — safe to call here even if already set.
-        static constexpr const char* ASSET_ROOT =
-            "/home/nigel/FastFreeEngine/assets";
-        ffe::renderer::setAssetRoot(ASSET_ROOT);
+        static char assetRootBuf[512];
+        if (!demoAssetRoot(assetRootBuf, sizeof(assetRootBuf))) {
+            FFE_LOG_ERROR("LuaDemo", "Failed to resolve asset root");
+            return;
+        }
+        ffe::renderer::setAssetRoot(assetRootBuf);
 
         ffe::rhi::TextureHandle loaded =
             ffe::renderer::loadTexture("textures/checkerboard.png");
@@ -135,11 +139,14 @@ void luaDemoSystem(ffe::World& world, const float dt)
     {
         ctx->scripts->setWorld(&world);
 
-        // game.lua lives next to this binary's source. We load it from the
-        // source tree using the known absolute path. In a shipped game this
-        // would be relative to the executable or a content root.
-        static constexpr const char* SCRIPT_ROOT =
-            "/home/nigel/FastFreeEngine/examples/lua_demo";
+        // game.lua lives next to this binary's source. Resolve path relative
+        // to the executable so it works on any machine after building.
+        static char scriptRootBuf[512];
+        if (!demoScriptRoot("lua_demo", scriptRootBuf, sizeof(scriptRootBuf))) {
+            FFE_LOG_ERROR("LuaDemo", "Failed to resolve script root");
+            return;
+        }
+        const char* SCRIPT_ROOT = scriptRootBuf;
 
         const bool ok = ctx->scripts->doFile("game.lua", SCRIPT_ROOT);
         if (!ok) {

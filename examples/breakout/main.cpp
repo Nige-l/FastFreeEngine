@@ -20,6 +20,7 @@
 #include "renderer/rhi_types.h"
 #include "renderer/texture_loader.h"
 #include "scripting/script_engine.h"
+#include "../demo_paths.h"
 
 #include <cstdint>
 
@@ -62,9 +63,12 @@ void breakoutSystem(ffe::World& world, const float dt)
     if (ctx == nullptr) { return; }
 
     if (!ctx->sceneReady) {
-        static constexpr const char* ASSET_ROOT =
-            "/home/nigel/FastFreeEngine/assets";
-        ffe::renderer::setAssetRoot(ASSET_ROOT);
+        static char assetRootBuf[512];
+        if (!demoAssetRoot(assetRootBuf, sizeof(assetRootBuf))) {
+            FFE_LOG_ERROR("Breakout", "Failed to resolve asset root");
+            return;
+        }
+        ffe::renderer::setAssetRoot(assetRootBuf);
 
         ffe::rhi::TextureHandle loaded = ffe::renderer::loadTexture("textures/white.png");
         if (ffe::rhi::isValid(loaded)) {
@@ -92,10 +96,13 @@ void breakoutSystem(ffe::World& world, const float dt)
     {
         ctx->scripts->setWorld(&world);
 
-        static constexpr const char* SCRIPT_ROOT =
-            "/home/nigel/FastFreeEngine/examples/breakout";
+        static char scriptRootBuf[512];
+        if (!demoScriptRoot("breakout", scriptRootBuf, sizeof(scriptRootBuf))) {
+            FFE_LOG_ERROR("Breakout", "Failed to resolve script root");
+            return;
+        }
 
-        const bool ok = ctx->scripts->doFile("breakout.lua", SCRIPT_ROOT);
+        const bool ok = ctx->scripts->doFile("breakout.lua", scriptRootBuf);
         if (!ok) {
             FFE_LOG_ERROR("Breakout", "breakout.lua failed to load");
         } else {
