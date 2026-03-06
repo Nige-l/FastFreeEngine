@@ -1967,3 +1967,109 @@ TEST_CASE("ffe.setHudText is no-op when no World is set (does not crash)", "[scr
     // Must not crash; the binding logs an error and returns 0.
     REQUIRE(fix.engine.doString("ffe.setHudText('should not crash')"));
 }
+
+// =============================================================================
+// Camera shake bindings
+// =============================================================================
+
+TEST_CASE("ffe.cameraShake sets CameraShake in ECS context", "[scripting][camera]") {
+    ScriptFixture fix;
+    ffe::World world;
+    world.registry().ctx().emplace<ffe::CameraShake>();
+    fix.engine.setWorld(&world);
+
+    REQUIRE(fix.engine.doString("ffe.cameraShake(10, 0.5)"));
+    const auto& shake = world.registry().ctx().get<ffe::CameraShake>();
+    CHECK(shake.intensity == Catch::Approx(10.0f));
+    CHECK(shake.duration == Catch::Approx(0.5f));
+    CHECK(shake.elapsed == Catch::Approx(0.0f));
+}
+
+TEST_CASE("ffe.cameraShake clamps values to valid range", "[scripting][camera]") {
+    ScriptFixture fix;
+    ffe::World world;
+    world.registry().ctx().emplace<ffe::CameraShake>();
+    fix.engine.setWorld(&world);
+
+    REQUIRE(fix.engine.doString("ffe.cameraShake(200, 10)"));
+    const auto& shake = world.registry().ctx().get<ffe::CameraShake>();
+    CHECK(shake.intensity == Catch::Approx(100.0f));
+    CHECK(shake.duration == Catch::Approx(5.0f));
+}
+
+TEST_CASE("ffe.cameraShake without World is a no-op", "[scripting][camera]") {
+    ScriptFixture fix;
+    REQUIRE(fix.engine.doString("ffe.cameraShake(5, 0.3)"));
+}
+
+TEST_CASE("ffe.cameraShake rejects NaN silently", "[scripting][camera]") {
+    ScriptFixture fix;
+    ffe::World world;
+    world.registry().ctx().emplace<ffe::CameraShake>();
+    fix.engine.setWorld(&world);
+
+    REQUIRE(fix.engine.doString("ffe.cameraShake(0/0, 0.5)"));
+    const auto& shake = world.registry().ctx().get<ffe::CameraShake>();
+    CHECK(shake.intensity == Catch::Approx(0.0f)); // unchanged from default
+}
+
+// =============================================================================
+// Background color bindings
+// =============================================================================
+
+TEST_CASE("ffe.setBackgroundColor sets ClearColor in ECS context", "[scripting][camera]") {
+    ScriptFixture fix;
+    ffe::World world;
+    world.registry().ctx().emplace<ffe::ClearColor>();
+    fix.engine.setWorld(&world);
+
+    REQUIRE(fix.engine.doString("ffe.setBackgroundColor(0.5, 0.6, 0.7)"));
+    const auto& cc = world.registry().ctx().get<ffe::ClearColor>();
+    CHECK(cc.r == Catch::Approx(0.5f));
+    CHECK(cc.g == Catch::Approx(0.6f));
+    CHECK(cc.b == Catch::Approx(0.7f));
+}
+
+TEST_CASE("ffe.setBackgroundColor clamps values to [0,1]", "[scripting][camera]") {
+    ScriptFixture fix;
+    ffe::World world;
+    world.registry().ctx().emplace<ffe::ClearColor>();
+    fix.engine.setWorld(&world);
+
+    REQUIRE(fix.engine.doString("ffe.setBackgroundColor(-1, 2, 0.5)"));
+    const auto& cc = world.registry().ctx().get<ffe::ClearColor>();
+    CHECK(cc.r == Catch::Approx(0.0f));
+    CHECK(cc.g == Catch::Approx(1.0f));
+    CHECK(cc.b == Catch::Approx(0.5f));
+}
+
+TEST_CASE("ffe.setBackgroundColor without World is a no-op", "[scripting][camera]") {
+    ScriptFixture fix;
+    REQUIRE(fix.engine.doString("ffe.setBackgroundColor(0.5, 0.5, 0.5)"));
+}
+
+// =============================================================================
+// Mouse button bindings
+// =============================================================================
+
+TEST_CASE("ffe.isMousePressed returns boolean", "[scripting][input]") {
+    ScriptFixture fix;
+    REQUIRE(fix.engine.doString("assert(type(ffe.isMousePressed(ffe.MOUSE_LEFT)) == 'boolean')"));
+}
+
+TEST_CASE("ffe.isMouseHeld returns boolean", "[scripting][input]") {
+    ScriptFixture fix;
+    REQUIRE(fix.engine.doString("assert(type(ffe.isMouseHeld(ffe.MOUSE_LEFT)) == 'boolean')"));
+}
+
+TEST_CASE("ffe.isMouseReleased returns boolean", "[scripting][input]") {
+    ScriptFixture fix;
+    REQUIRE(fix.engine.doString("assert(type(ffe.isMouseReleased(ffe.MOUSE_LEFT)) == 'boolean')"));
+}
+
+TEST_CASE("Mouse button constants are defined", "[scripting][input]") {
+    ScriptFixture fix;
+    REQUIRE(fix.engine.doString("assert(ffe.MOUSE_LEFT ~= nil)"));
+    REQUIRE(fix.engine.doString("assert(ffe.MOUSE_RIGHT ~= nil)"));
+    REQUIRE(fix.engine.doString("assert(ffe.MOUSE_MIDDLE ~= nil)"));
+}
