@@ -145,7 +145,7 @@ whiteTex    = ffe.loadTexture("white.png")
 sfxPaddle   = ffe.loadSound("sfx_pong_paddle.wav")
 sfxWall     = ffe.loadSound("sfx_pong_wall.wav")
 sfxScore    = ffe.loadSound("sfx_pong_score.wav")
-musicHandle = ffe.loadSound("music_pixelcrown.ogg")
+musicHandle = ffe.loadMusic("music_pixelcrown.ogg")
 
 -- Start background music
 if musicHandle then

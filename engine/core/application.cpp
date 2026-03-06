@@ -91,6 +91,17 @@ int32_t Application::run() {
             tick(fixedDt);
             accumulator -= fixedDt;
 
+#ifdef FFE_EDITOR
+            // F1 toggles editor overlay — checked immediately after tick() so
+            // updateInput() (priority 0) has processed the key event into
+            // current/previous state. Must be inside the tick loop, not after it,
+            // because a second tick would copy current→previous and convert
+            // "pressed" into "held", making the post-loop check miss the event.
+            if (ffe::isKeyPressed(ffe::Key::F1)) {
+                m_editorOverlay.toggle();
+            }
+#endif
+
             // Check if a system requested shutdown via the ECS context signal.
             // Break out of the tick loop immediately so we don't execute more
             // ticks after a shutdown has been requested.
@@ -99,14 +110,6 @@ int32_t Application::run() {
                 break;
             }
         }
-
-#ifdef FFE_EDITOR
-        // F1 toggles editor overlay — checked after updateInput() has processed
-        // pending key events during the tick loop above.
-        if (ffe::isKeyPressed(ffe::Key::F1)) {
-            m_editorOverlay.toggle();
-        }
-#endif
 
         // --- Variable-rate render ---
         {

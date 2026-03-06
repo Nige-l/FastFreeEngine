@@ -1587,6 +1587,29 @@ void ScriptEngine::registerEcsBindings() {
     });
     lua_setfield(L, -2, "loadSound");
 
+    // ffe.loadMusic(path) -> integer or nil
+    // Lightweight loader for music files — validates path and stores it for
+    // streaming via playMusic(). Does NOT decode the file to PCM, so large
+    // music tracks are accepted (no AUDIO_MAX_DECODED_BYTES limit).
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TSTRING) {
+            FFE_LOG_ERROR("ScriptEngine", "loadMusic: argument must be a string");
+            lua_pushnil(state);
+            return 1;
+        }
+        const char* path = lua_tostring(state, 1);
+        const char* assetRoot = ffe::renderer::getAssetRoot();
+        const ffe::audio::SoundHandle handle = ffe::audio::loadMusic(path, assetRoot);
+
+        if (handle.id == 0u) {
+            lua_pushnil(state);
+            return 1;
+        }
+        lua_pushinteger(state, static_cast<lua_Integer>(handle.id));
+        return 1;
+    });
+    lua_setfield(L, -2, "loadMusic");
+
     // ffe.unloadSound(handle) -> nothing
     lua_pushcfunction(L, [](lua_State* state) -> int {
         const lua_Integer rawHandle = luaL_checkinteger(state, 1);

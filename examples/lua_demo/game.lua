@@ -111,7 +111,7 @@ end)
 -- Load assets
 spritesheetTex = ffe.loadTexture("spritesheet.png")
 playerTex      = ffe.loadTexture("checkerboard.png")
-musicHandle    = ffe.loadSound("music_pixelcrown.ogg") or ffe.loadSound("music.ogg")
+musicHandle    = ffe.loadMusic("music_pixelcrown.ogg") or ffe.loadMusic("music.ogg")
 sfxHandle      = ffe.loadSound("sfx.wav")
 
 if spritesheetTex then

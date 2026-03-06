@@ -106,6 +106,23 @@ void shutdown();
 //   NOT a per-frame function. Call at scene load time.
 SoundHandle loadSound(const char* path, const char* assetRoot);
 
+// Load a music file for streaming playback via playMusic().
+//
+// Unlike loadSound(), this does NOT decode the entire file into memory.
+// It validates the path, checks magic bytes (OGG/WAV), and stores the
+// canonical path for streaming. Memory usage: ~4 KB per slot (path only).
+//
+// Use this for music tracks that are too large for full PCM decode
+// (the 10 MB AUDIO_MAX_DECODED_BYTES limit does not apply here).
+// The AUDIO_MAX_FILE_BYTES limit still applies to the raw file size.
+//
+// The returned handle can be passed to playMusic() but NOT to playSound()
+// (no decoded PCM data is available — playSound() will find an empty buffer
+// and silently skip it).
+//
+// Same path validation and security checks as loadSound().
+SoundHandle loadMusic(const char* path, const char* assetRoot);
+
 // Unload a sound and free its PCM buffer. No-op for SoundHandle{0}.
 // If the sound is currently playing, the active voice is stopped first.
 // After this call, the handle must not be used.

@@ -951,6 +951,134 @@ SoundHandle loadSound(const char* const path, const char* const assetRoot) {
     return SoundHandle{handleId};
 }
 
+SoundHandle loadMusic(const char* const path, const char* const assetRoot) {
+    // Lightweight music loader: validates path and stores canonical path for
+    // streaming via playMusic(). Does NOT decode the file to PCM — skips the
+    // AUDIO_MAX_DECODED_BYTES limit that blocks large music files in loadSound().
+
+    // SEC-1: path safety check is FIRST — before any syscall.
+    if (!isAudioPathSafe(path)) {
+        FFE_LOG_ERROR("Audio", "loadMusic: unsafe path rejected: \"%s\"",
+                      path ? path : "(null)");
+        return SoundHandle{0};
+    }
+
+    if (!validateAssetRoot(assetRoot)) {
+        FFE_LOG_ERROR("Audio", "loadMusic: invalid assetRoot: \"%s\"",
+                      assetRoot ? assetRoot : "(null)");
+        return SoundHandle{0};
+    }
+
+    // HIGH-1: Check combined path length before concatenation.
+    const size_t rootLen = strnlen(assetRoot, static_cast<size_t>(PATH_MAX));
+    const size_t pathLen = strnlen(path, static_cast<size_t>(MAX_AUDIO_PATH));
+    if (rootLen + 1u + pathLen + 1u > static_cast<size_t>(PATH_MAX) + 1u) {
+        FFE_LOG_ERROR("Audio", "loadMusic: path concatenation would overflow");
+        return SoundHandle{0};
+    }
+
+    // Build full path: assetRoot + "/" + path
+    char fullPath[PATH_MAX + 1];
+    memcpy(fullPath, assetRoot, rootLen);
+    fullPath[rootLen] = '/';
+    memcpy(fullPath + rootLen + 1u, path, pathLen);
+    fullPath[rootLen + 1u + pathLen] = '\0';
+
+    // Canonicalise via realpath().
+    char canonPath[PATH_MAX + 1];
+    if (::realpath(fullPath, canonPath) == nullptr) {
+        FFE_LOG_ERROR("Audio", "loadMusic: realpath() failed for \"%s\"", fullPath);
+        return SoundHandle{0};
+    }
+
+    // Verify the canonical path is within assetRoot.
+    if (strncmp(canonPath, assetRoot, rootLen) != 0) {
+        FFE_LOG_ERROR("Audio", "loadMusic: canonical path \"%s\" escapes assetRoot \"%s\"",
+                      canonPath, assetRoot);
+        return SoundHandle{0};
+    }
+    if (canonPath[rootLen] != '/' && canonPath[rootLen] != '\0') {
+        FFE_LOG_ERROR("Audio", "loadMusic: canonical path \"%s\" escapes assetRoot \"%s\"",
+                      canonPath, assetRoot);
+        return SoundHandle{0};
+    }
+
+    // SEC-2: Pre-decode file-size check via stat().
+    {
+        struct stat fileStat{};
+        if (::stat(canonPath, &fileStat) != 0) {
+            FFE_LOG_ERROR("Audio", "loadMusic: stat() failed for \"%s\"", canonPath);
+            return SoundHandle{0};
+        }
+        const u64 fileSize = static_cast<u64>(fileStat.st_size);
+        if (fileSize > AUDIO_MAX_FILE_BYTES) {
+            FFE_LOG_ERROR("Audio",
+                          "loadMusic: file too large (%" PRIu64 " bytes, max %" PRIu64 "): \"%s\"",
+                          fileSize, AUDIO_MAX_FILE_BYTES, canonPath);
+            return SoundHandle{0};
+        }
+    }
+
+    // SEC-3: Format allowlist — detect by magic bytes.
+    u8 magic[4] = {0, 0, 0, 0};
+    {
+        FILE* const magicFile = ::fopen(canonPath, "rb");
+        if (!magicFile) {
+            FFE_LOG_ERROR("Audio", "loadMusic: fopen() failed for \"%s\"", canonPath);
+            return SoundHandle{0};
+        }
+        const size_t magicRead = ::fread(magic, 1u, 4u, magicFile);
+        ::fclose(magicFile);
+        if (magicRead < 4u) {
+            FFE_LOG_ERROR("Audio", "loadMusic: file too small (< 4 bytes): \"%s\"", canonPath);
+            return SoundHandle{0};
+        }
+    }
+
+    const bool isWAV = (magic[0] == 0x52u && magic[1] == 0x49u &&
+                        magic[2] == 0x46u && magic[3] == 0x46u);
+    const bool isOGG = (magic[0] == 0x4Fu && magic[1] == 0x67u &&
+                        magic[2] == 0x67u && magic[3] == 0x53u);
+
+    if (!isWAV && !isOGG) {
+        FFE_LOG_ERROR("Audio", "loadMusic: unsupported audio format (not WAV or OGG): \"%s\"",
+                      canonPath);
+        return SoundHandle{0};
+    }
+
+    // Register into sound table — store path only, no decoded PCM.
+    u32 slotIndex = MAX_SOUNDS;
+    {
+        std::lock_guard<std::mutex> lock(s_state.mutex);
+
+        for (u32 i = 0u; i < MAX_SOUNDS; ++i) {
+            if (!s_state.sounds[i].inUse) {
+                slotIndex = i;
+                break;
+            }
+        }
+
+        if (slotIndex == MAX_SOUNDS) {
+            FFE_LOG_ERROR("Audio", "loadMusic: sound table full (max %u sounds)", MAX_SOUNDS);
+            return SoundHandle{0};
+        }
+
+        SoundBuffer& buf = s_state.sounds[slotIndex];
+        buf.data       = nullptr;   // no decoded PCM — streaming only
+        buf.frameCount = 0u;
+        buf.channels   = 0u;
+        buf.sampleRate = 0u;
+        buf.inUse      = true;
+        const size_t canonLen = strnlen(canonPath, static_cast<size_t>(PATH_MAX));
+        memcpy(buf.canonPath, canonPath, canonLen + 1u);
+    }
+
+    const u32 handleId = slotIndex + 1u;
+    FFE_LOG_INFO("Audio", "loadMusic: registered \"%s\" for streaming (id=%u)",
+                 canonPath, handleId);
+    return SoundHandle{handleId};
+}
+
 void unloadSound(const SoundHandle handle) {
     if (!isValid(handle)) {
         return; // Safe no-op for invalid handles
