@@ -33,7 +33,7 @@ The engine is developed in daily sessions. Each session should advance the curre
 - [x] Scene management (load/unload scenes, transitions)
 - [x] Timer/scheduler API from Lua (ffe.after, ffe.every)
 - [ ] Gamepad input (SDL_GameController or similar)
-- [ ] Particle system (engine-side, not Lua entity hacks)
+- [x] Particle system (engine-side, not Lua entity hacks)
 - [ ] TTF font rendering (stb_truetype, scalable text)
 - [ ] Save/load system (serialise game state to disk)
 - [ ] Tutorial documentation covering all features

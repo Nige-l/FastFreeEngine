@@ -199,4 +199,135 @@ void renderTilemaps(World& world, SpriteBatch& batch) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Particle system — update and render
+// ---------------------------------------------------------------------------
+
+// File-static seed for particle randomness. Not security-critical.
+static ffe::u32 s_particleSeed = 42u;
+
+void particleUpdateSystem(World& world, const float dt) {
+    ZoneScopedN("ParticleUpdate");
+
+    const auto view = world.view<const Transform, ParticleEmitter>();
+    for (const auto entity : view) {
+        const auto& transform = view.get<const Transform>(entity);
+        auto& emitter = view.get<ParticleEmitter>(entity);
+
+        const f32 emitX = transform.position.x + emitter.offset.x;
+        const f32 emitY = transform.position.y + emitter.offset.y;
+
+        // --- Update existing particles ---
+        u32 writeIdx = 0;
+        for (u32 i = 0; i < emitter.activeCount; ++i) {
+            auto& p = emitter.particles[i];
+            p.remaining -= dt;
+            if (p.remaining <= 0.0f) {
+                continue; // Dead — skip (compacted out)
+            }
+
+            // Apply gravity
+            p.velocity.y += emitter.gravityY * dt;
+
+            // Integrate position
+            p.position.x += p.velocity.x * dt;
+            p.position.y += p.velocity.y * dt;
+
+            // Compact: move to writeIdx
+            if (writeIdx != i) {
+                emitter.particles[writeIdx] = p;
+            }
+            ++writeIdx;
+        }
+        emitter.activeCount = writeIdx;
+
+        // --- Handle burst mode ---
+        if (emitter.burstCount > 0) {
+            const u32 toEmit = std::min(emitter.burstCount,
+                                        MAX_PARTICLES - emitter.activeCount);
+            for (u32 j = 0; j < toEmit; ++j) {
+                auto& p = emitter.particles[emitter.activeCount++];
+                const f32 angle = emitter.angleMin +
+                    particleRandom(s_particleSeed) * (emitter.angleMax - emitter.angleMin);
+                const f32 speed = emitter.speedMin +
+                    particleRandom(s_particleSeed) * (emitter.speedMax - emitter.speedMin);
+                p.position  = {emitX, emitY};
+                p.velocity  = {std::cos(angle) * speed, std::sin(angle) * speed};
+                p.lifetime  = emitter.lifetimeMin +
+                    particleRandom(s_particleSeed) * (emitter.lifetimeMax - emitter.lifetimeMin);
+                p.remaining = p.lifetime;
+                p.size      = emitter.sizeStart;
+                p.sizeEnd   = emitter.sizeEnd;
+                p.color     = emitter.colorStart;
+                p.colorEnd  = emitter.colorEnd;
+            }
+            emitter.burstCount = 0;
+            emitter.emitting = false; // Burst is a one-shot event
+        }
+
+        // --- Continuous emission ---
+        if (!emitter.emitting || emitter.emitRate <= 0.0f) continue;
+
+        emitter.emitAccum += emitter.emitRate * dt;
+
+        // Guard against runaway catch-up (similar to timer system)
+        if (emitter.emitAccum > static_cast<f32>(MAX_PARTICLES)) {
+            emitter.emitAccum = static_cast<f32>(MAX_PARTICLES);
+        }
+
+        while (emitter.emitAccum >= 1.0f && emitter.activeCount < MAX_PARTICLES) {
+            emitter.emitAccum -= 1.0f;
+
+            auto& p = emitter.particles[emitter.activeCount++];
+            const f32 angle = emitter.angleMin +
+                particleRandom(s_particleSeed) * (emitter.angleMax - emitter.angleMin);
+            const f32 speed = emitter.speedMin +
+                particleRandom(s_particleSeed) * (emitter.speedMax - emitter.speedMin);
+            p.position  = {emitX, emitY};
+            p.velocity  = {std::cos(angle) * speed, std::sin(angle) * speed};
+            p.lifetime  = emitter.lifetimeMin +
+                particleRandom(s_particleSeed) * (emitter.lifetimeMax - emitter.lifetimeMin);
+            p.remaining = p.lifetime;
+            p.size      = emitter.sizeStart;
+            p.sizeEnd   = emitter.sizeEnd;
+            p.color     = emitter.colorStart;
+            p.colorEnd  = emitter.colorEnd;
+        }
+    }
+}
+
+void renderParticles(World& world, SpriteBatch& batch, const rhi::TextureHandle defaultTexture) {
+    ZoneScopedN("RenderParticles");
+
+    const auto view = world.registry().view<const ParticleEmitter>();
+    for (const auto entity : view) {
+        const auto& emitter = view.get<const ParticleEmitter>(entity);
+
+        const rhi::TextureHandle tex = rhi::isValid(emitter.texture)
+            ? emitter.texture : defaultTexture;
+
+        for (u32 i = 0; i < emitter.activeCount; ++i) {
+            const auto& p = emitter.particles[i];
+
+            // Interpolate color and size over lifetime
+            const f32 t = (p.lifetime > 0.0f)
+                ? 1.0f - (p.remaining / p.lifetime)
+                : 1.0f;
+            const f32 size = p.size + (p.sizeEnd - p.size) * t;
+            const glm::vec4 color = p.color + (p.colorEnd - p.color) * t;
+
+            SpriteInstance sprite;
+            sprite.position = p.position;
+            sprite.size     = {size, size};
+            sprite.uvMin    = {0.0f, 0.0f};
+            sprite.uvMax    = {1.0f, 1.0f};
+            sprite.color    = color;
+            sprite.rotation = 0.0f;
+            sprite.depth    = 0.0f;
+
+            addSprite(batch, tex, sprite);
+        }
+    }
+}
+
 } // namespace ffe::renderer

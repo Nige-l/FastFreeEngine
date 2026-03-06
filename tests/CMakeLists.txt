@@ -7,6 +7,7 @@ add_executable(ffe_tests
     core/test_ecs.cpp
     core/test_renderer_headless.cpp
     core/test_input.cpp
+    core/test_particles.cpp
     physics/test_narrow_phase.cpp
 )
 

@@ -344,6 +344,14 @@ Result Application::startup() {
         renderer::animationUpdateSystem,
         renderer::ANIMATION_UPDATE_PRIORITY
     ));
+    // ParticleUpdateSystem runs at priority 55, after animation (50) and
+    // before gameplay systems (>= 100). Emits new particles, applies
+    // velocity + gravity, kills expired particles.
+    m_world.registerSystem(FFE_SYSTEM(
+        "ParticleUpdate",
+        renderer::particleUpdateSystem,
+        renderer::PARTICLE_UPDATE_PRIORITY
+    ));
     // CollisionSystem runs at priority 200 (physics band), after gameplay
     // systems have moved entities. Detects overlaps and writes CollisionEventList
     // to ECS context for Lua callback delivery.
@@ -503,6 +511,9 @@ void Application::render(const float alpha) {
 
         // Render tilemaps directly into the sprite batch (bypasses render queue).
         renderer::renderTilemaps(m_world, m_spriteBatch);
+
+        // Render particles directly into the sprite batch (bypasses render queue).
+        renderer::renderParticles(m_world, m_spriteBatch, m_defaultWhiteTexture);
 
         renderer::endSpriteBatch(m_spriteBatch);
 

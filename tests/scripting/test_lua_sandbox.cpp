@@ -2716,3 +2716,152 @@ TEST_CASE("setScriptRoot rejects null and empty", "[scripting][scene]") {
     REQUIRE_FALSE(fix.engine.setScriptRoot(""));
     REQUIRE(fix.engine.scriptRoot() == nullptr);
 }
+
+// =============================================================================
+// Particle emitter bindings
+// =============================================================================
+
+TEST_CASE("ffe.addEmitter adds ParticleEmitter component", "[scripting][particles]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    const ffe::EntityId e = world.createEntity();
+    world.addComponent<ffe::Transform>(e);
+
+    const std::string script = "local ok = ffe.addEmitter(" + std::to_string(e) + ")\nassert(ok)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+    REQUIRE(world.hasComponent<ffe::ParticleEmitter>(e));
+}
+
+TEST_CASE("ffe.addEmitter with config table sets properties", "[scripting][particles]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    const ffe::EntityId e = world.createEntity();
+    world.addComponent<ffe::Transform>(e);
+
+    const std::string script =
+        "ffe.addEmitter(" + std::to_string(e) + ", {\n"
+        "  emitRate = 50,\n"
+        "  lifetimeMin = 0.3,\n"
+        "  lifetimeMax = 0.8,\n"
+        "  speedMin = 10,\n"
+        "  speedMax = 40,\n"
+        "  sizeStart = 8,\n"
+        "  sizeEnd = 2,\n"
+        "  gravityY = -100,\n"
+        "  offsetX = 5,\n"
+        "  offsetY = 10,\n"
+        "  colorStartR = 1, colorStartG = 0, colorStartB = 0, colorStartA = 1,\n"
+        "  colorEndR = 0, colorEndG = 0, colorEndB = 0, colorEndA = 0\n"
+        "})";
+    REQUIRE(fix.engine.doString(script.c_str()));
+    REQUIRE(world.hasComponent<ffe::ParticleEmitter>(e));
+
+    const auto& em = world.getComponent<ffe::ParticleEmitter>(e);
+    REQUIRE(em.emitRate == Catch::Approx(50.0f));
+    REQUIRE(em.lifetimeMin == Catch::Approx(0.3f));
+    REQUIRE(em.lifetimeMax == Catch::Approx(0.8f));
+    REQUIRE(em.speedMin == Catch::Approx(10.0f));
+    REQUIRE(em.speedMax == Catch::Approx(40.0f));
+    REQUIRE(em.sizeStart == Catch::Approx(8.0f));
+    REQUIRE(em.sizeEnd == Catch::Approx(2.0f));
+    REQUIRE(em.gravityY == Catch::Approx(-100.0f));
+    REQUIRE(em.offset.x == Catch::Approx(5.0f));
+    REQUIRE(em.offset.y == Catch::Approx(10.0f));
+    REQUIRE(em.colorStart.r == Catch::Approx(1.0f));
+    REQUIRE(em.colorStart.g == Catch::Approx(0.0f));
+    REQUIRE(em.colorEnd.a == Catch::Approx(0.0f));
+}
+
+TEST_CASE("ffe.addEmitter fails without Transform", "[scripting][particles]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    const ffe::EntityId e = world.createEntity();
+    // No Transform added
+
+    const std::string script = "local ok = ffe.addEmitter(" + std::to_string(e) + ")\nassert(not ok)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+    REQUIRE_FALSE(world.hasComponent<ffe::ParticleEmitter>(e));
+}
+
+TEST_CASE("ffe.startEmitter and stopEmitter toggle emission", "[scripting][particles]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    const ffe::EntityId e = world.createEntity();
+    world.addComponent<ffe::Transform>(e);
+    REQUIRE(fix.engine.doString(("ffe.addEmitter(" + std::to_string(e) + ")").c_str()));
+
+    auto& em = world.getComponent<ffe::ParticleEmitter>(e);
+    REQUIRE_FALSE(em.emitting);
+
+    REQUIRE(fix.engine.doString(("ffe.startEmitter(" + std::to_string(e) + ")").c_str()));
+    REQUIRE(em.emitting);
+
+    REQUIRE(fix.engine.doString(("ffe.stopEmitter(" + std::to_string(e) + ")").c_str()));
+    REQUIRE_FALSE(em.emitting);
+}
+
+TEST_CASE("ffe.emitBurst sets burst count", "[scripting][particles]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    const ffe::EntityId e = world.createEntity();
+    world.addComponent<ffe::Transform>(e);
+    REQUIRE(fix.engine.doString(("ffe.addEmitter(" + std::to_string(e) + ")").c_str()));
+
+    REQUIRE(fix.engine.doString(("ffe.emitBurst(" + std::to_string(e) + ", 25)").c_str()));
+    auto& em = world.getComponent<ffe::ParticleEmitter>(e);
+    REQUIRE(em.burstCount == 25);
+}
+
+TEST_CASE("ffe.removeEmitter removes ParticleEmitter component", "[scripting][particles]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    const ffe::EntityId e = world.createEntity();
+    world.addComponent<ffe::Transform>(e);
+    REQUIRE(fix.engine.doString(("ffe.addEmitter(" + std::to_string(e) + ")").c_str()));
+    REQUIRE(world.hasComponent<ffe::ParticleEmitter>(e));
+
+    REQUIRE(fix.engine.doString(("ffe.removeEmitter(" + std::to_string(e) + ")").c_str()));
+    REQUIRE_FALSE(world.hasComponent<ffe::ParticleEmitter>(e));
+}
+
+TEST_CASE("ffe.setEmitterConfig updates emitter properties", "[scripting][particles]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    const ffe::EntityId e = world.createEntity();
+    world.addComponent<ffe::Transform>(e);
+    REQUIRE(fix.engine.doString(("ffe.addEmitter(" + std::to_string(e) + ")").c_str()));
+
+    REQUIRE(fix.engine.doString(
+        ("ffe.setEmitterConfig(" + std::to_string(e) + ", { emitRate = 200, gravityY = -50 })").c_str()));
+
+    const auto& em = world.getComponent<ffe::ParticleEmitter>(e);
+    REQUIRE(em.emitRate == Catch::Approx(200.0f));
+    REQUIRE(em.gravityY == Catch::Approx(-50.0f));
+}
+
+TEST_CASE("Particle bindings no-op on invalid entity", "[scripting][particles]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    // These should all be no-ops (no crash, no error)
+    REQUIRE(fix.engine.doString("ffe.startEmitter(999999)"));
+    REQUIRE(fix.engine.doString("ffe.stopEmitter(999999)"));
+    REQUIRE(fix.engine.doString("ffe.emitBurst(999999, 10)"));
+    REQUIRE(fix.engine.doString("ffe.removeEmitter(999999)"));
+    REQUIRE(fix.engine.doString("ffe.setEmitterConfig(999999, { emitRate = 1 })"));
+}

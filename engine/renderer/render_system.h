@@ -98,6 +98,76 @@ inline void destroyTilemap(Tilemap& tm) {
     tm.height = 0;
 }
 
+// --- Particle system ---
+// Engine-side particle emitter. Each emitter owns a fixed-size pool of particles
+// (no heap allocation — particles are stored inline). The emitter tracks emission
+// rate, lifetime, velocity spread, color range, and size range.
+//
+// Particles are updated by particleUpdateSystem (registered as a system).
+// Particles are rendered by renderParticles (called from Application::render,
+// bypassing the render queue like tilemaps).
+//
+// Up to MAX_PARTICLES per emitter. When the pool is full, new emissions are
+// silently dropped (no allocation, no crash).
+
+inline constexpr u32 MAX_PARTICLES = 128;
+
+struct Particle {
+    glm::vec2 position  = {0.0f, 0.0f};
+    glm::vec2 velocity  = {0.0f, 0.0f};
+    f32 lifetime        = 0.0f;  // Total lifetime (for alpha fade)
+    f32 remaining       = 0.0f;  // Time remaining
+    f32 size            = 4.0f;
+    f32 sizeEnd         = 0.0f;  // Size at end of life (lerp)
+    glm::vec4 color     = {1.0f, 1.0f, 1.0f, 1.0f};
+    glm::vec4 colorEnd  = {1.0f, 1.0f, 1.0f, 0.0f};
+};
+
+struct ParticleEmitter {
+    // --- Particle pool (inline, no heap) ---
+    Particle particles[MAX_PARTICLES] = {};
+    u32 activeCount = 0;
+
+    // --- Emission config ---
+    f32 emitRate     = 10.0f;   // Particles per second
+    f32 emitAccum    = 0.0f;    // Accumulator for fractional emission
+    bool emitting    = false;
+
+    // --- Particle config (randomised per-particle within [min, max]) ---
+    f32 lifetimeMin  = 0.5f;
+    f32 lifetimeMax  = 1.5f;
+    f32 speedMin     = 20.0f;
+    f32 speedMax     = 80.0f;
+    f32 angleMin     = 0.0f;    // Radians (0 = right, pi/2 = up)
+    f32 angleMax     = 6.2832f; // Full circle by default
+    f32 sizeStart    = 4.0f;
+    f32 sizeEnd      = 0.0f;
+    f32 gravityY     = 0.0f;    // Applied to velocity.y each tick
+
+    // --- Color (start and end, linearly interpolated over lifetime) ---
+    glm::vec4 colorStart = {1.0f, 1.0f, 1.0f, 1.0f};
+    glm::vec4 colorEnd   = {1.0f, 1.0f, 1.0f, 0.0f};
+
+    // --- Rendering ---
+    rhi::TextureHandle texture; // Use default white texture if invalid
+    i16 layer     = 0;
+    i16 sortOrder = 0;
+
+    // --- Emitter offset from entity Transform ---
+    glm::vec2 offset = {0.0f, 0.0f};
+
+    // --- Burst mode ---
+    u32 burstCount = 0;  // If > 0, emit this many instantly and stop
+};
+
+// Simple deterministic pseudo-random for particle emission.
+// Uses a linear congruential generator. Seeded once, used only for particles.
+// Returns a float in [0, 1).
+inline f32 particleRandom(u32& seed) {
+    seed = seed * 1103515245u + 12345u;
+    return static_cast<f32>((seed >> 16) & 0x7FFF) / 32768.0f;
+}
+
 } // namespace ffe
 
 namespace ffe::renderer {
@@ -128,5 +198,17 @@ void renderPrepareSystem(World& world, float alpha);
 // Called from Application::render() after the render queue sprites are drawn.
 // Bypasses the render queue to avoid filling it with thousands of tile commands.
 void renderTilemaps(World& world, SpriteBatch& batch);
+
+// ParticleUpdateSystem — run at priority 55, after animation (50) and before
+// gameplay systems (>= 100). Updates all ParticleEmitter components: emits new
+// particles, applies velocity + gravity, kills expired particles.
+void particleUpdateSystem(World& world, float dt);
+
+// Priority at which particleUpdateSystem should be registered.
+inline constexpr i32 PARTICLE_UPDATE_PRIORITY = 55;
+
+// Render all active particles directly into the sprite batch.
+// Called from Application::render() after tilemaps. Bypasses the render queue.
+void renderParticles(World& world, SpriteBatch& batch, rhi::TextureHandle defaultTexture);
 
 } // namespace ffe::renderer

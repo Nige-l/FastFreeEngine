@@ -1785,6 +1785,283 @@ void ScriptEngine::registerEcsBindings() {
     lua_setfield(L, -2, "isAnimationPlaying");
 
     // ----------------------------------------------------------------
+    // Particle emitter bindings
+    //
+    // ffe.addEmitter(entityId [, config]) -> bool
+    //   Adds a ParticleEmitter component to the entity. The entity must
+    //   already have a Transform. Optional config table sets emitter
+    //   properties (emitRate, lifetimeMin, lifetimeMax, speedMin, speedMax,
+    //   angleMin, angleMax, sizeStart, sizeEnd, gravityY, texture,
+    //   colorStartR/G/B/A, colorEndR/G/B/A, layer, offsetX, offsetY).
+    //
+    // ffe.setEmitterConfig(entityId, config) -> nothing
+    //   Updates emitter properties from a config table.
+    //
+    // ffe.startEmitter(entityId) -> nothing
+    //   Start continuous particle emission.
+    //
+    // ffe.stopEmitter(entityId) -> nothing
+    //   Stop continuous emission. Existing particles continue to live.
+    //
+    // ffe.emitBurst(entityId, count) -> nothing
+    //   Emit a fixed number of particles immediately.
+    //
+    // ffe.removeEmitter(entityId) -> nothing
+    //   Remove the ParticleEmitter component.
+    // ----------------------------------------------------------------
+
+    // Helper: apply config table fields to a ParticleEmitter.
+    // Expects the config table at stack index configIdx.
+    // This lambda captures nothing — it reads from the Lua stack only.
+    // NOTE: defined as a local function pointer for use in both addEmitter and setEmitterConfig.
+
+    // ffe.addEmitter(entityId [, config]) -> bool
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = luaL_checkinteger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) {
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) {
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        if (!world->hasComponent<ffe::Transform>(entityId)) {
+            FFE_LOG_ERROR("ScriptEngine", "addEmitter: entity has no Transform");
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+
+        // Add emitter component (or reset if already present).
+        // Avoid emplace_or_replace — GCC-13 ICE on large structs with that template.
+        if (world->hasComponent<ffe::ParticleEmitter>(entityId)) {
+            world->getComponent<ffe::ParticleEmitter>(entityId) = ffe::ParticleEmitter{};
+        } else {
+            world->addComponent<ffe::ParticleEmitter>(entityId);
+        }
+        ffe::ParticleEmitter& em = world->getComponent<ffe::ParticleEmitter>(entityId);
+
+        // Apply optional config table (arg 2)
+        if (lua_gettop(state) >= 2 && lua_istable(state, 2)) {
+            const int tbl = 2;
+
+            auto readF32 = [&](const char* key, ffe::f32& out) {
+                lua_getfield(state, tbl, key);
+                if (lua_isnumber(state, -1)) {
+                    out = static_cast<ffe::f32>(lua_tonumber(state, -1));
+                }
+                lua_pop(state, 1);
+            };
+
+            readF32("emitRate",    em.emitRate);
+            readF32("lifetimeMin", em.lifetimeMin);
+            readF32("lifetimeMax", em.lifetimeMax);
+            readF32("speedMin",    em.speedMin);
+            readF32("speedMax",    em.speedMax);
+            readF32("angleMin",    em.angleMin);
+            readF32("angleMax",    em.angleMax);
+            readF32("sizeStart",   em.sizeStart);
+            readF32("sizeEnd",     em.sizeEnd);
+            readF32("gravityY",    em.gravityY);
+            readF32("offsetX",     em.offset.x);
+            readF32("offsetY",     em.offset.y);
+
+            readF32("colorStartR", em.colorStart.r);
+            readF32("colorStartG", em.colorStart.g);
+            readF32("colorStartB", em.colorStart.b);
+            readF32("colorStartA", em.colorStart.a);
+            readF32("colorEndR",   em.colorEnd.r);
+            readF32("colorEndG",   em.colorEnd.g);
+            readF32("colorEndB",   em.colorEnd.b);
+            readF32("colorEndA",   em.colorEnd.a);
+
+            lua_getfield(state, tbl, "texture");
+            if (lua_isnumber(state, -1)) {
+                const lua_Integer rawTex = lua_tointeger(state, -1);
+                if (rawTex > 0 && rawTex <= static_cast<lua_Integer>(UINT32_MAX)) {
+                    em.texture.id = static_cast<ffe::u32>(rawTex);
+                }
+            }
+            lua_pop(state, 1);
+
+            lua_getfield(state, tbl, "layer");
+            if (lua_isnumber(state, -1)) {
+                em.layer = static_cast<ffe::i16>(lua_tointeger(state, -1));
+            }
+            lua_pop(state, 1);
+        }
+
+        lua_pushboolean(state, 1);
+        return 1;
+    });
+    lua_setfield(L, -2, "addEmitter");
+
+    // ffe.setEmitterConfig(entityId, config) -> nothing
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = luaL_checkinteger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) { return 0; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) { return 0; }
+        if (!world->hasComponent<ffe::ParticleEmitter>(entityId)) { return 0; }
+
+        ffe::ParticleEmitter& em = world->getComponent<ffe::ParticleEmitter>(entityId);
+
+        if (!lua_istable(state, 2)) {
+            FFE_LOG_ERROR("ScriptEngine", "setEmitterConfig: arg 2 must be a table");
+            return 0;
+        }
+        const int tbl = 2;
+
+        auto readF32 = [&](const char* key, ffe::f32& out) {
+            lua_getfield(state, tbl, key);
+            if (lua_isnumber(state, -1)) {
+                out = static_cast<ffe::f32>(lua_tonumber(state, -1));
+            }
+            lua_pop(state, 1);
+        };
+
+        readF32("emitRate",    em.emitRate);
+        readF32("lifetimeMin", em.lifetimeMin);
+        readF32("lifetimeMax", em.lifetimeMax);
+        readF32("speedMin",    em.speedMin);
+        readF32("speedMax",    em.speedMax);
+        readF32("angleMin",    em.angleMin);
+        readF32("angleMax",    em.angleMax);
+        readF32("sizeStart",   em.sizeStart);
+        readF32("sizeEnd",     em.sizeEnd);
+        readF32("gravityY",    em.gravityY);
+        readF32("offsetX",     em.offset.x);
+        readF32("offsetY",     em.offset.y);
+
+        readF32("colorStartR", em.colorStart.r);
+        readF32("colorStartG", em.colorStart.g);
+        readF32("colorStartB", em.colorStart.b);
+        readF32("colorStartA", em.colorStart.a);
+        readF32("colorEndR",   em.colorEnd.r);
+        readF32("colorEndG",   em.colorEnd.g);
+        readF32("colorEndB",   em.colorEnd.b);
+        readF32("colorEndA",   em.colorEnd.a);
+
+        lua_getfield(state, tbl, "texture");
+        if (lua_isnumber(state, -1)) {
+            const lua_Integer rawTex = lua_tointeger(state, -1);
+            if (rawTex > 0 && rawTex <= static_cast<lua_Integer>(UINT32_MAX)) {
+                em.texture.id = static_cast<ffe::u32>(rawTex);
+            }
+        }
+        lua_pop(state, 1);
+
+        lua_getfield(state, tbl, "layer");
+        if (lua_isnumber(state, -1)) {
+            em.layer = static_cast<ffe::i16>(lua_tointeger(state, -1));
+        }
+        lua_pop(state, 1);
+
+        return 0;
+    });
+    lua_setfield(L, -2, "setEmitterConfig");
+
+    // ffe.startEmitter(entityId) -> nothing
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = luaL_checkinteger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) { return 0; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) { return 0; }
+        if (!world->hasComponent<ffe::ParticleEmitter>(entityId)) { return 0; }
+
+        world->getComponent<ffe::ParticleEmitter>(entityId).emitting = true;
+        return 0;
+    });
+    lua_setfield(L, -2, "startEmitter");
+
+    // ffe.stopEmitter(entityId) -> nothing
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = luaL_checkinteger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) { return 0; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) { return 0; }
+        if (!world->hasComponent<ffe::ParticleEmitter>(entityId)) { return 0; }
+
+        world->getComponent<ffe::ParticleEmitter>(entityId).emitting = false;
+        return 0;
+    });
+    lua_setfield(L, -2, "stopEmitter");
+
+    // ffe.emitBurst(entityId, count) -> nothing
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = luaL_checkinteger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) { return 0; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) { return 0; }
+        if (!world->hasComponent<ffe::ParticleEmitter>(entityId)) { return 0; }
+
+        const lua_Integer rawCount = luaL_checkinteger(state, 2);
+        if (rawCount <= 0) { return 0; }
+
+        ffe::ParticleEmitter& em = world->getComponent<ffe::ParticleEmitter>(entityId);
+        em.burstCount = static_cast<ffe::u32>(
+            rawCount > static_cast<lua_Integer>(ffe::MAX_PARTICLES)
+                ? ffe::MAX_PARTICLES
+                : rawCount);
+        return 0;
+    });
+    lua_setfield(L, -2, "emitBurst");
+
+    // ffe.removeEmitter(entityId) -> nothing
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = luaL_checkinteger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) { return 0; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) { return 0; }
+        if (!world->hasComponent<ffe::ParticleEmitter>(entityId)) { return 0; }
+
+        world->removeComponent<ffe::ParticleEmitter>(entityId);
+        return 0;
+    });
+    lua_setfield(L, -2, "removeEmitter");
+
+    // ----------------------------------------------------------------
     // Collision bindings — add/remove colliders and set collision callback.
     //
     // ffe.addCollider(entityId, shape, halfW, halfH, layer, mask, isTrigger)

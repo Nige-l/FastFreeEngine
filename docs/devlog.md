@@ -2060,3 +2060,54 @@ P0: Scene management (load/unload scenes, transitions) from Phase 1 roadmap.
 
 ---
 
+
+## 2026-03-06 -- Session 32: Particle System + Process Optimization
+
+### Process Changes (Committed Separately)
+- CLAUDE.md Section 6: tests/ ownership transferred from test-engineer to engine-dev
+- CLAUDE.md Section 7: replaced parallel/sequential dispatch with 3-phase development flow
+  - Phase 1 (Design), Phase 2 (Implementation), Phase 3 (Expert Panel -- parallel), Phase 4 (Remediation)
+  - Build cycle rules: one build per phase, never during design or read-only reviews
+- CLAUDE.md Section 8: updated Definition of Done (tests alongside implementation, game-dev-tester conditional)
+- Agent files updated: engine-dev (test ownership), test-engineer (dormant), game-dev-tester (conditional), project-manager (3-phase flow)
+
+### Planned
+P0: Particle system (engine-side, from Phase 1 roadmap remaining items).
+
+### Session Execution (New 3-Phase Flow)
+
+**Phase 1 -- Design: SKIPPED** (feature is straightforward, no new attack surface)
+
+**Phase 2 -- Implementation:**
+- `ParticleEmitter` component with inline particle pool (128 max, no heap allocation)
+- `Particle` struct: position, velocity, lifetime, size lerp, color lerp
+- `particleUpdateSystem` (priority 55): emission, physics (gravity), compaction of dead particles
+- `renderParticles`: renders directly into SpriteBatch (bypasses render queue, like tilemaps)
+- Supports continuous emission (emitRate) and burst mode (burstCount)
+- Deterministic pseudo-random (LCG) for particle velocity/angle spread
+- 6 Lua bindings: addEmitter, setEmitterConfig, startEmitter, stopEmitter, emitBurst, removeEmitter
+- Config table with 20+ properties (rate, lifetime, speed, angle, size, gravity, color, texture, offset, layer)
+- Registered in Application as built-in system + render call
+- GCC-13 workaround: avoid emplace_or_replace on large struct (ICE in gimplify.cc)
+
+**Build Results:**
+- 431 tests pass on both Clang-18 and GCC-13, zero warnings (18 new tests)
+- 10 C++ particle tests: defaults, continuous emission, burst, particle death, gravity, pool cap, offset, RNG bounds, no-Transform skip, stopped emitter
+- 8 Lua binding tests: addEmitter, addEmitter with config, no-Transform rejection, start/stop toggle, burst, remove, setEmitterConfig, invalid entity no-op
+
+**Phase 3 -- Expert Panel:** Deferred to next session (PM executing solo in this invocation)
+
+**Documentation Updates:**
+- `engine/scripting/.context.md`: 6 new particle Lua bindings, config table reference, usage examples
+- `engine/renderer/.context.md`: particleUpdateSystem, renderParticles, ParticleEmitter/Particle components
+- `docs/ROADMAP.md`: particle system checked off
+
+### game-dev-tester: SKIPPED
+Particle API follows established patterns (addComponent, start/stop, config table). No new API paradigm.
+
+### Next Session Should Start With
+- P0: Gamepad input (needs dependency decision: GLFW gamepad API vs SDL)
+- P1: TTF font rendering (stb_truetype, scalable text)
+- P2: Save/load system (serialise game state to disk)
+
+---
