@@ -14,6 +14,10 @@ compile_commands.json
 # vcpkg installed packages
 vcpkg_installed/
 
+# Large audio files (local-only, not for git)
+assets/audio/Pixel Crown.wav
+assets/textures/music.wav
+
 # OS
 .DS_Store
 Thumbs.db

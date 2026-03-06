@@ -1336,3 +1336,79 @@ Session 16 handover document written at `docs/session16-handover.md`.
 
 ---
 
+## 2026-03-06 — Session 16: "Collect the Stars" Demo Game + Real Music Asset
+
+### Planned
+- Build a complete mini-game in Lua exercising ALL engine subsystems
+- Verify deliverCollisionEvents() integration end-to-end
+- Add real music asset for demo showcase
+
+### Completed
+
+**"Collect the Stars" demo game — full rewrite of `examples/lua_demo/game.lua`:**
+- Player entity (WASD movement, AABB collider, checkerboard texture, 48x48)
+- 8 animated stars (spritesheet.png, 8 frames, circle colliders, looping animation)
+- Collision-triggered pickup: star destroyed on contact, respawned at random position
+- SFX on pickup (sfx_beep.wav via ffe.playSound)
+- Background music — "Pixel Crown" (real music track, converted to OGG for repo)
+- Score tracking with log output on each pickup and final score on shutdown
+- Clean shutdown releasing all resources (textures, sounds, music)
+- F1 editor overlay works during gameplay (entity inspector, perf panel)
+- All game logic in a single Lua file — zero C++ changes needed for game mechanics
+
+**Critical fix — `deliverCollisionEvents()` in lua_demo:**
+- `examples/lua_demo/main.cpp` updated to call `ctx->scripts->deliverCollisionEvents(world)` after `callFunction("update", ...)` each tick
+- Without this call, the Lua collision callback registered via `ffe.setCollisionCallback()` was never invoked
+- This was the integration gap identified in Session 15 P1
+
+**Real music asset:**
+- User provided "Pixel Crown.wav" (29MB, too large for git)
+- Converted to `assets/textures/music_pixelcrown.ogg` (3.5MB) using ffmpeg/sox
+- Original WAV and intermediate files excluded from git via .gitignore
+
+**Window title updated:**
+- "FFE - Collect the Stars (WASD, F1 editor, ESC quit)"
+
+**Subsystem coverage achieved:**
+
+| Subsystem | Exercised By |
+|-----------|-------------|
+| ECS | createEntity/destroyEntity for stars, C++ player entity |
+| Rendering | Sprite batching, player + 8 star sprites |
+| Input | WASD via isKeyHeld, ESC via isKeyPressed |
+| Sprite Animation | Stars use spritesheet with 8-frame looping animation |
+| Audio | SFX on pickup, streaming background music |
+| 2D Collision | AABB player collider, circle star colliders, callback |
+| Transform | fillTransform (zero-alloc), setTransform for movement |
+| Editor Overlay | F1 toggle works during gameplay |
+| Scripting | Full init/update/shutdown lifecycle in Lua |
+| Texture Loading | checkerboard.png + spritesheet.png from Lua |
+
+### Session 16 Stats
+- **Modified files:** examples/lua_demo/game.lua (full rewrite), examples/lua_demo/main.cpp (deliverCollisionEvents fix + title)
+- **New assets:** assets/textures/music_pixelcrown.ogg (3.5MB, real music track)
+- **Test count:** 341/341 pass on both Clang-18 and GCC-13, zero warnings
+- **No new tests added** — this session was demo-focused, no engine code changed
+
+### Review Results
+- All 341 tests pass, both compilers, zero warnings
+- Demo runs end-to-end: player movement, star pickups, collision callbacks, SFX, music, score, clean shutdown
+
+### Known Issues Updated
+- **Asset root conflation:** `assets/textures/` still used for textures, audio, and music; needs unified asset root
+- **No on-screen score display:** Score only visible via log output; needs text rendering or ImGui HUD
+- **Console/log viewer panel:** Still a stretch goal from Session 13
+- **M-1 getTransform GC pressure:** Mitigated by fillTransform() usage in demo
+- **isAudioPathSafe() bare ".." check:** LOW — still tracked, non-exploitable
+- **README.md outdated:** No build/run instructions or demo description
+
+### Next Session Should Start With
+- P0: README.md update with build/run instructions and demo description
+- P1: Performance review of the full demo (performance-critic)
+- P2: On-screen score display (ImGui text or simple approach)
+- P3: Additional demo polish (more game mechanics, visual effects)
+
+Session 17 handover document written at `docs/session17-handover.md`.
+
+---
+

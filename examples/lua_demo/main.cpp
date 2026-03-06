@@ -164,6 +164,13 @@ void luaDemoSystem(ffe::World& world, const float dt)
         ctx->scripts->callFunction("update",
                                    static_cast<ffe::i64>(ctx->player),
                                    static_cast<double>(dt));
+
+        // Deliver collision events from the previous tick's collisionSystem
+        // (priority 200) to the Lua callback registered via
+        // ffe.setCollisionCallback(). This must happen after callFunction so
+        // that the game's update() runs first (e.g. to move entities), and
+        // the collision response fires in the same logical frame.
+        ctx->scripts->deliverCollisionEvents(world);
     }
 
     // -----------------------------------------------------------------------
@@ -181,7 +188,7 @@ void luaDemoSystem(ffe::World& world, const float dt)
 int main()
 {
     ffe::ApplicationConfig config;
-    config.windowTitle  = "FFE - Lua Demo (WASD to move, ESC to quit)";
+    config.windowTitle  = "FFE - Collect the Stars (WASD, F1 editor, ESC quit)";
     config.windowWidth  = 1280;
     config.windowHeight = 720;
     config.headless     = false;
