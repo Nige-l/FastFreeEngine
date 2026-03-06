@@ -461,17 +461,20 @@ void Application::render(const float alpha) {
     rhi::beginFrame({cc.r, cc.g, cc.b, 1.0f});
 
     // Apply camera shake (if active) and compute VP matrix.
-    // Shake decays linearly over its duration. Offset is computed from
-    // sin/cos of elapsed time scaled to high frequency for jitter.
-    // Offsets are rounded to whole pixels to prevent sub-pixel shimmering.
+    // Shake uses exponential decay for a punchy start that fades naturally.
+    // Low-frequency sin/cos produce a visible rumble rather than jitter.
+    // Sub-pixel offsets are kept (no rounding) for smooth motion.
+    // Effective offset is capped at 3 pixels regardless of intensity.
     auto& shake = m_world.registry().ctx().get<CameraShake>();
     renderer::Camera shakeCamera = m_camera;
     if (shake.duration > 0.0f) {
         const f32 t = shake.elapsed / (shake.elapsed + shake.duration);
-        const f32 strength = shake.intensity * (1.0f - t);
-        const f32 freq = shake.elapsed * 37.0f; // high-frequency jitter
-        shakeCamera.position.x += std::round(strength * std::sin(freq * 7.3f));
-        shakeCamera.position.y += std::round(strength * std::cos(freq * 13.1f));
+        const f32 strength = shake.intensity * std::exp(-5.0f * t);
+        const f32 ox = strength * std::sin(shake.elapsed * 15.0f);
+        const f32 oy = strength * std::cos(shake.elapsed * 11.0f);
+        constexpr f32 MAX_OFFSET = 3.0f;
+        shakeCamera.position.x += std::clamp(ox, -MAX_OFFSET, MAX_OFFSET);
+        shakeCamera.position.y += std::clamp(oy, -MAX_OFFSET, MAX_OFFSET);
     }
     const glm::mat4 vp = renderer::computeViewProjectionMatrix(shakeCamera);
     rhi::setViewProjection(vp);

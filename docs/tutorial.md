@@ -280,7 +280,7 @@ ffe.cameraShake(4, 0.12)
 ffe.cameraShake(12, 0.3)
 ```
 
-The shake decays linearly. A new shake replaces any active one.
+The shake decays exponentially (punchy start, smooth fade). A new shake replaces any active one.
 
 ---
 
