@@ -1261,3 +1261,78 @@ Session 15 handover document written at `docs/session15-handover.md`.
 
 ---
 
+## 2026-03-06 — Session 15: 2D Physics System (Spatial Hash, Collisions, Lua Callbacks)
+
+### Planned
+- Implement 2D physics/collision system based on design-note-physics-2d.md
+- Collider2D component, spatial hash broadphase, narrow phase detection
+- Layer/mask filtering for collision groups
+- CollisionEvent generation with deduplication
+- Lua bindings for collision API (addCollider, removeCollider, setCollisionCallback)
+- Collision event delivery from C++ to Lua callbacks
+- Spritesheet asset for animation demos
+- Security review of collision system
+
+### Completed
+
+**2D Collision System — full implementation:**
+- `Collider2D` component — 16 bytes POD, supports AABB and Circle shapes
+- Spatial hash grid — arena-allocated, 1024 buckets, 128px cells
+- Narrow phase: AABB-AABB, Circle-Circle, AABB-Circle (all inline, no sqrt — uses squared distance)
+- Layer/mask filtering — 16 layers, bidirectional check
+- CollisionEvent generation with canonical entity ordering + deduplication
+- `collisionSystem` registered at priority 200 (runs after gameplay systems)
+
+**Lua bindings for collisions:**
+- `ffe.addCollider(entityId, shape, ...)` — shape is "aabb" or "circle"
+- `ffe.removeCollider(entityId)`
+- `ffe.setCollisionCallback(function)` — registers a Lua callback for collision events
+- `ScriptEngine::deliverCollisionEvents()` — delivers collision events from C++ to Lua callback
+
+**Assets:**
+- `assets/textures/spritesheet.png` — 128x64 PNG, 8 frames, color-coded circles
+- SFX assets from Session 14 already in place
+
+**Integration:**
+- `Application::tick()` updated to call `deliverCollisionEvents()` after systems run
+
+**API documentation updated:**
+- `engine/physics/.context.md` — full collision system API documented
+- `engine/scripting/.context.md` — collision Lua bindings documented
+
+**Testing:**
+- 50 new tests (narrow phase + scripting collision bindings)
+- All **341 tests pass** on both Clang-18 and GCC-13, zero warnings
+
+### Session 15 Stats
+- **New engine files:** collider2d.h, collision_system.h, collision_system.cpp, narrow_phase.h
+- **Modified engine files:** application.cpp, engine/CMakeLists.txt, engine/physics/CMakeLists.txt, script_engine.cpp, script_engine.h, engine/scripting/CMakeLists.txt
+- **New test files:** tests/physics/test_narrow_phase.cpp
+- **Modified test files:** tests/scripting/test_lua_sandbox.cpp, tests/CMakeLists.txt
+- **New assets:** assets/textures/spritesheet.png
+- **Modified docs:** environment.md, engine/physics/.context.md, engine/scripting/.context.md
+- **Test count:** 291 -> 341 (+50)
+
+### Review Results
+- security-auditor: **MINOR ISSUES** (non-blocking — shape string match in Lua binding, theoretical overflow in spatial hash)
+- test-engineer: **PASS** (341/341, zero warnings, both compilers)
+- api-designer: **APPROVED** (physics and scripting .context.md updated)
+
+### Known Issues Updated
+- **No demo game yet:** All subsystems are implemented but no showcase game exists
+- **Asset root conflation:** `assets/textures/` used for textures, audio, and spritesheets; needs unified asset root
+- **Console/log viewer panel:** Still a stretch goal from Session 13
+- **M-1 getTransform GC pressure:** Still tracked (fillTransform available as mitigation)
+- **isAudioPathSafe() bare ".." check:** LOW — still tracked, non-exploitable
+- **Security MINOR:** shape string match in addCollider Lua binding (non-blocking)
+- **Security MINOR:** theoretical overflow in spatial hash bucket calc (non-blocking)
+
+### Next Session Should Start With
+- P0: Demo game — a collect-the-items game exercising ALL subsystems (player, collectibles, animation, collision, audio, score, all logic in Lua)
+- P1: Verify deliverCollisionEvents integration in Application::tick()
+- P2: Any remaining polish for a playable showcase
+
+Session 16 handover document written at `docs/session16-handover.md`.
+
+---
+

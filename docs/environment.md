@@ -98,3 +98,19 @@ The following libraries are declared in `vcpkg.json`:
 - Full build passes (clang++-18, Debug, LEGACY tier)
 - All 263 tests pass
 - Standalone compile+link test of `imgui.h`, `imgui_impl_glfw.h`, `imgui_impl_opengl3.h` with `ImGui::GetVersion()` succeeds
+
+### 2026-03-06: Spritesheet test asset for animation system
+
+**What changed:**
+- Created `assets/textures/spritesheet.png`: 128x64 RGBA PNG, 4 columns x 2 rows grid of 32x32 pixel frames
+- Each frame contains a uniquely colored circle (red, orange, yellow, green, cyan, blue, purple, magenta) with a white rotating line indicator and frame number overlay
+- Generated with Python3 + Pillow (both already installed on system)
+
+**Why:**
+- Needed a multi-frame spritesheet asset to test the grid-based sprite animation system
+- The rotating indicator and color cycling make it visually obvious whether animation frame sequencing is correct
+- 8 distinct frames provide enough variation to verify looping, frame stepping, and UV coordinate calculations
+
+**Verification:**
+- `file` confirms: PNG image data, 128 x 64, 8-bit/color RGBA, non-interlaced
+- Pillow confirms: Size (128, 64), Mode RGBA

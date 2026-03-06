@@ -69,6 +69,13 @@ public:
     // entityId maps to lua_Integer; dt maps to lua_Number (double).
     bool callFunction(const char* funcName, ffe::i64 entityId, double dt);
 
+    // Deliver collision events to the registered Lua callback.
+    // Reads CollisionEventList from the World's ECS context and calls the
+    // Lua callback (set via ffe.setCollisionCallback) for each event.
+    // Call this after all systems have run (after tick()), before arena reset.
+    // No-op if no callback is registered or no events exist.
+    void deliverCollisionEvents(World& world);
+
     // Returns true if init() has been called successfully.
     bool isInitialised() const;
 

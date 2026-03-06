@@ -7,12 +7,14 @@ add_executable(ffe_tests
     core/test_ecs.cpp
     core/test_renderer_headless.cpp
     core/test_input.cpp
+    physics/test_narrow_phase.cpp
 )
 
 target_link_libraries(ffe_tests
     PRIVATE
         ffe_core
         ffe_renderer
+        ffe_physics
         Catch2::Catch2WithMain
 )
 

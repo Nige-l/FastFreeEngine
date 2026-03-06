@@ -14,6 +14,7 @@ extern "C" {
 #include "renderer/render_system.h"
 #include "renderer/texture_loader.h"
 #include "audio/audio.h"
+#include "physics/collider2d.h"
 
 #include <algorithm>  // std::max, std::min
 #include <cinttypes>  // PRId64
@@ -30,6 +31,10 @@ extern "C" {
 // registry. Scripts never see this — it is never exposed to Lua.
 // The value stored at this key is a light userdata pointing to the World.
 static int s_worldRegistryKey = 0;
+
+// Registry key for the collision callback Lua function reference.
+// Stores an integer (luaL_ref result) as light userdata.
+static int s_collisionCallbackKey = 0;
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -314,6 +319,68 @@ void ScriptEngine::setWorld(ffe::World* world) {
         lua_pushnil(L);                               // value: clear it
     }
     lua_settable(L, LUA_REGISTRYINDEX);
+}
+
+void ScriptEngine::deliverCollisionEvents(World& world) {
+    if (!m_initialised || m_luaState == nullptr) {
+        return;
+    }
+
+    // Check if collision events exist in the ECS context.
+    if (!world.registry().ctx().contains<ffe::CollisionEventList>()) {
+        return;
+    }
+    const auto& eventList = world.registry().ctx().get<ffe::CollisionEventList>();
+    if (eventList.count == 0 || eventList.events == nullptr) {
+        return;
+    }
+
+    auto* L = static_cast<lua_State*>(m_luaState);
+
+    // Retrieve the callback ref from the Lua registry.
+    lua_pushlightuserdata(L, &s_collisionCallbackKey);
+    lua_gettable(L, LUA_REGISTRYINDEX);
+    if (lua_isnil(L, -1)) {
+        lua_pop(L, 1);
+        return; // No callback registered.
+    }
+    const int ref = static_cast<int>(lua_tointeger(L, -1));
+    lua_pop(L, 1);
+
+    if (ref == -2) { // LUA_NOREF
+        return;
+    }
+
+    // Call the callback for each event: callback(entityA, entityB)
+    for (u32 i = 0; i < eventList.count; ++i) {
+        lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
+        if (!lua_isfunction(L, -1)) {
+            lua_pop(L, 1);
+            FFE_LOG_WARN("ScriptEngine", "Collision callback is not a function — unregistering");
+            luaL_unref(L, LUA_REGISTRYINDEX, ref);
+
+            // Clear the stored ref.
+            lua_pushlightuserdata(L, &s_collisionCallbackKey);
+            lua_pushinteger(L, -2); // LUA_NOREF
+            lua_settable(L, LUA_REGISTRYINDEX);
+
+            if (world.registry().ctx().contains<ffe::CollisionCallbackRef>()) {
+                world.registry().ctx().get<ffe::CollisionCallbackRef>().luaRef = -2;
+            }
+            return;
+        }
+
+        lua_pushinteger(L, static_cast<lua_Integer>(eventList.events[i].entityA));
+        lua_pushinteger(L, static_cast<lua_Integer>(eventList.events[i].entityB));
+
+        if (lua_pcall(L, 2, 0, 0) != 0) {
+            const char* err = lua_tostring(L, -1);
+            FFE_LOG_ERROR("ScriptEngine", "Collision callback error: %s",
+                          err != nullptr ? err : "(unknown)");
+            lua_pop(L, 1);
+            // Continue delivering remaining events despite the error.
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1120,6 +1187,222 @@ void ScriptEngine::registerEcsBindings() {
         return 1;
     });
     lua_setfield(L, -2, "isAnimationPlaying");
+
+    // ----------------------------------------------------------------
+    // Collision bindings — add/remove colliders and set collision callback.
+    //
+    // ffe.addCollider(entityId, shape, halfW, halfH, layer, mask, isTrigger)
+    //   shape: "aabb" or "circle"
+    //   halfW, halfH: positive numbers
+    //   layer, mask: integers (default 0xFFFF if omitted)
+    //   isTrigger: boolean (default false)
+    //   Returns true on success, false on failure.
+    //
+    // ffe.removeCollider(entityId)
+    //   Remove Collider2D component. No-op if entity has no collider.
+    //
+    // ffe.setCollisionCallback(func)
+    //   Register a Lua function to be called for each collision event.
+    //   func receives (entityA, entityB) per overlapping pair per frame.
+    //   Pass nil to unregister.
+    // ----------------------------------------------------------------
+
+    // ffe.addCollider(entityId, shape, halfW, halfH [, layer, mask, isTrigger]) -> bool
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        // Arg 1: entity ID
+        const lua_Integer rawId = luaL_checkinteger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) {
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) {
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+
+        // Arg 2: shape string ("aabb" or "circle")
+        if (lua_type(state, 2) != LUA_TSTRING) {
+            FFE_LOG_ERROR("ScriptEngine", "addCollider: shape must be a string (\"aabb\" or \"circle\")");
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        const char* shapeStr = lua_tostring(state, 2);
+        ffe::ColliderShape shape = ffe::ColliderShape::AABB;
+        if (shapeStr != nullptr && shapeStr[0] == 'c') {
+            shape = ffe::ColliderShape::CIRCLE;
+        } else if (shapeStr == nullptr || shapeStr[0] != 'a') {
+            FFE_LOG_ERROR("ScriptEngine", "addCollider: unknown shape \"%s\" — use \"aabb\" or \"circle\"",
+                          shapeStr != nullptr ? shapeStr : "(null)");
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+
+        // Arg 3: halfWidth (positive, finite)
+        const lua_Number halfW = luaL_checknumber(state, 3);
+        if (!std::isfinite(halfW) || halfW <= 0.0) {
+            FFE_LOG_ERROR("ScriptEngine", "addCollider: halfWidth must be finite and > 0");
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+
+        // Arg 4: halfHeight (positive, finite; ignored for circle but must be valid)
+        const lua_Number halfH = luaL_checknumber(state, 4);
+        if (!std::isfinite(halfH) || halfH < 0.0) {
+            FFE_LOG_ERROR("ScriptEngine", "addCollider: halfHeight must be finite and >= 0");
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+
+        // Arg 5 (optional): layer (default 0xFFFF)
+        ffe::u16 layer = 0xFFFF;
+        if (lua_gettop(state) >= 5 && !lua_isnil(state, 5)) {
+            const lua_Integer rawLayer = luaL_checkinteger(state, 5);
+            if (rawLayer < 0 || rawLayer > 0xFFFF) {
+                FFE_LOG_WARN("ScriptEngine", "addCollider: layer out of [0, 65535] — clamping");
+            }
+            layer = static_cast<ffe::u16>(rawLayer < 0 ? 0 : (rawLayer > 0xFFFF ? 0xFFFF : rawLayer));
+        }
+
+        // Arg 6 (optional): mask (default 0xFFFF)
+        ffe::u16 mask = 0xFFFF;
+        if (lua_gettop(state) >= 6 && !lua_isnil(state, 6)) {
+            const lua_Integer rawMask = luaL_checkinteger(state, 6);
+            if (rawMask < 0 || rawMask > 0xFFFF) {
+                FFE_LOG_WARN("ScriptEngine", "addCollider: mask out of [0, 65535] — clamping");
+            }
+            mask = static_cast<ffe::u16>(rawMask < 0 ? 0 : (rawMask > 0xFFFF ? 0xFFFF : rawMask));
+        }
+
+        // Arg 7 (optional): isTrigger (default false)
+        bool isTrigger = false;
+        if (lua_gettop(state) >= 7 && !lua_isnil(state, 7)) {
+            isTrigger = lua_toboolean(state, 7) != 0;
+        }
+
+        // Overwrite guard (H-2): use emplace_or_replace.
+        if (world->hasComponent<ffe::Collider2D>(entityId)) {
+            FFE_LOG_WARN("ScriptEngine", "addCollider: entity already has Collider2D — overwriting");
+        }
+        ffe::Collider2D& col = world->registry().emplace_or_replace<ffe::Collider2D>(
+            static_cast<entt::entity>(entityId));
+        col.shape      = shape;
+        col.isTrigger  = isTrigger;
+        col.layer      = layer;
+        col.mask       = mask;
+        col.halfWidth  = static_cast<ffe::f32>(halfW);
+        col.halfHeight = static_cast<ffe::f32>(halfH);
+
+        lua_pushboolean(state, 1);
+        return 1;
+    });
+    lua_setfield(L, -2, "addCollider");
+
+    // ffe.removeCollider(entityId) -> nothing
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            return 0;
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = luaL_checkinteger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) { return 0; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) { return 0; }
+        if (!world->hasComponent<ffe::Collider2D>(entityId)) { return 0; }
+
+        world->removeComponent<ffe::Collider2D>(entityId);
+        return 0;
+    });
+    lua_setfield(L, -2, "removeCollider");
+
+    // ffe.setCollisionCallback(func) -> nothing
+    // Stores the function as a Lua registry reference. The collision system
+    // writes events to CollisionEventList in ECS context; ScriptEngine reads
+    // them and calls this callback after all systems have run.
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        // Allow nil to unregister the callback.
+        if (lua_isnil(state, 1) || lua_gettop(state) == 0) {
+            // Unregister: release old ref if any.
+            lua_pushlightuserdata(state, &s_collisionCallbackKey);
+            lua_gettable(state, LUA_REGISTRYINDEX);
+            if (!lua_isnil(state, -1)) {
+                const int oldRef = static_cast<int>(lua_tointeger(state, -1));
+                if (oldRef != -2) { // LUA_NOREF
+                    luaL_unref(state, LUA_REGISTRYINDEX, oldRef);
+                }
+            }
+            lua_pop(state, 1);
+
+            // Store LUA_NOREF sentinel.
+            lua_pushlightuserdata(state, &s_collisionCallbackKey);
+            lua_pushinteger(state, -2); // LUA_NOREF
+            lua_settable(state, LUA_REGISTRYINDEX);
+
+            // Also update ECS context if World is available.
+            lua_pushlightuserdata(state, &s_worldRegistryKey);
+            lua_gettable(state, LUA_REGISTRYINDEX);
+            if (!lua_isnil(state, -1)) {
+                auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+                if (world != nullptr && world->registry().ctx().contains<ffe::CollisionCallbackRef>()) {
+                    world->registry().ctx().get<ffe::CollisionCallbackRef>().luaRef = -2;
+                }
+            }
+            lua_pop(state, 1);
+            return 0;
+        }
+
+        // Must be a function.
+        luaL_checktype(state, 1, LUA_TFUNCTION);
+
+        // Release old ref if any.
+        lua_pushlightuserdata(state, &s_collisionCallbackKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (!lua_isnil(state, -1)) {
+            const int oldRef = static_cast<int>(lua_tointeger(state, -1));
+            if (oldRef != -2) { // LUA_NOREF
+                luaL_unref(state, LUA_REGISTRYINDEX, oldRef);
+            }
+        }
+        lua_pop(state, 1);
+
+        // Create a new reference to the callback function.
+        lua_pushvalue(state, 1); // push copy of the function
+        const int ref = luaL_ref(state, LUA_REGISTRYINDEX);
+
+        // Store the ref integer in the registry under our key.
+        lua_pushlightuserdata(state, &s_collisionCallbackKey);
+        lua_pushinteger(state, static_cast<lua_Integer>(ref));
+        lua_settable(state, LUA_REGISTRYINDEX);
+
+        // Also update ECS context if World is available.
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (!lua_isnil(state, -1)) {
+            auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+            if (world != nullptr && world->registry().ctx().contains<ffe::CollisionCallbackRef>()) {
+                world->registry().ctx().get<ffe::CollisionCallbackRef>().luaRef = ref;
+            }
+        }
+        lua_pop(state, 1);
+
+        return 0;
+    });
+    lua_setfield(L, -2, "setCollisionCallback");
 
     // ----------------------------------------------------------------
     // Texture lifecycle bindings — load and unload GPU textures.

@@ -2,6 +2,8 @@
 #include "core/input.h"
 #include "renderer/rhi.h"
 #include "renderer/render_system.h"
+#include "physics/collider2d.h"
+#include "physics/collision_system.h"
 
 #include <chrono>
 
@@ -272,6 +274,14 @@ Result Application::startup() {
     // after every tick and exits the loop if requested = true.
     m_world.registry().ctx().emplace<ShutdownSignal>();
 
+    // 5ce. Emplace frame arena pointer into ECS context so systems (e.g. collision)
+    // can use per-frame arena allocation without holding an Application pointer.
+    m_world.registry().ctx().emplace<ArenaAllocator*>(&m_frameAllocator);
+
+    // 5cf. Emplace collision event list and callback ref into ECS context.
+    m_world.registry().ctx().emplace<CollisionEventList>();
+    m_world.registry().ctx().emplace<CollisionCallbackRef>();
+
     // 5d. Setup camera for 2D (orthographic, pixel-space)
     m_camera.projType = renderer::ProjectionType::ORTHOGRAPHIC;
     m_camera.orthoLeft   = static_cast<f32>(-m_config.windowWidth)  / 2.0f;
@@ -311,6 +321,14 @@ Result Application::startup() {
         "AnimationUpdate",
         renderer::animationUpdateSystem,
         renderer::ANIMATION_UPDATE_PRIORITY
+    ));
+    // CollisionSystem runs at priority 200 (physics band), after gameplay
+    // systems have moved entities. Detects overlaps and writes CollisionEventList
+    // to ECS context for Lua callback delivery.
+    m_world.registerSystem(FFE_SYSTEM(
+        "Collision",
+        collisionSystem,
+        COLLISION_SYSTEM_PRIORITY
     ));
     // renderPrepareSystem is NOT registered in the system list — it is called
     // explicitly from Application::render() with the interpolation alpha.

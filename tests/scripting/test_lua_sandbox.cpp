@@ -8,6 +8,7 @@
 #include "renderer/rhi_types.h"
 #include "renderer/texture_loader.h"
 #include "audio/audio.h"
+#include "physics/collider2d.h"
 
 #include <string>
 
@@ -1675,4 +1676,177 @@ TEST_CASE("ffe.isAnimationPlaying returns false for invalid entity", "[scripting
     fix.engine.setWorld(&world);
 
     REQUIRE(fix.engine.doString("assert(ffe.isAnimationPlaying(999999) == false)"));
+}
+
+// =============================================================================
+// Collision bindings — addCollider / removeCollider / setCollisionCallback
+// =============================================================================
+
+TEST_CASE("ffe.addCollider returns true for valid entity with AABB params", "[scripting][collision]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    const std::string script =
+        "local ok = ffe.addCollider(" + std::to_string(entity) + ", 'aabb', 16, 16)\n"
+        "assert(ok == true)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+    REQUIRE(world.hasComponent<ffe::Collider2D>(entity));
+    const auto& col = world.getComponent<ffe::Collider2D>(entity);
+    REQUIRE(col.shape == ffe::ColliderShape::AABB);
+    REQUIRE(col.halfWidth == Catch::Approx(16.0f));
+    REQUIRE(col.halfHeight == Catch::Approx(16.0f));
+}
+
+TEST_CASE("ffe.addCollider returns true for valid entity with circle params", "[scripting][collision]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    const std::string script =
+        "local ok = ffe.addCollider(" + std::to_string(entity) + ", 'circle', 10, 0)\n"
+        "assert(ok == true)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+    const auto& col = world.getComponent<ffe::Collider2D>(entity);
+    REQUIRE(col.shape == ffe::ColliderShape::CIRCLE);
+    REQUIRE(col.halfWidth == Catch::Approx(10.0f));
+}
+
+TEST_CASE("ffe.addCollider returns false for invalid entity", "[scripting][collision]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    // Entity 999999 does not exist.
+    REQUIRE(fix.engine.doString(
+        "local ok = ffe.addCollider(999999, 'aabb', 16, 16)\n"
+        "assert(ok == false)"));
+}
+
+TEST_CASE("ffe.addCollider rejects invalid shape string", "[scripting][collision]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    const std::string script =
+        "local ok = ffe.addCollider(" + std::to_string(entity) + ", 'polygon', 16, 16)\n"
+        "assert(ok == false)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+    REQUIRE_FALSE(world.hasComponent<ffe::Collider2D>(entity));
+}
+
+TEST_CASE("ffe.addCollider rejects negative halfWidth", "[scripting][collision]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    const std::string script =
+        "local ok = ffe.addCollider(" + std::to_string(entity) + ", 'aabb', -5, 16)\n"
+        "assert(ok == false)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+    REQUIRE_FALSE(world.hasComponent<ffe::Collider2D>(entity));
+}
+
+TEST_CASE("ffe.addCollider rejects zero halfWidth", "[scripting][collision]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    const std::string script =
+        "local ok = ffe.addCollider(" + std::to_string(entity) + ", 'aabb', 0, 16)\n"
+        "assert(ok == false)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+}
+
+TEST_CASE("ffe.addCollider rejects negative halfHeight", "[scripting][collision]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    const std::string script =
+        "local ok = ffe.addCollider(" + std::to_string(entity) + ", 'aabb', 16, -1)\n"
+        "assert(ok == false)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+}
+
+TEST_CASE("ffe.addCollider defaults layer=0xFFFF, mask=0xFFFF, isTrigger=false", "[scripting][collision]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    const std::string script =
+        "local ok = ffe.addCollider(" + std::to_string(entity) + ", 'aabb', 8, 8)\n"
+        "assert(ok == true)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+
+    const auto& col = world.getComponent<ffe::Collider2D>(entity);
+    REQUIRE(col.layer == 0xFFFF);
+    REQUIRE(col.mask == 0xFFFF);
+    REQUIRE(col.isTrigger == false);
+}
+
+TEST_CASE("ffe.addCollider with explicit layer, mask, and isTrigger", "[scripting][collision]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    const std::string script =
+        "local ok = ffe.addCollider(" + std::to_string(entity) + ", 'aabb', 8, 8, 1, 2, true)\n"
+        "assert(ok == true)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+
+    const auto& col = world.getComponent<ffe::Collider2D>(entity);
+    REQUIRE(col.layer == 1);
+    REQUIRE(col.mask == 2);
+    REQUIRE(col.isTrigger == true);
+}
+
+TEST_CASE("ffe.removeCollider removes Collider2D from entity", "[scripting][collision]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    world.addComponent<ffe::Collider2D>(entity);
+    REQUIRE(world.hasComponent<ffe::Collider2D>(entity));
+
+    fix.engine.setWorld(&world);
+    const std::string script = "ffe.removeCollider(" + std::to_string(entity) + ")";
+    REQUIRE(fix.engine.doString(script.c_str()));
+    REQUIRE_FALSE(world.hasComponent<ffe::Collider2D>(entity));
+}
+
+TEST_CASE("ffe.removeCollider is no-op for entity without collider", "[scripting][collision]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    // No Collider2D added.
+    fix.engine.setWorld(&world);
+
+    const std::string script = "ffe.removeCollider(" + std::to_string(entity) + ")";
+    REQUIRE(fix.engine.doString(script.c_str())); // Must not crash.
+}
+
+TEST_CASE("ffe.setCollisionCallback accepts a function", "[scripting][collision]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    REQUIRE(fix.engine.doString("ffe.setCollisionCallback(function(a, b) end)"));
+}
+
+TEST_CASE("ffe.setCollisionCallback accepts nil to unregister", "[scripting][collision]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    // Register, then unregister with nil.
+    REQUIRE(fix.engine.doString("ffe.setCollisionCallback(function(a, b) end)"));
+    REQUIRE(fix.engine.doString("ffe.setCollisionCallback(nil)"));
 }
