@@ -1640,3 +1640,32 @@ Session 22 handover document written at `docs/session22-handover.md`.
 
 ---
 
+## 2026-03-06 — Session 22: API Quick-Start Tutorial
+
+### Planned
+- P0: API quick-start tutorial for new users
+
+### Completed
+- **`docs/tutorial.md`** — comprehensive step-by-step guide covering:
+  - Script structure (init, update, shutdown)
+  - Entity creation and components
+  - Texture loading and unloading
+  - Transform reads/writes with zero-alloc fillTransform
+  - Keyboard and mouse input
+  - Audio (SFX + music with volume control)
+  - Collision detection with callbacks
+  - Sprite animation
+  - HUD text display
+  - Editor overlay (F1 toggle)
+  - Complete minimal game example
+- **README.md** updated with link to tutorial
+
+### Next Session Should Start With
+- P0: Third example game (Breakout) or further polish
+- P1: Contributing guide (CONTRIBUTING.md)
+- P2: Screenshots/GIFs for README
+
+Session 23 handover document written at `docs/session23-handover.md`.
+
+---
+

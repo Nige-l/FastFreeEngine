@@ -235,4 +235,6 @@ FastFreeEngine is licensed under the [MIT License](LICENSE). Free and open sourc
 
 ## Status
 
-Active development. The engine has a working game loop, 2D rendering, audio, physics, scripting, and an editor overlay -- all demonstrated in a playable mini-game. See `docs/devlog.md` for the full session-by-session development history.
+Active development. The engine has a working game loop, 2D rendering, audio, physics, scripting, and an editor overlay -- all demonstrated in two playable demo games. See `docs/devlog.md` for the full session-by-session development history.
+
+**Getting started?** Read the [Quick-Start Tutorial](docs/tutorial.md) to build your first game in Lua.
