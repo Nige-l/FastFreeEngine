@@ -907,6 +907,221 @@ void ScriptEngine::registerEcsBindings() {
     lua_setfield(L, -2, "addPreviousTransform");
 
     // ----------------------------------------------------------------
+    // Sprite animation bindings — atlas-based animation control.
+    //
+    // ffe.addSpriteAnimation(entityId, frameCount, columns, frameTime, looping)
+    //   → true on success, false on failure
+    //   Validates: entity exists, frameCount > 0, columns > 0,
+    //   columns <= frameCount, frameTime > 0.
+    //   Sets playing = false initially (user calls playAnimation to start).
+    //
+    // ffe.playAnimation(entityId) → nothing
+    //   Set playing = true, reset elapsed = 0.
+    //
+    // ffe.stopAnimation(entityId) → nothing
+    //   Set playing = false.
+    //
+    // ffe.setAnimationFrame(entityId, frame) → nothing
+    //   Clamp to [0, frameCount-1], update UVs immediately.
+    //
+    // ffe.isAnimationPlaying(entityId) → boolean
+    //   Returns true if the animation is currently playing.
+    // ----------------------------------------------------------------
+
+    // ffe.addSpriteAnimation(entityId, frameCount, columns, frameTime, looping) -> bool
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = luaL_checkinteger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) {
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) {
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+
+        const lua_Integer frameCount = luaL_checkinteger(state, 2);
+        const lua_Integer columns    = luaL_checkinteger(state, 3);
+        const lua_Number  frameTime  = luaL_checknumber(state, 4);
+        const bool        looping    = lua_toboolean(state, 5) != 0;
+
+        // Validate parameters.
+        if (frameCount <= 0 || frameCount > 65535) {
+            FFE_LOG_ERROR("ScriptEngine", "addSpriteAnimation: frameCount must be in [1, 65535]");
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        if (columns <= 0 || columns > frameCount) {
+            FFE_LOG_ERROR("ScriptEngine", "addSpriteAnimation: columns must be in [1, frameCount]");
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        if (!std::isfinite(frameTime) || frameTime <= 0.0) {
+            FFE_LOG_ERROR("ScriptEngine", "addSpriteAnimation: frameTime must be > 0 and finite");
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+
+        // Overwrite guard (H-2): use emplace_or_replace.
+        if (world->hasComponent<ffe::SpriteAnimation>(entityId)) {
+            FFE_LOG_WARN("ScriptEngine", "addSpriteAnimation: entity already has SpriteAnimation — overwriting");
+        }
+        ffe::SpriteAnimation& anim = world->registry().emplace_or_replace<ffe::SpriteAnimation>(
+            static_cast<entt::entity>(entityId));
+        anim.frameCount   = static_cast<ffe::u16>(frameCount);
+        anim.columns      = static_cast<ffe::u16>(columns);
+        anim.currentFrame = 0;
+        anim.frameTime    = static_cast<ffe::f32>(frameTime);
+        anim.elapsed      = 0.0f;
+        anim.looping      = looping;
+        anim.playing      = false;
+
+        lua_pushboolean(state, 1);
+        return 1;
+    });
+    lua_setfield(L, -2, "addSpriteAnimation");
+
+    // ffe.playAnimation(entityId) -> nothing
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            return 0;
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = luaL_checkinteger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) { return 0; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) { return 0; }
+        if (!world->hasComponent<ffe::SpriteAnimation>(entityId)) { return 0; }
+
+        ffe::SpriteAnimation& anim = world->getComponent<ffe::SpriteAnimation>(entityId);
+        anim.playing = true;
+        anim.elapsed = 0.0f;
+        return 0;
+    });
+    lua_setfield(L, -2, "playAnimation");
+
+    // ffe.stopAnimation(entityId) -> nothing
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            return 0;
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = luaL_checkinteger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) { return 0; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) { return 0; }
+        if (!world->hasComponent<ffe::SpriteAnimation>(entityId)) { return 0; }
+
+        world->getComponent<ffe::SpriteAnimation>(entityId).playing = false;
+        return 0;
+    });
+    lua_setfield(L, -2, "stopAnimation");
+
+    // ffe.setAnimationFrame(entityId, frame) -> nothing
+    // Clamps frame to [0, frameCount-1] and updates UVs immediately.
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            return 0;
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = luaL_checkinteger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) { return 0; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) { return 0; }
+        if (!world->hasComponent<ffe::SpriteAnimation>(entityId)) { return 0; }
+
+        ffe::SpriteAnimation& anim = world->getComponent<ffe::SpriteAnimation>(entityId);
+
+        const lua_Integer rawFrame = luaL_checkinteger(state, 2);
+        // Clamp to [0, frameCount - 1].
+        ffe::u16 frame = 0;
+        if (rawFrame > 0) {
+            frame = static_cast<ffe::u16>(
+                rawFrame >= static_cast<lua_Integer>(anim.frameCount)
+                    ? anim.frameCount - 1
+                    : rawFrame);
+        }
+        anim.currentFrame = frame;
+
+        // Update UVs immediately if the entity also has a Sprite component.
+        if (world->hasComponent<ffe::Sprite>(entityId)) {
+            ffe::Sprite& sprite = world->getComponent<ffe::Sprite>(entityId);
+            const ffe::u16 col  = frame % anim.columns;
+            const ffe::u16 row  = frame / anim.columns;
+            const ffe::u16 rows = (anim.frameCount + anim.columns - 1) / anim.columns;
+
+            const ffe::f32 uWidth  = 1.0f / static_cast<ffe::f32>(anim.columns);
+            const ffe::f32 vHeight = 1.0f / static_cast<ffe::f32>(rows);
+
+            sprite.uvMin.x = static_cast<ffe::f32>(col) * uWidth;
+            sprite.uvMin.y = static_cast<ffe::f32>(row) * vHeight;
+            sprite.uvMax.x = sprite.uvMin.x + uWidth;
+            sprite.uvMax.y = sprite.uvMin.y + vHeight;
+        }
+        return 0;
+    });
+    lua_setfield(L, -2, "setAnimationFrame");
+
+    // ffe.isAnimationPlaying(entityId) -> boolean
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = luaL_checkinteger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) {
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) {
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        if (!world->hasComponent<ffe::SpriteAnimation>(entityId)) {
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+
+        const ffe::SpriteAnimation& anim = world->getComponent<ffe::SpriteAnimation>(entityId);
+        lua_pushboolean(state, anim.playing ? 1 : 0);
+        return 1;
+    });
+    lua_setfield(L, -2, "isAnimationPlaying");
+
+    // ----------------------------------------------------------------
     // Texture lifecycle bindings — load and unload GPU textures.
     // These bindings have NO World dependency — texture loading is a
     // renderer function, not an ECS function.

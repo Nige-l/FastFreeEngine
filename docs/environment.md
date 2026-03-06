@@ -16,6 +16,7 @@ The following packages were installed via `apt-get`:
 - glslang-tools, spirv-tools
 - libglfw3-dev, libasound2-dev, libpulse-dev
 - luajit, libluajit-5.1-dev
+- sox, libsox-fmt-all (audio asset generation)
 - xvfb, pkg-config, curl, wget, unzip
 - libxinerama-dev, libxcursor-dev, xorg-dev, libglu1-mesa-dev (2026-03-06: required by vcpkg glfw3 build for imgui glfw-binding feature)
 
@@ -33,6 +34,7 @@ The following packages were installed via `apt-get`:
 | valgrind | valgrind-3.22.0 |
 | luajit | LuaJIT 2.1.1703358377 |
 | pkg-config | 1.8.1 |
+| sox | SoX v14.4.2 |
 
 ## vcpkg
 
@@ -58,6 +60,24 @@ The following libraries are declared in `vcpkg.json`:
 | vulkan-memory-allocator | (default) | Vulkan memory allocation library |
 
 ## Change Log
+
+### 2026-03-06: Audio demo assets and sox installation
+
+**What changed:**
+- Installed `sox` (v14.4.2) and `libsox-fmt-all` for generating audio test assets
+- Created `assets/audio/sfx_beep.wav`: 0.15s 440Hz sine wave beep, 16-bit mono 48kHz PCM, 14KB
+- Created `assets/audio/music_loop.ogg`: 8s C major chord (C4+E4+G4 mixed), Vorbis mono 48kHz, 23KB
+- Copied audio files to `assets/textures/` as `sfx.wav` and `music.ogg` (names expected by `examples/lua_demo/game.lua` which uses `renderer::getAssetRoot()` pointing to `assets/textures/`)
+
+**Why:**
+- The lua_demo's `game.lua` calls `ffe.loadSound("music.ogg")` and `ffe.loadSound("sfx.wav")` but no audio files existed in the repo
+- The demo's asset root is `assets/textures/` (set in `examples/lua_demo/main.cpp`), so audio files must reside there for the Lua `loadSound` calls to find them
+- Canonical copies kept in `assets/audio/` with descriptive names for future use when a separate audio asset root is added
+
+**Verification:**
+- `file` command confirms correct formats (RIFF WAV PCM 16-bit, Ogg Vorbis)
+- `sox --i` confirms expected duration, sample rate, and encoding for both files
+- Both files under 50KB each
 
 ### 2026-03-06: Dear ImGui with GLFW/OpenGL3 backends
 

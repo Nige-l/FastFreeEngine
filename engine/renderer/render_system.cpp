@@ -22,6 +22,46 @@ void copyTransformSystem(World& world, const float /*dt*/) {
     }
 }
 
+void animationUpdateSystem(World& world, const float dt) {
+    ZoneScopedN("AnimationUpdate");
+
+    const auto view = world.view<Sprite, SpriteAnimation>();
+    for (const auto entity : view) {
+        auto& anim = view.get<SpriteAnimation>(entity);
+        if (!anim.playing) continue;
+
+        anim.elapsed += dt;
+        while (anim.elapsed >= anim.frameTime) {
+            anim.elapsed -= anim.frameTime;
+            ++anim.currentFrame;
+            if (anim.currentFrame >= anim.frameCount) {
+                if (anim.looping) {
+                    anim.currentFrame = 0;
+                } else {
+                    anim.currentFrame = anim.frameCount - 1;
+                    anim.playing = false;
+                    break;
+                }
+            }
+        }
+
+        // Compute UV coordinates from frame index and grid layout.
+        // Assumes the full texture is a uniform grid: columns x rows.
+        auto& sprite = view.get<Sprite>(entity);
+        const u16 col  = anim.currentFrame % anim.columns;
+        const u16 row  = anim.currentFrame / anim.columns;
+        const u16 rows = (anim.frameCount + anim.columns - 1) / anim.columns;
+
+        const f32 uWidth  = 1.0f / static_cast<f32>(anim.columns);
+        const f32 vHeight = 1.0f / static_cast<f32>(rows);
+
+        sprite.uvMin.x = static_cast<f32>(col) * uWidth;
+        sprite.uvMin.y = static_cast<f32>(row) * vHeight;
+        sprite.uvMax.x = sprite.uvMin.x + uWidth;
+        sprite.uvMax.y = sprite.uvMin.y + vHeight;
+    }
+}
+
 void renderPrepareSystem(World& world, const float alpha) {
     ZoneScopedN("RenderPrepare");
 
@@ -61,6 +101,10 @@ void renderPrepareSystem(World& world, const float alpha) {
         cmd.posY    = posY;
         cmd.scaleX  = scaleX;
         cmd.scaleY  = scaleY;
+        cmd.uvMinX  = sprite.uvMin.x;
+        cmd.uvMinY  = sprite.uvMin.y;
+        cmd.uvMaxX  = sprite.uvMax.x;
+        cmd.uvMaxY  = sprite.uvMax.y;
         cmd.colorR  = static_cast<u8>(glm::clamp(sprite.color.r, 0.0f, 1.0f) * 255.0f);
         cmd.colorG  = static_cast<u8>(glm::clamp(sprite.color.g, 0.0f, 1.0f) * 255.0f);
         cmd.colorB  = static_cast<u8>(glm::clamp(sprite.color.b, 0.0f, 1.0f) * 255.0f);

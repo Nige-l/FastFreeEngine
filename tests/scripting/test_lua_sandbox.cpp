@@ -1319,3 +1319,360 @@ TEST_CASE("ffe.setMasterVolume rejects non-number argument (Lua error)", "[scrip
     REQUIRE_FALSE(fix.engine.doString("ffe.setMasterVolume(true)"));
     REQUIRE_FALSE(fix.engine.doString("ffe.setMasterVolume(nil)"));
 }
+
+// =============================================================================
+// ffe.addSpriteAnimation — sprite animation component from Lua
+// =============================================================================
+
+TEST_CASE("ffe.addSpriteAnimation returns true for valid entity with Sprite", "[scripting][animation]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    // addSpriteAnimation does not require Sprite, but we add one to match typical usage.
+    ffe::Sprite& s = world.addComponent<ffe::Sprite>(entity);
+    s.size = {32.0f, 32.0f};
+    s.texture = ffe::rhi::TextureHandle{1};
+    fix.engine.setWorld(&world);
+
+    const std::string script =
+        "local ok = ffe.addSpriteAnimation(" + std::to_string(entity) + ", 4, 2, 0.1, true)\n"
+        "assert(ok == true)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+    REQUIRE(world.hasComponent<ffe::SpriteAnimation>(entity));
+
+    const ffe::SpriteAnimation& anim = world.getComponent<ffe::SpriteAnimation>(entity);
+    REQUIRE(anim.frameCount == 4);
+    REQUIRE(anim.columns == 2);
+    REQUIRE(anim.frameTime == Catch::Approx(0.1f));
+    REQUIRE(anim.looping == true);
+    REQUIRE(anim.playing == false);  // must start stopped
+    REQUIRE(anim.currentFrame == 0);
+}
+
+TEST_CASE("ffe.addSpriteAnimation returns false for invalid entity", "[scripting][animation]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    // Entity 999999 does not exist in the world.
+    REQUIRE(fix.engine.doString(
+        "local ok = ffe.addSpriteAnimation(999999, 4, 2, 0.1, true)\n"
+        "assert(ok == false)"));
+}
+
+TEST_CASE("ffe.addSpriteAnimation rejects frameCount <= 0", "[scripting][animation][security]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    const std::string script =
+        "local ok = ffe.addSpriteAnimation(" + std::to_string(entity) + ", 0, 1, 0.1, true)\n"
+        "assert(ok == false)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+    REQUIRE_FALSE(world.hasComponent<ffe::SpriteAnimation>(entity));
+}
+
+TEST_CASE("ffe.addSpriteAnimation rejects negative frameCount", "[scripting][animation][security]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    const std::string script =
+        "local ok = ffe.addSpriteAnimation(" + std::to_string(entity) + ", -1, 1, 0.1, true)\n"
+        "assert(ok == false)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+    REQUIRE_FALSE(world.hasComponent<ffe::SpriteAnimation>(entity));
+}
+
+TEST_CASE("ffe.addSpriteAnimation rejects columns <= 0", "[scripting][animation][security]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    const std::string script =
+        "local ok = ffe.addSpriteAnimation(" + std::to_string(entity) + ", 4, 0, 0.1, true)\n"
+        "assert(ok == false)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+    REQUIRE_FALSE(world.hasComponent<ffe::SpriteAnimation>(entity));
+}
+
+TEST_CASE("ffe.addSpriteAnimation rejects columns > frameCount", "[scripting][animation][security]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    // frameCount=4, columns=5 -> invalid
+    const std::string script =
+        "local ok = ffe.addSpriteAnimation(" + std::to_string(entity) + ", 4, 5, 0.1, true)\n"
+        "assert(ok == false)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+    REQUIRE_FALSE(world.hasComponent<ffe::SpriteAnimation>(entity));
+}
+
+TEST_CASE("ffe.addSpriteAnimation rejects frameTime <= 0", "[scripting][animation][security]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    const std::string script =
+        "local ok = ffe.addSpriteAnimation(" + std::to_string(entity) + ", 4, 2, 0.0, true)\n"
+        "assert(ok == false)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+    REQUIRE_FALSE(world.hasComponent<ffe::SpriteAnimation>(entity));
+
+    // Also negative
+    const std::string script2 =
+        "local ok = ffe.addSpriteAnimation(" + std::to_string(entity) + ", 4, 2, -0.5, true)\n"
+        "assert(ok == false)";
+    REQUIRE(fix.engine.doString(script2.c_str()));
+    REQUIRE_FALSE(world.hasComponent<ffe::SpriteAnimation>(entity));
+}
+
+TEST_CASE("ffe.addSpriteAnimation rejects non-finite frameTime (inf/nan)", "[scripting][animation][security]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    // math.huge is Lua's infinity
+    const std::string script =
+        "local ok = ffe.addSpriteAnimation(" + std::to_string(entity) + ", 4, 2, math.huge, true)\n"
+        "assert(ok == false)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+    REQUIRE_FALSE(world.hasComponent<ffe::SpriteAnimation>(entity));
+
+    // 0/0 is NaN in Lua
+    const std::string script2 =
+        "local ok = ffe.addSpriteAnimation(" + std::to_string(entity) + ", 4, 2, 0/0, true)\n"
+        "assert(ok == false)";
+    REQUIRE(fix.engine.doString(script2.c_str()));
+    REQUIRE_FALSE(world.hasComponent<ffe::SpriteAnimation>(entity));
+}
+
+// =============================================================================
+// ffe.playAnimation / ffe.stopAnimation
+// =============================================================================
+
+TEST_CASE("ffe.playAnimation sets playing state", "[scripting][animation]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    // Add animation via C++ for direct setup
+    ffe::SpriteAnimation& anim = world.addComponent<ffe::SpriteAnimation>(entity);
+    anim.frameCount = 4;
+    anim.columns = 2;
+    anim.frameTime = 0.1f;
+    anim.playing = false;
+
+    const std::string script =
+        "ffe.playAnimation(" + std::to_string(entity) + ")";
+    REQUIRE(fix.engine.doString(script.c_str()));
+    REQUIRE(anim.playing == true);
+    REQUIRE(anim.elapsed == Catch::Approx(0.0f));  // elapsed reset on play
+}
+
+TEST_CASE("ffe.stopAnimation clears playing state", "[scripting][animation]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    ffe::SpriteAnimation& anim = world.addComponent<ffe::SpriteAnimation>(entity);
+    anim.frameCount = 4;
+    anim.columns = 2;
+    anim.frameTime = 0.1f;
+    anim.playing = true;
+
+    const std::string script =
+        "ffe.stopAnimation(" + std::to_string(entity) + ")";
+    REQUIRE(fix.engine.doString(script.c_str()));
+    REQUIRE(anim.playing == false);
+}
+
+TEST_CASE("ffe.playAnimation no-op for invalid entity", "[scripting][animation]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    // Entity 999999 does not exist — must not crash, returns nothing.
+    REQUIRE(fix.engine.doString("ffe.playAnimation(999999)"));
+}
+
+TEST_CASE("ffe.stopAnimation no-op for invalid entity", "[scripting][animation]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    REQUIRE(fix.engine.doString("ffe.stopAnimation(999999)"));
+}
+
+TEST_CASE("ffe.playAnimation no-op for entity without SpriteAnimation", "[scripting][animation]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    // Entity exists but has no SpriteAnimation — must not crash.
+    const std::string script =
+        "ffe.playAnimation(" + std::to_string(entity) + ")";
+    REQUIRE(fix.engine.doString(script.c_str()));
+}
+
+// =============================================================================
+// ffe.setAnimationFrame
+// =============================================================================
+
+TEST_CASE("ffe.setAnimationFrame clamps frame to valid range", "[scripting][animation]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    ffe::SpriteAnimation& anim = world.addComponent<ffe::SpriteAnimation>(entity);
+    anim.frameCount = 4;
+    anim.columns = 4;
+    anim.frameTime = 0.1f;
+    // Also add Sprite so UV update path runs.
+    ffe::Sprite& spr = world.addComponent<ffe::Sprite>(entity);
+    spr.size = {32.0f, 32.0f};
+    spr.texture = ffe::rhi::TextureHandle{1};
+
+    // Set frame within range
+    std::string script =
+        "ffe.setAnimationFrame(" + std::to_string(entity) + ", 2)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+    REQUIRE(anim.currentFrame == 2);
+
+    // Set frame above range — should clamp to frameCount-1 = 3
+    script = "ffe.setAnimationFrame(" + std::to_string(entity) + ", 100)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+    REQUIRE(anim.currentFrame == 3);
+
+    // Set frame below range (negative) — should clamp to 0
+    script = "ffe.setAnimationFrame(" + std::to_string(entity) + ", -5)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+    REQUIRE(anim.currentFrame == 0);
+}
+
+TEST_CASE("ffe.setAnimationFrame updates UVs immediately", "[scripting][animation]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    ffe::SpriteAnimation& anim = world.addComponent<ffe::SpriteAnimation>(entity);
+    anim.frameCount = 4;
+    anim.columns = 2;  // 2 columns, 2 rows
+    anim.frameTime = 0.1f;
+
+    ffe::Sprite& spr = world.addComponent<ffe::Sprite>(entity);
+    spr.size = {32.0f, 32.0f};
+    spr.texture = ffe::rhi::TextureHandle{1};
+
+    // Set to frame 3 (row=1, col=1 in a 2x2 grid)
+    const std::string script =
+        "ffe.setAnimationFrame(" + std::to_string(entity) + ", 3)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+
+    // Expected: col=3%2=1, row=3/2=1, uWidth=0.5, vHeight=0.5
+    REQUIRE(spr.uvMin.x == Catch::Approx(0.5f));
+    REQUIRE(spr.uvMin.y == Catch::Approx(0.5f));
+    REQUIRE(spr.uvMax.x == Catch::Approx(1.0f));
+    REQUIRE(spr.uvMax.y == Catch::Approx(1.0f));
+}
+
+TEST_CASE("ffe.setAnimationFrame no-op for entity without SpriteAnimation", "[scripting][animation]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    // Entity exists but has no SpriteAnimation — must not crash.
+    const std::string script =
+        "ffe.setAnimationFrame(" + std::to_string(entity) + ", 0)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+}
+
+// =============================================================================
+// ffe.isAnimationPlaying
+// =============================================================================
+
+TEST_CASE("ffe.isAnimationPlaying returns false before playAnimation", "[scripting][animation]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    ffe::SpriteAnimation& anim = world.addComponent<ffe::SpriteAnimation>(entity);
+    anim.frameCount = 4;
+    anim.columns = 2;
+    anim.frameTime = 0.1f;
+    anim.playing = false;
+
+    const std::string script =
+        "assert(ffe.isAnimationPlaying(" + std::to_string(entity) + ") == false)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+}
+
+TEST_CASE("ffe.isAnimationPlaying returns true after playAnimation", "[scripting][animation]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    ffe::SpriteAnimation& anim = world.addComponent<ffe::SpriteAnimation>(entity);
+    anim.frameCount = 4;
+    anim.columns = 2;
+    anim.frameTime = 0.1f;
+    anim.playing = false;
+
+    const std::string script =
+        "ffe.playAnimation(" + std::to_string(entity) + ")\n"
+        "assert(ffe.isAnimationPlaying(" + std::to_string(entity) + ") == true)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+}
+
+TEST_CASE("ffe.isAnimationPlaying returns false after stopAnimation", "[scripting][animation]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    ffe::SpriteAnimation& anim = world.addComponent<ffe::SpriteAnimation>(entity);
+    anim.frameCount = 4;
+    anim.columns = 2;
+    anim.frameTime = 0.1f;
+    anim.playing = false;
+
+    const std::string script =
+        "ffe.playAnimation(" + std::to_string(entity) + ")\n"
+        "ffe.stopAnimation(" + std::to_string(entity) + ")\n"
+        "assert(ffe.isAnimationPlaying(" + std::to_string(entity) + ") == false)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+}
+
+TEST_CASE("ffe.isAnimationPlaying returns false for entity without SpriteAnimation", "[scripting][animation]") {
+    ScriptFixture fix;
+    ffe::World world;
+    const ffe::EntityId entity = world.createEntity();
+    fix.engine.setWorld(&world);
+
+    const std::string script =
+        "assert(ffe.isAnimationPlaying(" + std::to_string(entity) + ") == false)";
+    REQUIRE(fix.engine.doString(script.c_str()));
+}
+
+TEST_CASE("ffe.isAnimationPlaying returns false for invalid entity", "[scripting][animation]") {
+    ScriptFixture fix;
+    ffe::World world;
+    fix.engine.setWorld(&world);
+
+    REQUIRE(fix.engine.doString("assert(ffe.isAnimationPlaying(999999) == false)"));
+}

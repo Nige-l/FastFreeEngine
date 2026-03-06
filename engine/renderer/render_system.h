@@ -42,6 +42,22 @@ struct Sprite {
     i16 sortOrder = 0;
 };
 
+// --- SpriteAnimation component ---
+// Drives atlas-based sprite animation. Entities with both Sprite and
+// SpriteAnimation will have their uvMin/uvMax updated each frame by
+// animationUpdateSystem based on the current frame index and grid layout.
+// POD. No heap. No pointers.
+struct SpriteAnimation {
+    u16 frameCount   = 1;       // total frames in the atlas
+    u16 columns      = 1;       // atlas grid columns
+    u16 currentFrame = 0;       // current frame index (0-based)
+    u16 _pad         = 0;       // explicit padding for alignment
+    f32 frameTime    = 0.1f;    // seconds per frame
+    f32 elapsed      = 0.0f;    // time accumulator
+    bool looping     = true;
+    bool playing     = false;
+};
+
 } // namespace ffe
 
 namespace ffe::renderer {
@@ -54,6 +70,14 @@ void copyTransformSystem(World& world, float dt);
 // Priority at which copyTransformSystem should be registered.
 // Must be lower than any gameplay system priority (gameplay typically >= 100).
 inline constexpr i32 COPY_TRANSFORM_PRIORITY = 5;
+
+// AnimationUpdateSystem — run at priority 50, after CopyTransform (5) and
+// before gameplay systems (>= 100). Advances SpriteAnimation timers and
+// writes updated UV coordinates into the Sprite component.
+void animationUpdateSystem(World& world, float dt);
+
+// Priority at which animationUpdateSystem should be registered.
+inline constexpr i32 ANIMATION_UPDATE_PRIORITY = 50;
 
 // The render preparation system. Called explicitly from Application::render(),
 // NOT registered in the system list. Accepts alpha (interpolation factor [0,1))

@@ -304,6 +304,14 @@ Result Application::startup() {
         renderer::copyTransformSystem,
         renderer::COPY_TRANSFORM_PRIORITY
     ));
+    // AnimationUpdateSystem runs at priority 50, after CopyTransform (5) and
+    // before gameplay systems (>= 100). Advances sprite animation timers and
+    // writes updated UV coordinates into the Sprite component each tick.
+    m_world.registerSystem(FFE_SYSTEM(
+        "AnimationUpdate",
+        renderer::animationUpdateSystem,
+        renderer::ANIMATION_UPDATE_PRIORITY
+    ));
     // renderPrepareSystem is NOT registered in the system list — it is called
     // explicitly from Application::render() with the interpolation alpha.
     // This ensures it has access to alpha (computed after the tick loop) and
@@ -408,8 +416,8 @@ void Application::render(const float alpha) {
             renderer::SpriteInstance sprite;
             sprite.position = {cmd.posX, cmd.posY};
             sprite.size     = {cmd.scaleX, cmd.scaleY};
-            sprite.uvMin    = {0.0f, 0.0f};
-            sprite.uvMax    = {1.0f, 1.0f};
+            sprite.uvMin    = {cmd.uvMinX, cmd.uvMinY};
+            sprite.uvMax    = {cmd.uvMaxX, cmd.uvMaxY};
             sprite.color    = {
                 static_cast<f32>(cmd.colorR) / 255.0f,
                 static_cast<f32>(cmd.colorG) / 255.0f,

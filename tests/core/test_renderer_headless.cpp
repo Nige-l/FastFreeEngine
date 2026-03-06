@@ -107,8 +107,8 @@ TEST_CASE("Camera computes view-projection matrix", "[renderer]") {
     REQUIRE(vp != glm::mat4(1.0f));
 }
 
-TEST_CASE("DrawCommand is exactly 64 bytes", "[renderer]") {
-    REQUIRE(sizeof(DrawCommand) == 64);
+TEST_CASE("DrawCommand is exactly 80 bytes", "[renderer]") {
+    REQUIRE(sizeof(DrawCommand) == 80);
 }
 
 TEST_CASE("Sort key encoding round-trips correctly", "[renderer]") {
@@ -579,4 +579,177 @@ TEST_CASE("renderPrepareSystem: static entity without PreviousTransform uses raw
     destroyRenderQueue(queue);
     shutdownShaderLibrary(shaderLib);
     shutdown();
+}
+
+// =============================================================================
+// animationUpdateSystem — frame advancement and UV computation
+// =============================================================================
+
+TEST_CASE("animationUpdateSystem advances frame when elapsed exceeds frameTime", "[renderer][animation]") {
+    ffe::World world;
+    const ffe::EntityId e = world.createEntity();
+
+    ffe::Sprite& s = world.addComponent<ffe::Sprite>(e);
+    s.size = {32.0f, 32.0f};
+    s.texture = rhi::TextureHandle{1};
+
+    ffe::SpriteAnimation& anim = world.addComponent<ffe::SpriteAnimation>(e);
+    anim.frameCount = 4;
+    anim.columns = 4;   // 4 columns, 1 row
+    anim.frameTime = 0.1f;
+    anim.playing = true;
+    anim.looping = true;
+    anim.elapsed = 0.0f;
+    anim.currentFrame = 0;
+
+    // Tick with dt=0.15 — exceeds one frameTime (0.1), should advance to frame 1
+    ffe::renderer::animationUpdateSystem(world, 0.15f);
+    REQUIRE(anim.currentFrame == 1);
+    // Residual elapsed should be ~0.05
+    REQUIRE(anim.elapsed == Catch::Approx(0.05f));
+}
+
+TEST_CASE("animationUpdateSystem does not advance when not playing", "[renderer][animation]") {
+    ffe::World world;
+    const ffe::EntityId e = world.createEntity();
+
+    ffe::Sprite& s = world.addComponent<ffe::Sprite>(e);
+    s.size = {32.0f, 32.0f};
+    s.texture = rhi::TextureHandle{1};
+
+    ffe::SpriteAnimation& anim = world.addComponent<ffe::SpriteAnimation>(e);
+    anim.frameCount = 4;
+    anim.columns = 4;
+    anim.frameTime = 0.1f;
+    anim.playing = false;
+    anim.currentFrame = 0;
+    anim.elapsed = 0.0f;
+
+    ffe::renderer::animationUpdateSystem(world, 1.0f);
+    REQUIRE(anim.currentFrame == 0);
+    REQUIRE(anim.elapsed == Catch::Approx(0.0f));
+}
+
+TEST_CASE("animationUpdateSystem wraps frame with looping enabled", "[renderer][animation]") {
+    ffe::World world;
+    const ffe::EntityId e = world.createEntity();
+
+    ffe::Sprite& s = world.addComponent<ffe::Sprite>(e);
+    s.size = {32.0f, 32.0f};
+    s.texture = rhi::TextureHandle{1};
+
+    ffe::SpriteAnimation& anim = world.addComponent<ffe::SpriteAnimation>(e);
+    anim.frameCount = 3;
+    anim.columns = 3;
+    anim.frameTime = 0.1f;
+    anim.playing = true;
+    anim.looping = true;
+    anim.currentFrame = 2;  // last frame
+    anim.elapsed = 0.0f;
+
+    // dt=0.1 pushes past the last frame → should wrap to 0
+    ffe::renderer::animationUpdateSystem(world, 0.1f);
+    REQUIRE(anim.currentFrame == 0);
+    REQUIRE(anim.playing == true);
+}
+
+TEST_CASE("animationUpdateSystem stops at last frame when not looping", "[renderer][animation]") {
+    ffe::World world;
+    const ffe::EntityId e = world.createEntity();
+
+    ffe::Sprite& s = world.addComponent<ffe::Sprite>(e);
+    s.size = {32.0f, 32.0f};
+    s.texture = rhi::TextureHandle{1};
+
+    ffe::SpriteAnimation& anim = world.addComponent<ffe::SpriteAnimation>(e);
+    anim.frameCount = 3;
+    anim.columns = 3;
+    anim.frameTime = 0.1f;
+    anim.playing = true;
+    anim.looping = false;
+    anim.currentFrame = 2;  // last frame
+    anim.elapsed = 0.0f;
+
+    ffe::renderer::animationUpdateSystem(world, 0.1f);
+    REQUIRE(anim.currentFrame == 2);  // stays at last frame
+    REQUIRE(anim.playing == false);   // playing stops
+}
+
+TEST_CASE("animationUpdateSystem computes correct UVs for 2x2 grid frame 3", "[renderer][animation]") {
+    ffe::World world;
+    const ffe::EntityId e = world.createEntity();
+
+    ffe::Sprite& s = world.addComponent<ffe::Sprite>(e);
+    s.size = {32.0f, 32.0f};
+    s.texture = rhi::TextureHandle{1};
+
+    ffe::SpriteAnimation& anim = world.addComponent<ffe::SpriteAnimation>(e);
+    anim.frameCount = 4;
+    anim.columns = 2;   // 2 columns, 2 rows
+    anim.frameTime = 0.1f;
+    anim.playing = true;
+    anim.looping = true;
+    anim.currentFrame = 2;  // will advance to frame 3
+    anim.elapsed = 0.0f;
+
+    ffe::renderer::animationUpdateSystem(world, 0.1f);
+    REQUIRE(anim.currentFrame == 3);
+
+    // Frame 3 in a 2x2 grid: col=3%2=1, row=3/2=1
+    // uWidth=0.5, vHeight=0.5
+    REQUIRE(s.uvMin.x == Catch::Approx(0.5f));
+    REQUIRE(s.uvMin.y == Catch::Approx(0.5f));
+    REQUIRE(s.uvMax.x == Catch::Approx(1.0f));
+    REQUIRE(s.uvMax.y == Catch::Approx(1.0f));
+}
+
+TEST_CASE("animationUpdateSystem computes correct UVs for 4x1 grid frame 2", "[renderer][animation]") {
+    ffe::World world;
+    const ffe::EntityId e = world.createEntity();
+
+    ffe::Sprite& s = world.addComponent<ffe::Sprite>(e);
+    s.size = {32.0f, 32.0f};
+    s.texture = rhi::TextureHandle{1};
+
+    ffe::SpriteAnimation& anim = world.addComponent<ffe::SpriteAnimation>(e);
+    anim.frameCount = 4;
+    anim.columns = 4;   // 4 columns, 1 row
+    anim.frameTime = 0.1f;
+    anim.playing = true;
+    anim.looping = true;
+    anim.currentFrame = 1;  // will advance to frame 2
+    anim.elapsed = 0.0f;
+
+    ffe::renderer::animationUpdateSystem(world, 0.1f);
+    REQUIRE(anim.currentFrame == 2);
+
+    // Frame 2 in a 4x1 grid: col=2%4=2, row=2/4=0
+    // uWidth=0.25, vHeight=1.0
+    REQUIRE(s.uvMin.x == Catch::Approx(0.5f));
+    REQUIRE(s.uvMin.y == Catch::Approx(0.0f));
+    REQUIRE(s.uvMax.x == Catch::Approx(0.75f));
+    REQUIRE(s.uvMax.y == Catch::Approx(1.0f));
+}
+
+TEST_CASE("animationUpdateSystem handles multiple frame advance in single dt", "[renderer][animation]") {
+    ffe::World world;
+    const ffe::EntityId e = world.createEntity();
+
+    ffe::Sprite& s = world.addComponent<ffe::Sprite>(e);
+    s.size = {32.0f, 32.0f};
+    s.texture = rhi::TextureHandle{1};
+
+    ffe::SpriteAnimation& anim = world.addComponent<ffe::SpriteAnimation>(e);
+    anim.frameCount = 8;
+    anim.columns = 8;
+    anim.frameTime = 0.1f;
+    anim.playing = true;
+    anim.looping = true;
+    anim.currentFrame = 0;
+    anim.elapsed = 0.0f;
+
+    // dt=0.35 → should advance 3 frames (0.35 / 0.1 = 3 full frames, 0.05 residual)
+    ffe::renderer::animationUpdateSystem(world, 0.35f);
+    REQUIRE(anim.currentFrame == 3);
+    REQUIRE(anim.elapsed == Catch::Approx(0.05f).margin(1e-6f));
 }

@@ -1188,3 +1188,76 @@ Session 14 handover document written at `docs/session14-handover.md`.
 
 ---
 
+## 2026-03-06 — Session 14: Sprite Animation System, SFX Assets, Physics Design
+
+### Planned
+- Sprite animation system (grid-based atlas support)
+- SFX audio asset creation
+- Physics 2D design note
+- Sprite animation design note + shift-left security review
+
+### Completed
+
+**Sprite animation system:**
+- `SpriteAnimation` component — 20 bytes POD, grid-based atlas UV calculation
+- `animationUpdateSystem` registered at priority 50 (between CopyTransform at 40 and gameplay systems)
+- Looping and one-shot animation modes
+- DrawCommand expanded from 64 to 80 bytes to carry UV min/max (with static_assert updated)
+- UV passthrough in render pipeline — Sprite.uvMin/uvMax now flow through to the shader (was previously hardcoded to {0,0}-{1,1})
+
+**Lua bindings for animation:**
+- `ffe.addSpriteAnimation(entityId, cols, rows, totalFrames, fps, loop)`
+- `ffe.playAnimation(entityId)`, `ffe.stopAnimation(entityId)`
+- `ffe.setAnimationFrame(entityId, frame)`, `ffe.isAnimationPlaying(entityId)`
+
+**SFX audio assets created:**
+- `assets/audio/sfx_beep.wav` — 440Hz sine, 0.15s, 14KB
+- `assets/audio/music_loop.ogg` — C major chord, 8s, 23KB
+- Copies placed in `assets/textures/` for demo compatibility (asset root limitation)
+- `sox` installed as system dependency for audio generation
+
+**Design and security:**
+- `docs/architecture/design-note-sprite-animation.md` written
+- `docs/architecture/design-note-physics-2d.md` written — covers collision detection (AABB broadphase, SAT narrowphase), rigid body dynamics, spatial hashing, Lua API design
+- Security shift-left review for animation design: **PASS**
+- Security shift-left review for physics design: **PASS**
+
+**API documentation updated:**
+- `engine/scripting/.context.md` — animation Lua bindings documented
+- `engine/renderer/.context.md` — SpriteAnimation component, UV passthrough documented
+
+**Testing:**
+- 28 new tests (renderer headless + scripting)
+- All **291 tests pass** on both Clang-18 and GCC-13, zero warnings
+
+### Session 14 Stats
+- **Modified engine files:** application.cpp, render_queue.h, render_system.h, render_system.cpp, script_engine.cpp
+- **Modified test files:** test_renderer_headless.cpp, test_lua_sandbox.cpp
+- **New architecture docs:** design-note-sprite-animation.md, design-note-physics-2d.md
+- **New audio assets:** assets/audio/sfx_beep.wav, assets/audio/music_loop.ogg
+- **Modified docs:** environment.md, engine/renderer/.context.md, engine/scripting/.context.md
+- **Test count:** 263 -> 291 (+28)
+
+### Review Results
+- security-auditor (shift-left, animation): **PASS**
+- security-auditor (shift-left, physics): **PASS**
+- test-engineer: **PASS** (291/291, zero warnings, both compilers)
+- api-designer: **APPROVED** (scripting and renderer .context.md updated)
+
+### Known Issues Updated
+- **Physics system:** Designed but not implemented — target Session 15
+- **No spritesheet asset in repo:** Cannot visually test animation without a multi-frame atlas image
+- **Asset root conflation:** `assets/textures/` used for both textures and audio; needs a unified asset root or per-type roots
+- **Console/log viewer panel:** Still a stretch goal from Session 13
+- **M-1 getTransform GC pressure:** Still tracked (fillTransform available as mitigation)
+- **isAudioPathSafe() bare ".." check:** LOW — still tracked, non-exploitable
+
+### Next Session Should Start With
+- P0: Physics system implementation (design note is complete)
+- P1: Create a spritesheet asset + animated Lua demo
+- P2: Demo game concept — collect items with score, showcase all subsystems
+
+Session 15 handover document written at `docs/session15-handover.md`.
+
+---
+

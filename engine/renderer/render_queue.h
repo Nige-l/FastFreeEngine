@@ -30,19 +30,24 @@ struct DrawCommand {
     f32 scaleX = 1.0f;
     f32 scaleY = 1.0f;
 
+    // --- UV coordinates (16 bytes) ---
+    f32 uvMinX = 0.0f;
+    f32 uvMinY = 0.0f;
+    f32 uvMaxX = 1.0f;
+    f32 uvMaxY = 1.0f;
+
     // --- Sprite color (packed RGBA8) ---
     u8 colorR = 255;
     u8 colorG = 255;
     u8 colorB = 255;
     u8 colorA = 255;
 
-    // --- Pipeline state + padding to 64 bytes ---
-    // 52 bytes used above + 4 (color) + 1 (pipelineBits) + 7 (reserved) = 64
+    // --- Pipeline state + padding to 80 bytes ---
     u8 pipelineBits = 0;
     u8 reserved[7] = {};
 };
 
-static_assert(sizeof(DrawCommand) == 64, "DrawCommand must be exactly one cache line");
+static_assert(sizeof(DrawCommand) == 80, "DrawCommand must be 80 bytes");
 
 // Sort key encoding
 inline u64 makeSortKey(const u8 layer, const u8 shaderId, const u16 textureId,
