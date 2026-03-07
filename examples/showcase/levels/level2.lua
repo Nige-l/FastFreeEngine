@@ -30,16 +30,16 @@ end
 local sfxCollect = ffe.loadSound("audio/sfx_collect.wav")
 local sfxHit     = ffe.loadSound("audio/sfx_hit.wav")
 local sfxGate    = ffe.loadSound("audio/sfx_gate.wav")
-local musicHandle = ffe.loadMusic("audio/BattleMusic.mp3")
 
--- Start background music (with fallback logging, Bug 4)
+-- Music: engine only supports WAV/OGG, skip MP3 to avoid error spam
+-- local musicHandle = ffe.loadMusic("audio/BattleMusic.ogg")
+local musicHandle = nil
 if musicHandle and musicHandle ~= 0 then
     ffe.playMusic(musicHandle, true)
     ffe.setMusicVolume(0.3)
-    ffe.log("[Level2] Music playing: audio/BattleMusic.mp3")
+    ffe.log("[Level2] Music playing")
 else
-    ffe.log("[Level2] WARNING: Could not load music (handle=" .. tostring(musicHandle) .. ")")
-    ffe.log("[Level2] Expected file at: assets/audio/BattleMusic.mp3")
+    ffe.log("[Level2] No music loaded (MP3 not supported, provide OGG/WAV)")
 end
 
 --------------------------------------------------------------------

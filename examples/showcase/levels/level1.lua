@@ -44,16 +44,16 @@ ffe.log("[Level1] Meshes loaded: helmet=" .. tostring(helmetMesh)
 local sfxCollect = ffe.loadSound("audio/sfx_collect.wav")
 local sfxHit     = ffe.loadSound("audio/sfx_hit.wav")
 local sfxGate    = ffe.loadSound("audio/sfx_gate.wav")
-local musicHandle = ffe.loadMusic("audio/BattleMusic.mp3")
 
--- Start background music (with fallback logging, Bug 4)
+-- Music: engine only supports WAV/OGG, skip MP3 to avoid error spam
+-- local musicHandle = ffe.loadMusic("audio/BattleMusic.ogg")
+local musicHandle = nil
 if musicHandle and musicHandle ~= 0 then
     ffe.playMusic(musicHandle, true)
     ffe.setMusicVolume(0.35)
-    ffe.log("[Level1] Music playing: audio/BattleMusic.mp3")
+    ffe.log("[Level1] Music playing")
 else
-    ffe.log("[Level1] WARNING: Could not load music (handle=" .. tostring(musicHandle) .. ")")
-    ffe.log("[Level1] Expected file at: assets/audio/BattleMusic.mp3")
+    ffe.log("[Level1] No music loaded (MP3 not supported, provide OGG/WAV)")
 end
 
 --------------------------------------------------------------------
@@ -79,9 +79,12 @@ ffe.setShadowArea(40, 40, 0.1, 80)
 
 --------------------------------------------------------------------
 -- Fog: soft blue-grey outdoor atmosphere
+-- NOTE: ACES tone mapping darkens colors significantly. Raw fog/bg
+-- values are boosted so the post-tonemapped result looks correct
+-- (~0.6, 0.65, 0.75 perceived). ACES(0.85) ~ 0.65.
 --------------------------------------------------------------------
-ffe.setFog(0.6, 0.65, 0.75, 20.0, 80.0)
-ffe.setBackgroundColor(0.6, 0.65, 0.75)
+ffe.setFog(0.85, 0.9, 1.0, 20.0, 80.0)
+ffe.setBackgroundColor(0.85, 0.9, 1.0)
 
 --------------------------------------------------------------------
 -- Terrain: gently rolling courtyard heightmap
@@ -137,9 +140,13 @@ local function createDynamicBox(x, y, z, sx, sy, sz, r, g, b, mass)
 end
 
 --------------------------------------------------------------------
--- Ground plane: replaced by terrain heightmap (see loadTerrain above)
--- The terrain center is flat, so entities at Y=0 remain compatible.
+-- Ground plane: large invisible physics floor to prevent fall-through.
+-- The terrain heightmap spans [0,60]x[0,60] (NOT centered at origin)
+-- but all level geometry is centered around (0,0,0). The terrain
+-- serves as visual background; this ground plane provides the actual
+-- walkable collision surface under the play area.
 --------------------------------------------------------------------
+createStaticBox(0, -0.25, 0, 32, 0.25, 32, 0.35, 0.38, 0.3)
 
 --------------------------------------------------------------------
 -- Edge border walls: low walls at ground perimeter for spatial reference (Bug 2)
@@ -589,11 +596,12 @@ end
 
 --------------------------------------------------------------------
 -- Player spawn (south side of courtyard, at the entrance)
+-- Ground plane top is at Y=0; spawn player above it.
 --------------------------------------------------------------------
-local spawnTerrainY = ffe.getTerrainHeight(0, -17)
-Player.create(0, spawnTerrainY + 1.5, -17, cesiumMesh)
-Camera.setPosition(0, spawnTerrainY + 1.5, -17)
-Camera.setYawPitch(0, 35)  -- Pitch down to see the ground on spawn (Bug 2)
+local SPAWN_Y = 1.5
+Player.create(0, SPAWN_Y, -17, cesiumMesh)
+Camera.setPosition(0, SPAWN_Y, -17)
+Camera.setYawPitch(0, 25)  -- Slight pitch down to see the courtyard
 
 if HUD then
     HUD.showPrompt("The Courtyard -- Find the Ancient Artifact", 4.0)
@@ -694,13 +702,11 @@ ffe.every(TICK_RATE, function()
             end
         end
 
-        -- Fall-off detection: respawn if player falls below terrain
-        local groundY = ffe.getTerrainHeight(px, pz)
-        if py < groundY - 10 then
+        -- Fall-off detection: respawn if player falls well below ground plane (Y=0)
+        if py < -10 then
             Player.cleanup()
-            local spawnY = ffe.getTerrainHeight(0, -17) + 1.5
-            Player.create(0, spawnY, -17, cesiumMesh)
-            Camera.setPosition(0, spawnY, -17)
+            Player.create(0, SPAWN_Y, -17, cesiumMesh)
+            Camera.setPosition(0, SPAWN_Y, -17)
             if HUD then HUD.showPrompt("Watch your step!", 2.0) end
         end
     end

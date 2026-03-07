@@ -46,16 +46,16 @@ ffe.log("[Level3] Meshes loaded: cube=" .. tostring(cubeMesh)
 local sfxCollect = ffe.loadSound("audio/sfx_collect.wav")
 local sfxHit     = ffe.loadSound("audio/sfx_hit.wav")
 local sfxGate    = ffe.loadSound("audio/sfx_gate.wav")
-local musicHandle = ffe.loadMusic("audio/BattleMusic.mp3")
 
--- Start background music (with fallback logging, Bug 4)
+-- Music: engine only supports WAV/OGG, skip MP3 to avoid error spam
+-- local musicHandle = ffe.loadMusic("audio/BattleMusic.ogg")
+local musicHandle = nil
 if musicHandle and musicHandle ~= 0 then
     ffe.playMusic(musicHandle, true)
     ffe.setMusicVolume(0.35)
-    ffe.log("[Level3] Music playing: audio/BattleMusic.mp3")
+    ffe.log("[Level3] Music playing")
 else
-    ffe.log("[Level3] WARNING: Could not load music (handle=" .. tostring(musicHandle) .. ")")
-    ffe.log("[Level3] Expected file at: assets/audio/BattleMusic.mp3")
+    ffe.log("[Level3] No music loaded (MP3 not supported, provide OGG/WAV)")
 end
 
 --------------------------------------------------------------------
@@ -81,11 +81,14 @@ ffe.setShadowArea(40, 40, 0.1, 80)
 
 --------------------------------------------------------------------
 -- Fog: thick atmospheric summit fog
+-- NOTE: ACES tone mapping darkens colors. Raw values are boosted
+-- so the post-tonemapped result looks correct (~0.5, 0.55, 0.7
+-- perceived). ACES(0.72) ~ 0.55.
 --------------------------------------------------------------------
-ffe.setFog(0.5, 0.55, 0.7, 15.0, 50.0)
+ffe.setFog(0.72, 0.78, 0.95, 15.0, 50.0)
 
 -- Background matches fog color for seamless horizon
-ffe.setBackgroundColor(0.5, 0.55, 0.7)
+ffe.setBackgroundColor(0.72, 0.78, 0.95)
 
 --------------------------------------------------------------------
 -- Terrain: dramatic summit heightmap with mountain ring
@@ -141,10 +144,13 @@ local function createVisualBox(x, y, z, sx, sy, sz, r, g, b, a, rx, ry, rz)
 end
 
 --------------------------------------------------------------------
--- CENTRAL ARENA: terrain replaces the flat ground floor.
--- Keep the inner ring and edge borders for spatial reference.
+-- CENTRAL ARENA: large ground floor for the arena combat area.
+-- The terrain heightmap spans [0,60]x[0,60] (not centered at origin)
+-- so a physics ground plane is needed under the play area.
 --------------------------------------------------------------------
--- Arena inner ring (slightly raised center, sits on terrain)
+-- Main arena floor (covers the full combat area)
+createStaticBox(0, -0.25, 0, 12, 0.25, 12, 0.38, 0.3, 0.24)
+-- Arena inner ring (slightly raised decorative center)
 createStaticBox(0, 0.05, 0, 3.5, 0.05, 3.5, 0.5, 0.4, 0.32)
 
 -- Edge border walls for spatial reference (Bug 2)
@@ -650,16 +656,16 @@ ffe.every(TICK_RATE, function()
     end
 
     -- ================================================================
-    -- Fall detection: respawn at central arena if player falls below terrain
+    -- Fall detection: respawn at central arena if player falls too low.
+    -- Use absolute Y threshold (terrain spans [0,60] not centered at
+    -- origin, so getTerrainHeight returns 0 for our play area).
     -- ================================================================
     if Player then
         local px, py, pz = Player.getPosition()
-        local groundY = ffe.getTerrainHeight(px, pz)
-        if py < groundY - 10 then
+        if py < -15 then
             Player.cleanup()
-            local spawnY = ffe.getTerrainHeight(0, 0) + 2.0
-            Player.create(0, spawnY, 0, cesiumMesh)
-            Camera.setPosition(0, spawnY, 0)
+            Player.create(0, 3.5, -15, cesiumMesh)
+            Camera.setPosition(0, 3.5, -15)
             if HUD then HUD.showPrompt("Lost in the clouds... regaining footing!", 2.0) end
         end
     end
