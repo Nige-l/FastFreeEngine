@@ -2445,6 +2445,135 @@ Port FFE to build cleanly on Windows using MinGW-w64 cross-compilation from Linu
 
 ---
 
+## 2026-03-07 — Session 39: Windows Build Support (MinGW-w64 Cross-Compilation)
+
+### Goal
+
+Port FFE to build cleanly on Windows. Target: MinGW-w64 cross-compilation from Linux (MSVC support deferred). Deliverables: CMake/Ninja build succeeds for all engine targets and examples, all 519 Linux tests still pass, 11 Windows PE32+ executables produced.
+
+### Work Completed
+
+**Phase 1/2 — system-engineer (investigation + CMake/build system):**
+
+system-engineer audited all POSIX-specific calls and build system constructs, then made all required CMake and infrastructure changes:
+
+- Installed MinGW-w64 toolchain (`x86_64-w64-mingw32-g++` GCC 13)
+- Created `cmake/toolchains/mingw-w64-x86_64.cmake` — cross-compilation toolchain file (sets system name, compilers, windres, sysroot paths)
+- `cmake/CompilerFlags.cmake`: guarded `mold` linker behind `if(NOT WIN32)` — mold is Linux-only
+- Added Windows-specific link libraries to `engine/core` and `engine/audio`: `ws2_32`, `opengl32`, `winmm`
+- Created vcpkg LuaJIT overlay for MinGW PE cross-compilation (LuaJIT requires special flags when targeting Windows PE from a Linux host)
+- Fixed `tests/scripting/test_save_load.cpp`: replaced `mkdtemp` with `ffe_mkdtemp` portability wrapper
+- Fixed `VCPKG_APPLOCAL_DEPS=OFF` for cross-compile host (prevents attempting to copy host DLLs to Windows output)
+- Fixed link ordering with `LINK_GROUP:RESCAN` for GNU ld (required for static library ordering under MinGW)
+- Fixed `engine/core/arena_allocator.cpp`: `_aligned_malloc`/`_aligned_free` on Windows instead of `std::aligned_alloc`/`free`
+- Fixed `examples/demo_paths.h`: `GetModuleFileNameA` on Windows instead of `/proc/self/exe` readlink
+
+**Phase 2 — engine-dev (platform-specific C++ guards):**
+
+- Created `engine/core/platform.h` — cross-platform `canonicalizePath()` wrapping:
+  - POSIX: `realpath(path, nullptr)` (heap-allocated, size-safe) with bounded `memcpy` into fixed output buffer
+  - Windows: `_fullpath()` with matching null-check and bounded copy
+- Updated all 11 `realpath()` call sites across 4 files to use `canonicalizePath()`:
+  - `engine/scripting/script_engine.cpp` (save/load path validation, doFile)
+  - `engine/renderer/mesh_loader.cpp` (asset path validation)
+  - `engine/renderer/texture_loader.cpp` (asset path validation)
+  - `engine/core/application.cpp` (asset root setup)
+
+**Phase 3 — Expert panel (parallel):**
+
+*performance-critic* — MINOR ISSUES:
+- POSIX `realpath` branch was passing `outBufSize` that was being silently ignored (realpath with nullptr allocates its own buffer; the size parameter was dead code). Fixed in Phase 4.
+- No Win32 API calls found in hot paths — PASS
+- No frame-loop regressions — PASS
+
+*security-auditor* — MINOR ISSUES:
+- ADS (Alternate Data Streams) paths not blocked on Windows: `file:stream` notation could bypass prefix checks. Fixed in Phase 4.
+- `doFile` in scripting was missing a `canonicalize + prefix check` before loading a Lua file. Fixed in Phase 4.
+- UNC path gap in scripting `isPathSafe()`: `\\server\share` paths documented as a known limitation (blocking `\\` prefix is trivial but no test environment available; comment added)
+- No CRITICAL findings; no HIGH findings after Phase 4 fixes
+
+*api-designer* — updates made:
+- `engine/core/.context.md`: `canonicalizePath()` documented (purpose, signature, platform notes, when to use vs `std::filesystem`)
+- `CONTRIBUTING.md`: Windows build section added — MinGW cross-compilation commands, vcpkg triplet, Wine test-execution note
+
+**Phase 4 — Remediation (engine-dev):**
+
+- `canonicalizePath()` POSIX branch: fixed to use `realpath(path, nullptr)` exclusively; removed dead `outBufSize` parameter; added bounded `memcpy` with null terminator
+- All `isPathSafe()` implementations: block ADS paths via `strchr(canonical, ':')` check (after drive letter on Windows)
+- `engine/scripting/script_engine.cpp` `doFile`: added `canonicalizePath` + prefix check before `luaL_loadfile`
+- UNC gap: explicit comment added to scripting `isPathSafe()` documenting the limitation and the trivial mitigation path
+
+**Phase 5 — build-engineer:**
+
+Linux builds verified first (all 519 tests still passing), then MinGW cross-build:
+
+| Target | Result |
+|--------|--------|
+| Linux Clang-18 (519 tests) | PASS — 0 warnings |
+| Linux GCC-13 (519 tests) | PASS — 0 warnings |
+| Windows MinGW cross-build | PASS — 11 PE32+ .exe files produced |
+
+Windows test execution: Wine was not available in the build environment. The 11 executables produced are: `ffe_tests` (engine test suite), `ffe_lua_demo`, `ffe_pong`, `ffe_breakout`, `ffe_3d_demo`, and the remaining example/test binaries. Execution on a Windows host or under Wine is documented in CONTRIBUTING.md as the next step.
+
+**Additional fixes (mid-session, user-reported):**
+
+- `docs/agents/system-engineer.md`: added no-polling-loop rule (agents must not use `sleep`/polling loops) and warn-before-long-ops rule (agents must state estimated cost before starting any operation expected to take more than 30 seconds)
+- `assets/models/cube.glb`: generated a valid 1660-byte glTF 2.0 unit cube (24 vertices, 36 indices, correct normals per face) — fixes "cube.glb not found" error in the 3D demo on fresh checkouts
+
+### Agents Dispatched
+
+1. `system-engineer` (Phase 1/2 combined — investigation + CMake changes, sequential)
+2. `engine-dev` (Phase 2 — platform C++ guards, sequential after system-engineer)
+3. `performance-critic` + `security-auditor` + `api-designer` (Phase 3, parallel)
+4. `engine-dev` (Phase 4 — remediation, sequential)
+5. `build-engineer` (Phase 5, sequential)
+
+### Files Changed
+
+| File | Status |
+|------|--------|
+| `cmake/toolchains/mingw-w64-x86_64.cmake` | NEW |
+| `engine/core/platform.h` | NEW |
+| `assets/models/cube.glb` | NEW |
+| `cmake/CompilerFlags.cmake` | MODIFIED |
+| `engine/core/CMakeLists.txt` | MODIFIED |
+| `engine/audio/CMakeLists.txt` | MODIFIED |
+| `engine/core/arena_allocator.cpp` | MODIFIED |
+| `engine/core/application.cpp` | MODIFIED |
+| `engine/core/.context.md` | MODIFIED |
+| `engine/scripting/script_engine.cpp` | MODIFIED |
+| `engine/renderer/mesh_loader.cpp` | MODIFIED |
+| `engine/renderer/texture_loader.cpp` | MODIFIED |
+| `examples/demo_paths.h` | MODIFIED |
+| `tests/scripting/test_save_load.cpp` | MODIFIED |
+| `CONTRIBUTING.md` | MODIFIED |
+| `docs/agents/system-engineer.md` | MODIFIED |
+
+### game-dev-tester: NOT INVOKED
+
+No new API surface introduced. All changes are build-system and platform portability guards. Existing APIs unchanged. Skip documented here per CLAUDE.md Section 7.
+
+### Session 39 Stats
+
+- 3 new files
+- 13 modified files
+- 519 Linux tests passing (unchanged)
+- 11 Windows PE32+ executables produced
+- 1 fix cycle
+- Commit: `bf52241 feat(platform): Windows MinGW cross-build — platform.h, mold guard, Windows link libs`
+
+### ROADMAP Update
+
+`Windows build support` checked off in ROADMAP.md. Both cross-platform items now in progress:
+- [x] Windows build support (MinGW-w64 cross-compilation — Session 39)
+- [ ] macOS build support — Session 40
+
+### Next Session (40): macOS Build Support
+
+Fix macOS-specific source issues, create a macOS CMake toolchain file, add GitHub Actions workflow for macOS CI (native toolchain required — cannot cross-compile from Linux), and update CONTRIBUTING.md. Key areas: `_NSGetExecutablePath` for `demo_paths.h`, `posix_memalign` fallback for arena allocator on pre-10.15, OpenGL deprecation warnings, LuaJIT arm64 flags, vcpkg `arm64-osx` triplet.
+
+---
+
 ## 2026-03-06 — Session 37: Phase 2 Architecture — 3D Foundation Design
 
 ### Goal

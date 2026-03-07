@@ -188,6 +188,13 @@ Result Application::startup() {
         // GLFW defaults to 24 on most platforms for GL 3.3 core, but explicit is safer.
         glfwWindowHint(GLFW_DEPTH_BITS, 24);
 
+#ifdef __APPLE__
+        // Disable Retina framebuffer scaling. Without this, a 1280×720 window
+        // gets a 2560×1440 framebuffer on Retina displays, breaking the 2D
+        // coordinate system (all positions appear at half their expected location).
+        glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_FALSE);
+#endif
+
         m_window = glfwCreateWindow(
             m_config.windowWidth,
             m_config.windowHeight,

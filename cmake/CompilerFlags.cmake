@@ -4,13 +4,13 @@ add_compile_options(-Wall -Wextra -Wpedantic)
 # No RTTI, no exceptions in engine core (C++ only)
 add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-rtti> $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>)
 
-# Linker: use mold if available (Linux only — mold is not available on Windows).
+# Linker: use mold if available (Linux only — mold is not available on Windows or macOS).
 # We set CMAKE_EXE_LINKER_FLAGS and CMAKE_SHARED_LINKER_FLAGS directly.
 # Note: CMake+Ninja may pass these flags during compilation too, producing
 # "unused during compilation" warnings on Clang. This is a known CMake issue
 # and does not affect code correctness or the zero-warnings guarantee for
 # engine source. Engine code compiles clean with -Wall -Wextra.
-if(NOT WIN32)
+if(UNIX AND NOT APPLE)
     find_program(MOLD_LINKER mold)
     if(MOLD_LINKER)
         set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=mold")

@@ -32,7 +32,8 @@ sudo apt-get install mingw-w64
 
 # Configure — uses the bundled toolchain file and the x64-mingw-dynamic vcpkg triplet
 cmake -B build-win -G Ninja \
-  -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64-x86_64.cmake \
+  -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
+  -DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=$(pwd)/cmake/toolchains/mingw-w64-x86_64.cmake \
   -DVCPKG_TARGET_TRIPLET=x64-mingw-dynamic \
   -DCMAKE_BUILD_TYPE=Release \
   -DFFE_TIER=LEGACY
@@ -47,10 +48,41 @@ Notes:
 - **mold** is not used for Windows cross-builds — the CMake configuration automatically disables it when targeting Windows.
 - **Native Windows builds** (MSVC, Visual Studio) are planned for a future session and are not yet supported.
 
+## Building on macOS (Apple Silicon)
+
+**Prerequisites:**
+- macOS 13 (Ventura) or later
+- Xcode Command Line Tools: `xcode-select --install`
+- Homebrew: https://brew.sh
+- Build tools: `brew install ninja cmake pkg-config`
+- vcpkg (see Linux setup above for vcpkg instructions)
+
+**Note:** GLFW is provided by vcpkg for the `arm64-osx` triplet.
+Do NOT install GLFW via Homebrew — it will conflict with the vcpkg version.
+
+**Configure and build (Apple Silicon):**
+
+```bash
+cmake -B build-macos -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
+  -DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=$(pwd)/cmake/toolchains/macos-arm64.cmake \
+  -DVCPKG_TARGET_TRIPLET=arm64-osx \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DFFE_TIER=LEGACY
+cmake --build build-macos
+ctest --test-dir build-macos --output-on-failure
+```
+
+**Intel Macs (x86_64):** Omit the toolchain file and use `-DVCPKG_TARGET_TRIPLET=x64-osx`.
+
+**OpenGL deprecation warnings** are silenced via `GL_SILENCE_DEPRECATION` — this is expected.
+OpenGL is deprecated on macOS but fully functional for the LEGACY tier.
+The mold linker is not used on macOS — Apple's ld64 is used automatically.
+
 **Build toolchain notes:**
 - **Ninja** is the build backend (faster than Make)
-- **mold** is the linker (faster link times). The CMake configuration selects it automatically when available
-- **ccache** is used for compilation caching. Install it to speed up rebuilds: `sudo apt install ccache`
+- **mold** is the linker (faster link times on Linux). The CMake configuration selects it automatically when available on Linux. Not used on macOS or Windows.
+- **ccache** is used for compilation caching. Install it to speed up rebuilds: `sudo apt install ccache` (Linux) or `brew install ccache` (macOS)
 
 ## Code Style
 

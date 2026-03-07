@@ -6,6 +6,7 @@
 // hardcoding absolute paths.
 //
 // Linux:   resolves /proc/self/exe via readlink.
+// macOS:   resolves executable path via _NSGetExecutablePath.
 // Windows: resolves executable path via GetModuleFileNameA.
 //
 // Usage:
@@ -18,8 +19,13 @@
 
 #ifdef _WIN32
 #  include <windows.h>
+#elif defined(__APPLE__)
+#  include <mach-o/dyld.h>  // _NSGetExecutablePath
+#  include <cstring>        // strlen, memcpy
+#  include <cstdlib>        // realpath, free
+#  include <unistd.h>       // access
 #else
-#  include <unistd.h>
+#  include <unistd.h>       // readlink
 #endif
 
 // Get the project root by resolving the executable path and walking up to find assets/.
@@ -37,6 +43,17 @@ inline bool demoProjectRoot(char* buf, size_t bufSize) {
         if (exePath[i] == '\\') { exePath[i] = '/'; }
     }
     char* slash = exePath + len;
+#elif defined(__APPLE__)
+    char rawPath[512];
+    uint32_t rawSize = static_cast<uint32_t>(sizeof(rawPath));
+    if (_NSGetExecutablePath(rawPath, &rawSize) != 0) { return false; }
+    char* resolved = ::realpath(rawPath, nullptr);
+    if (!resolved) { return false; }
+    const size_t rlen = ::strlen(resolved);
+    if (rlen >= sizeof(exePath) - 1) { ::free(resolved); return false; }
+    ::memcpy(exePath, resolved, rlen + 1);
+    ::free(resolved);
+    char* slash = exePath + rlen;
 #else
     const ssize_t len = readlink("/proc/self/exe", exePath, sizeof(exePath) - 1);
     if (len <= 0) { return false; }

@@ -117,6 +117,40 @@ This step fails on a Linux cross-compile host because Windows EXEs cannot execut
 Wine. The link step succeeds and the `.exe` files are valid PE32+ binaries. Test enumeration
 failure is expected and does not indicate a build error. Use Wine or a Windows machine to run tests.
 
+## macOS Build: Apple Silicon (arm64-osx)
+
+### Toolchain file
+
+`cmake/toolchains/macos-arm64.cmake` — sets `CMAKE_SYSTEM_NAME Darwin`, `CMAKE_SYSTEM_PROCESSOR arm64`,
+and `CMAKE_OSX_ARCHITECTURES arm64`. Does not set `CMAKE_OSX_DEPLOYMENT_TARGET` to avoid conflicting
+with the LuaJIT vcpkg overlay which strips that variable from the LuaJIT Makefile.
+
+### Build command
+
+```bash
+cmake -B build-macos -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
+  -DVCPKG_CHAINLOAD_TOOLCHAIN_FILE="$(pwd)/cmake/toolchains/macos-arm64.cmake" \
+  -DVCPKG_TARGET_TRIPLET=arm64-osx \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DFFE_TIER=LEGACY
+cmake --build build-macos
+ctest --test-dir build-macos --output-on-failure
+```
+
+### OpenGL deprecation
+
+macOS deprecated OpenGL in 10.14 (Mojave). All OpenGL API calls produce deprecation warnings
+under the default Apple Clang settings. FFE silences these via `GL_SILENCE_DEPRECATION` defined
+on the `ffe_renderer` target (in `engine/renderer/CMakeLists.txt`). This is necessary to preserve
+the zero-warnings rule under `-Wall -Wextra`. OpenGL is deprecated on macOS but remains fully
+functional through at least macOS 14 for the LEGACY tier's OpenGL 3.3 feature set.
+
+### mold linker
+
+mold is not available on macOS. `cmake/CompilerFlags.cmake` guards the `find_program(MOLD_LINKER mold)`
+block with `if(UNIX AND NOT APPLE)` — Apple's ld64 linker is used automatically on macOS builds.
+
 ## Change Log
 
 ### 2026-03-06: Audio demo assets and sox installation
@@ -269,6 +303,59 @@ failure is expected and does not indicate a build error. Use Wine or a Windows m
 - `realpath()` appears in 11 call sites across 5 files (see POSIX audit section below). This is
   the last remaining POSIX-only call that needs a `_WIN32` guard before the Windows builds will
   run correctly on a Windows machine. The pattern to use is documented in the POSIX audit section.
+
+### 2026-03-07: macOS build support — Session 40 (build system changes)
+
+**What changed:**
+
+1. `cmake/CompilerFlags.cmake` — changed the mold linker guard from `if(NOT WIN32)` to
+   `if(UNIX AND NOT APPLE)`. The previous guard passed on macOS (macOS is not WIN32) causing CMake
+   to search for mold and emit a warning when it was not found. The new guard is precise: mold is
+   only searched on Linux (UNIX systems that are not Apple).
+
+2. `cmake/toolchains/macos-arm64.cmake` — new file. CMake toolchain for macOS Apple Silicon
+   (arm64). Sets `CMAKE_SYSTEM_NAME Darwin`, `CMAKE_SYSTEM_PROCESSOR arm64`, and
+   `CMAKE_OSX_ARCHITECTURES arm64`. Does not set `CMAKE_OSX_DEPLOYMENT_TARGET` to avoid
+   conflicting with the LuaJIT vcpkg overlay. Used via `VCPKG_CHAINLOAD_TOOLCHAIN_FILE` so vcpkg's
+   toolchain wraps it — same pattern as the Windows MinGW toolchain.
+
+3. `engine/renderer/CMakeLists.txt` — added:
+   ```cmake
+   if(APPLE)
+       target_compile_definitions(ffe_renderer PRIVATE GL_SILENCE_DEPRECATION)
+   endif()
+   ```
+   macOS deprecated OpenGL in 10.14. Without this define, every OpenGL call in `ffe_renderer`
+   produces a deprecation warning. This would violate the zero-warnings rule under `-Wall -Wextra`.
+   The define is scoped `PRIVATE` so it does not leak into consumers of `ffe_renderer`.
+   `engine/core/CMakeLists.txt` does not need this change — no OpenGL headers are included in any
+   `engine/core/` source file.
+
+4. `.github/workflows/ci.yml` — new file. GitHub Actions CI workflow with three jobs:
+   `linux-clang` (ubuntu-24.04, Clang-18), `linux-gcc` (ubuntu-24.04, GCC-13), and
+   `macos-arm64` (macos-15, Apple Silicon). All jobs run on push and PR to main. The macOS job
+   clones and bootstraps vcpkg at `$HOME/vcpkg`, uses `VCPKG_CHAINLOAD_TOOLCHAIN_FILE` to apply
+   the arm64 toolchain, and targets the `arm64-osx` vcpkg triplet.
+
+5. `CONTRIBUTING.md` — added "Building on macOS (Apple Silicon)" section after the Windows section.
+   Documents prerequisites (Xcode CLT, Homebrew, ninja/cmake/pkg-config, vcpkg), the configure and
+   build commands for arm64-osx and x64-osx, the GL_SILENCE_DEPRECATION note, and the mold note.
+   Updated the build toolchain notes to mention mold is Linux-only and ccache is available on macOS
+   via Homebrew.
+
+**Why:**
+- macOS build support is a Phase 2 target. Apple Silicon is now the dominant macOS hardware and
+  `macos-15` runners are available on GitHub Actions.
+- The mold guard change prevents a spurious CMake warning on macOS that would appear in CI output
+  and could mask real warnings.
+- `GL_SILENCE_DEPRECATION` is the correct Apple-recommended mechanism for silencing the OpenGL
+  deprecation warnings — it does not disable any functionality.
+
+**Verification:**
+- Deferred to build-engineer (Session 40 Phase 5). No build run on this machine (Linux host cannot
+  execute macOS binaries). CI will be the verification path for macOS.
+- Linux builds: no changes to Linux-specific code paths. The mold guard change (`UNIX AND NOT APPLE`
+  evaluates identically to `NOT WIN32` on Linux) leaves all Linux behaviour intact.
 
 ## POSIX-Specific Calls Requiring Windows Guards
 

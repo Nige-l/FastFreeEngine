@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  linux-clang:
+    name: Linux (Clang-18)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            ninja-build mold clang-18 \
+            libglfw3-dev libluajit-5.1-dev \
+            pkg-config cmake
+
+      - name: Cache vcpkg
+        uses: actions/cache@v4
+        with:
+          path: vcpkg_installed
+          key: vcpkg-linux-x64-${{ hashFiles('vcpkg.json') }}
+
+      - name: Configure
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_CXX_COMPILER=clang++-18 \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DFFE_TIER=LEGACY
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure --parallel $(nproc)
+
+  linux-gcc:
+    name: Linux (GCC-13)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            ninja-build mold g++-13 \
+            libglfw3-dev libluajit-5.1-dev \
+            pkg-config cmake
+
+      - name: Cache vcpkg
+        uses: actions/cache@v4
+        with:
+          path: vcpkg_installed
+          key: vcpkg-linux-x64-${{ hashFiles('vcpkg.json') }}
+
+      - name: Configure
+        run: |
+          cmake -B build-gcc -G Ninja \
+            -DCMAKE_CXX_COMPILER=g++-13 \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DFFE_TIER=LEGACY
+
+      - name: Build
+        run: cmake --build build-gcc
+
+      - name: Test
+        run: ctest --test-dir build-gcc --output-on-failure --parallel $(nproc)
+
+  macos-arm64:
+    name: macOS (Apple Silicon, arm64)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: brew install ninja cmake pkg-config
+
+      - name: Set up vcpkg
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git $HOME/vcpkg
+          $HOME/vcpkg/bootstrap-vcpkg.sh -disableMetrics
+          echo "VCPKG_ROOT=$HOME/vcpkg" >> $GITHUB_ENV
+
+      - name: Cache vcpkg
+        uses: actions/cache@v4
+        with:
+          path: vcpkg_installed
+          key: vcpkg-macos-arm64-${{ hashFiles('vcpkg.json') }}
+
+      - name: Configure
+        run: |
+          cmake -B build-macos -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
+            -DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=$(pwd)/cmake/toolchains/macos-arm64.cmake \
+            -DVCPKG_TARGET_TRIPLET=arm64-osx \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DFFE_TIER=LEGACY
+
+      - name: Build
+        run: cmake --build build-macos
+
+      - name: Test
+        run: ctest --test-dir build-macos --output-on-failure --parallel $(sysctl -n hw.logicalcpu)

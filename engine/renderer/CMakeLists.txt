@@ -43,3 +43,9 @@ target_link_libraries(ffe_renderer
         glfw
         Tracy::TracyClient
 )
+
+# macOS deprecated OpenGL in 10.14. Silence warnings so -Wall -Wextra
+# do not violate the zero-warnings rule.
+if(APPLE)
+    target_compile_definitions(ffe_renderer PRIVATE GL_SILENCE_DEPRECATION)
+endif()

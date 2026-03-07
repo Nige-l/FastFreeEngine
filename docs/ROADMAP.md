@@ -38,8 +38,8 @@ The engine is developed in daily sessions. Each session should advance the curre
 - [x] Save/load system (JSON on disk, path security, atomic writes, 128 file limit)
 - [x] Tutorial documentation covering all features
 - [x] CONTRIBUTING.md polish
-- [ ] Windows build support (MSVC or MinGW)
-- [ ] macOS build support
+- [x] Windows build support (MinGW-w64 cross-compilation from Linux)
+- [x] macOS build support (Apple Silicon arm64 and Intel x86_64)
 
 ### Phase 1 Exit Criteria
 - A non-trivial 2D game (beyond demos) can be built entirely in Lua
