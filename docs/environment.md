@@ -123,7 +123,10 @@ failure is expected and does not indicate a build error. Use Wine or a Windows m
 
 `cmake/toolchains/macos-arm64.cmake` — sets `CMAKE_SYSTEM_NAME Darwin`, `CMAKE_SYSTEM_PROCESSOR arm64`,
 and `CMAKE_OSX_ARCHITECTURES arm64`. Does not set `CMAKE_OSX_DEPLOYMENT_TARGET` to avoid conflicting
-with the LuaJIT vcpkg overlay which strips that variable from the LuaJIT Makefile.
+with the LuaJIT vcpkg overlay which strips that variable from the LuaJIT Makefile. Automatically
+locates Apple Clang via `xcrun --find clang`/`clang++` and sets `CMAKE_C_COMPILER`/`CMAKE_CXX_COMPILER`
+if they are not already set. This is required because vcpkg's chainloaded toolchain mechanism can
+prevent CMake's default compiler auto-detection from working on CI runners.
 
 ### Build command
 
@@ -527,3 +530,62 @@ File: `.github/workflows/ci.yml`
 - YAML validated with `python3 -c "import yaml; yaml.safe_load(open(...))"` — valid.
 - `git diff` confirms only the two targeted additions; no other lines changed.
 - No engine source files were modified.
+
+### 2026-03-07: Fix macOS CI — compiler detection and Xcode selection
+
+**What changed:**
+
+1. `cmake/toolchains/macos-arm64.cmake` — added `xcrun`-based compiler detection. When
+   `CMAKE_C_COMPILER` or `CMAKE_CXX_COMPILER` are not already set, the toolchain now runs
+   `xcrun --find clang` and `xcrun --find clang++` to locate Apple Clang and sets the
+   compiler cache variables explicitly. The detection is guarded by `if(NOT CMAKE_C_COMPILER)`
+   so it does not override compilers passed on the command line.
+
+2. `.github/workflows/ci.yml` — renamed the macOS "Install dependencies" step to "Select Xcode
+   and install dependencies". Added `sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer`
+   before the `brew install` line to ensure the Xcode developer directory is correctly set.
+   Added verification commands (`which ninja`, `ninja --version`, `xcrun --find clang++`,
+   `clang++ --version`) to confirm tools are available before the configure step.
+
+**Root cause:**
+
+The macOS CI job on `macos-15` GitHub runners was failing with three errors:
+```
+CMake Error: CMake was unable to find a build program corresponding to "Ninja".
+CMake Error: CMAKE_CXX_COMPILER not set, after EnableLanguage
+CMake Error: CMAKE_C_COMPILER not set, after EnableLanguage
+```
+
+Two independent issues combined to cause this:
+
+1. **Compiler detection failure:** The `macos-arm64.cmake` toolchain sets `CMAKE_SYSTEM_NAME Darwin`,
+   which is correct, but when chainloaded via `VCPKG_CHAINLOAD_TOOLCHAIN_FILE`, the vcpkg toolchain
+   wrapper can interfere with CMake's normal compiler auto-detection. Without explicit compiler paths,
+   CMake's `EnableLanguage` step fails to find any compiler. The fix is to use `xcrun --find` (the
+   standard macOS mechanism) to locate the Apple Clang installation and set `CMAKE_C_COMPILER` and
+   `CMAKE_CXX_COMPILER` explicitly in the toolchain file.
+
+2. **Xcode developer directory not selected:** On some `macos-15` runner images, the Xcode developer
+   directory is not pre-selected, causing `xcrun` and compiler detection to fail. The
+   `xcode-select --switch` command ensures the full Xcode installation (including the compiler
+   toolchain) is active before any build tools are invoked.
+
+**Why this does not affect local macOS development:**
+
+On a developer's Mac with Xcode or Command Line Tools installed, `xcrun --find clang` always
+succeeds because the developer directory is already selected. The `if(NOT CMAKE_C_COMPILER)` guard
+also means that if a developer passes `-DCMAKE_CXX_COMPILER=...` on the command line, the
+toolchain's detection is skipped entirely.
+
+**Why this does not affect Linux builds:**
+
+The `xcrun` commands only execute when the toolchain file is loaded. The macOS toolchain is only
+loaded on macOS (via `VCPKG_CHAINLOAD_TOOLCHAIN_FILE` in the macOS CI job). Linux jobs use
+different compiler flags (`-DCMAKE_CXX_COMPILER=clang++-18` or `g++-13`) and do not reference
+the macOS toolchain.
+
+**Verification:**
+- YAML validated: `python3 -c "import yaml; yaml.safe_load(open('.github/workflows/ci.yml'))"` -- valid.
+- No engine source files were modified.
+- Linux CI jobs are unchanged.
+- Full verification deferred to CI run after commit/push.
