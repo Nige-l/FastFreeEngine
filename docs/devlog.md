@@ -3,6 +3,58 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 82: Phase 7 M6 — SSAO (Screen-Space Ambient Occlusion)
+
+### Summary
+
+Session 82 completed SSAO (Phase 7 M6): hemisphere sampling with configurable kernel size (16/32/64 samples, default 32), half-resolution rendering for performance, 4x4 box blur pass. HDR depth changed from renderbuffer to texture for SSAO depth reads. Normal reconstruction via dFdx/dFdy screen-space derivatives (no G-buffer needed). AO applied as multiply in HDR space before tone mapping (correct ordering). SSAOConfig ECS singleton component for runtime configuration. GLSL 330 core — LEGACY compatible, which is a win since it was originally planned for STANDARD+ only. GL_RGB16F added to GLAD header for half-res AO texture. 3 new Lua bindings: `ffe.enableSSAO()`, `ffe.disableSSAO()`, `ffe.setSSAOIntensity(value)`. 36 new tests (22 SSAO + 11 bindings + 3 misc). Performance-critic: MINOR ISSUES (non-blocking — suggested batching kernel upload and simplifying depth comparison for future). api-designer: PASS (.context.md updated). game-dev-tester: SKIPPED (no examples/ changes). FAST build: 1204 tests, zero warnings.
+
+### Planned
+
+- Phase 7 M6: SSAO — screen-space ambient occlusion with hemisphere sampling, blur, tier gating
+
+### Delivered
+
+- **Hemisphere Sampling** -- 32-sample kernel (configurable 16/32/64), random rotation via 4x4 noise texture, hemisphere oriented along reconstructed normal
+- **Half-Resolution Rendering** -- AO computed at half screen resolution for performance, upscaled during composite
+- **4x4 Box Blur** -- Separable blur pass to smooth AO noise
+- **Depth Texture** -- HDR depth changed from renderbuffer to texture for SSAO depth reads
+- **Normal Reconstruction** -- dFdx/dFdy screen-space derivatives, no G-buffer required
+- **HDR Compositing** -- AO multiply before tone mapping (correct ordering)
+- **SSAOConfig** -- ECS singleton component (enabled, intensity, radius, bias, kernelSize)
+- **3 Lua Bindings** -- `ffe.enableSSAO()`, `ffe.disableSSAO()`, `ffe.setSSAOIntensity(value)`
+- **GLAD Addition** -- GL_RGB16F for half-res AO texture format
+- **36 New Tests** -- 22 SSAO + 11 bindings + 3 misc
+
+### Files Changed
+
+- `engine/renderer/ssao.h` (NEW -- SSAOConfig, SSAOPass class)
+- `engine/renderer/ssao.cpp` (NEW -- SSAO implementation, kernel generation, blur)
+- `engine/renderer/shader_library.h` (MODIFIED -- SSAO shader enums)
+- `engine/renderer/shader_library.cpp` (MODIFIED -- SSAO + blur shader sources)
+- `engine/renderer/render_system.h` (MODIFIED -- SSAOConfig component)
+- `engine/renderer/opengl/rhi_opengl.cpp` (MODIFIED -- depth renderbuffer -> texture)
+- `engine/renderer/.context.md` (MODIFIED -- SSAO API documentation)
+- `engine/scripting/script_engine.cpp` (MODIFIED -- 3 new Lua bindings)
+- `engine/scripting/.context.md` (MODIFIED -- SSAO binding docs)
+- `third_party/glad/include/glad/glad.h` (MODIFIED -- GL_RGB16F)
+- `tests/renderer/test_ssao.cpp` (NEW -- 22 SSAO tests)
+- `tests/scripting/test_ssao_bindings.cpp` (NEW -- 11 binding tests)
+- `tests/CMakeLists.txt` (MODIFIED -- new test files)
+- `engine/renderer/CMakeLists.txt` (MODIFIED -- ssao.cpp)
+
+### Reviews
+
+- performance-critic: MINOR ISSUES (non-blocking — batch kernel uniform upload, simplify depth comparison suggested for future)
+- api-designer: PASS (.context.md updated)
+- game-dev-tester: SKIPPED (no examples/ changes)
+
+### Next Session (83)
+
+Phase 7 M7: Sprite Batching 2.0 — texture atlas support, draw call reduction, z-ordering for 2D sprites.
+
+---
+
 ## 2026-03-07 — Session 81: Phase 7 M5 — Skeletal Animation Completion
 
 ### Summary
