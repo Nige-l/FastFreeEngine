@@ -148,6 +148,7 @@ int gladLoadGLLoader(GLADloadproc load);
 #define GL_R8                             0x8229
 #define GL_RGB8                           0x8051
 #define GL_RGBA8                          0x8058
+#define GL_RGB16F                         0x881B
 #define GL_RGBA16F                        0x881A
 
 /* Pixel store */

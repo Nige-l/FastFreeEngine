@@ -95,8 +95,8 @@ TEST_CASE("BuiltinShader: SHADOW_DEPTH_INSTANCED has value 15", "[renderer][inst
     CHECK(static_cast<u32>(BuiltinShader::SHADOW_DEPTH_INSTANCED) == 15);
 }
 
-TEST_CASE("BuiltinShader: COUNT is 17 (includes instanced + FXAA shaders)", "[renderer][instancing]") {
-    CHECK(static_cast<u32>(BuiltinShader::COUNT) == 17);
+TEST_CASE("BuiltinShader: COUNT is 19 (includes instanced + post-process shaders)", "[renderer][instancing]") {
+    CHECK(static_cast<u32>(BuiltinShader::COUNT) == 19);
 }
 
 // ===========================================================================

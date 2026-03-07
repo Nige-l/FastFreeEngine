@@ -7,6 +7,7 @@
 #include "renderer/mesh_renderer.h"
 #include "renderer/shadow_map.h"
 #include "renderer/post_process.h"
+#include "renderer/ssao.h"
 #include "renderer/text_renderer.h"
 #include "renderer/texture_loader.h"
 #include "physics/collider2d.h"
@@ -291,6 +292,10 @@ Result Application::initSubsystemsInternal() {
     // only active when a PostProcessConfig is placed in the ECS context.
     renderer::initPostProcessing(m_config.windowWidth, m_config.windowHeight);
 
+    // 5b2b. Initialize SSAO pipeline (after post-processing, same FBO dimensions).
+    // SSAO is optional — only active when an SSAOConfig is placed in the ECS context.
+    renderer::initSSAO(m_config.windowWidth, m_config.windowHeight);
+
     // 5b3. Initialize GPU instancing (shared instance VBO for batched mesh draws).
     renderer::initInstancing();
 
@@ -561,6 +566,9 @@ void Application::onFramebufferResize(const i32 width, const i32 height) {
 
     // Resize post-processing FBOs to match the new framebuffer size
     renderer::resizePostProcessing(width, height);
+
+    // Resize SSAO FBOs to match the new framebuffer size
+    renderer::resizeSSAO(width, height);
 }
 
 void Application::shutdown() {
@@ -612,6 +620,9 @@ void Application::shutdown() {
 
     // 5b3. Shutdown GPU instancing (shared instance VBO)
     renderer::shutdownInstancing();
+
+    // 5b2b. Shutdown SSAO pipeline (before shader library — shaders still valid)
+    renderer::shutdownSSAO();
 
     // 5b2. Shutdown post-processing pipeline (before shader library — shaders still valid)
     renderer::shutdownPostProcessing();
@@ -803,11 +814,27 @@ void Application::render(const float alpha) {
         renderer::flushText(m_textRenderer, m_spriteBatch, staging);
     }
 
-    // --- Post-processing pass ---
-    // Execute the post-process chain (bloom, tone map, gamma) and output to FBO 0.
-    // Must happen after all scene rendering and before the editor overlay / endFrame.
+    // --- SSAO pass ---
+    // Run SSAO after scene rendering, before post-processing composite.
+    // The AO texture is passed to the post-process pipeline via the config.
     if (usePostProcess) {
-        renderer::executePostProcessing(*postCfg);
+        const auto* ssaoCfg = m_world.registry().ctx().find<renderer::SSAOConfig>();
+        if (ssaoCfg != nullptr && ssaoCfg->enabled && renderer::isSSAOInitialised()) {
+            // Provide the scene depth texture to the SSAO pipeline
+            renderer::setSceneDepthTexture(renderer::getSceneDepthTexture());
+
+            const glm::mat4 viewMat = renderer::computeViewMatrix(m_camera3d);
+            const glm::mat4 projMat = renderer::computeProjectionMatrix(m_camera3d);
+            renderer::renderSSAOPass(viewMat, projMat, *ssaoCfg);
+
+            // Pass the blurred AO texture to the post-process final composite.
+            // We need a mutable copy of the config to inject the SSAO texture.
+            auto mutablePostCfg = *postCfg;
+            mutablePostCfg.ssaoTexture = renderer::getSSAOTexture();
+            renderer::executePostProcessing(mutablePostCfg);
+        } else {
+            renderer::executePostProcessing(*postCfg);
+        }
     }
 
 #ifdef FFE_EDITOR

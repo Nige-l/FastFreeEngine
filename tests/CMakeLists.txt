@@ -22,6 +22,7 @@ add_executable(ffe_tests
     renderer/test_post_process.cpp
     renderer/test_gpu_instancing.cpp
     renderer/test_anti_aliasing.cpp
+    renderer/test_ssao.cpp
 )
 
 target_link_libraries(ffe_tests
@@ -56,6 +57,7 @@ add_executable(ffe_tests_scripting
     scripting/test_pbr_bindings.cpp
     scripting/test_mouse_bindings.cpp
     scripting/test_postprocess_bindings.cpp
+    scripting/test_ssao_bindings.cpp
 )
 
 target_link_libraries(ffe_tests_scripting

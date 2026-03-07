@@ -18,6 +18,7 @@ set(RENDERER_SOURCES
     shadow_map.cpp
     screenshot.cpp
     post_process.cpp
+    ssao.cpp
 )
 
 # Backend selection based on tier

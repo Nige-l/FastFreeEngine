@@ -23,6 +23,8 @@ enum class BuiltinShader : u8 {
     MESH_PBR_INSTANCED         = 14, // PBR instanced (model matrix from attribs)
     SHADOW_DEPTH_INSTANCED     = 15, // Shadow depth instanced (model matrix from attribs)
     POST_FXAA                  = 16, // FXAA 3.11 anti-aliasing (post tone-map, pre gamma)
+    SSAO_PASS                  = 17, // Screen-space ambient occlusion (hemisphere sampling)
+    SSAO_BLUR                  = 18, // 4x4 box blur for SSAO noise reduction
     COUNT
 };
 

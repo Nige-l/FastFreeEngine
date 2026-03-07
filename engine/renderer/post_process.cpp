@@ -25,7 +25,8 @@ static i32  s_height = 0;
 // HDR scene FBO (full resolution)
 static GLuint s_hdrFbo        = 0;
 static GLuint s_hdrColorTex   = 0;
-static GLuint s_hdrDepthRbo   = 0;
+static GLuint s_hdrDepthRbo   = 0;   // Renderbuffer fallback (when SSAO not needed)
+static GLuint s_hdrDepthTex   = 0;   // Depth texture (for SSAO sampling)
 
 // Bloom half-res ping-pong FBOs
 static GLuint s_bloomFbo[2]   = {0, 0};
@@ -70,18 +71,26 @@ static void createHdrFbo(const i32 w, const i32 h) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glBindTexture(GL_TEXTURE_2D, 0);
 
-    // Depth-stencil renderbuffer
-    glGenRenderbuffers(1, &s_hdrDepthRbo);
-    glBindRenderbuffer(GL_RENDERBUFFER, s_hdrDepthRbo);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8,
-                          static_cast<GLsizei>(w), static_cast<GLsizei>(h));
-    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+    // Depth attachment: texture (not renderbuffer) so SSAO can sample it.
+    // GL_DEPTH_COMPONENT24 is core in GL 3.3. We use a depth-only texture
+    // and a separate renderbuffer for stencil if needed (stencil is not
+    // currently used by the engine, so depth-only is sufficient).
+    glGenTextures(1, &s_hdrDepthTex);
+    glBindTexture(GL_TEXTURE_2D, s_hdrDepthTex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24,
+                 static_cast<GLsizei>(w), static_cast<GLsizei>(h),
+                 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, 0);
 
     // Assemble FBO
     glGenFramebuffers(1, &s_hdrFbo);
     glBindFramebuffer(GL_FRAMEBUFFER, s_hdrFbo);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, s_hdrColorTex, 0);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, s_hdrDepthRbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, s_hdrDepthTex, 0);
 
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
         FFE_LOG_ERROR("PostProcess", "HDR FBO incomplete (status 0x%X)",
@@ -240,6 +249,10 @@ static void destroyFbos() {
         glDeleteRenderbuffers(1, &s_hdrDepthRbo);
         s_hdrDepthRbo = 0;
     }
+    if (s_hdrDepthTex != 0) {
+        glDeleteTextures(1, &s_hdrDepthTex);
+        s_hdrDepthTex = 0;
+    }
     for (i32 i = 0; i < 2; ++i) {
         if (s_bloomFbo[i] != 0) {
             glDeleteFramebuffers(1, &s_bloomFbo[i]);
@@ -352,9 +365,14 @@ void executePostProcessing(const PostProcessConfig& config) {
     if (s_msaaSamples > 0 && s_msaaFbo != 0) {
         glBindFramebuffer(GL_READ_FRAMEBUFFER, s_msaaFbo);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, s_hdrFbo);
+        // Resolve color (bilinear filter for smooth result)
         glBlitFramebuffer(0, 0, s_width, s_height,
                           0, 0, s_width, s_height,
                           GL_COLOR_BUFFER_BIT, GL_LINEAR);
+        // Resolve depth (nearest — required for SSAO depth sampling)
+        glBlitFramebuffer(0, 0, s_width, s_height,
+                          0, 0, s_width, s_height,
+                          GL_DEPTH_BUFFER_BIT, GL_NEAREST);
         glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
     }
@@ -429,6 +447,16 @@ void executePostProcessing(const PostProcessConfig& config) {
         }
         rhi::setUniformInt(s_finalShader, "u_bloom", 1);
 
+        // Bind SSAO texture to unit 2 (if available)
+        glActiveTexture(GL_TEXTURE2);
+        if (config.ssaoTexture != 0) {
+            glBindTexture(GL_TEXTURE_2D, config.ssaoTexture);
+        } else {
+            glBindTexture(GL_TEXTURE_2D, 0);
+        }
+        rhi::setUniformInt(s_finalShader, "u_ssaoTex", 2);
+        rhi::setUniformInt(s_finalShader, "u_ssaoEnabled", config.ssaoTexture != 0 ? 1 : 0);
+
         // Uniforms
         rhi::setUniformInt(s_finalShader, "u_bloomEnabled", config.bloomEnabled ? 1 : 0);
         rhi::setUniformFloat(s_finalShader, "u_bloomIntensity", config.bloomIntensity);
@@ -446,6 +474,8 @@ void executePostProcessing(const PostProcessConfig& config) {
         drawFullscreenTriangle();
 
         // Unbind textures
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, 0);
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, 0);
         glActiveTexture(GL_TEXTURE0);
@@ -517,6 +547,10 @@ u32 getSceneFBOHandle() {
 
 bool isPostProcessingInitialised() {
     return s_initialised;
+}
+
+u32 getSceneDepthTexture() {
+    return static_cast<u32>(s_hdrDepthTex);
 }
 
 // ---------------------------------------------------------------------------

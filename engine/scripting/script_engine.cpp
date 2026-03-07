@@ -22,6 +22,7 @@ extern "C" {
 #include "renderer/camera.h"
 #include "renderer/pbr_material.h"
 #include "renderer/post_process.h"
+#include "renderer/ssao.h"
 
 #include "audio/audio.h"
 #include "renderer/text_renderer.h"
@@ -5543,6 +5544,89 @@ void ScriptEngine::registerEcsBindings() {
     };
     lua_pushcfunction(L, ffe_setMSAASamples);
     lua_setfield(L, -2, "setMSAASamples");
+
+    // ----------------------------------------------------------------
+    // SSAO bindings
+    // ----------------------------------------------------------------
+
+    // ffe.enableSSAO(radius: number, bias: number, samples: int) -> nothing
+    // Enable screen-space ambient occlusion.
+    // radius: hemisphere sample radius in view space (default 0.5).
+    // bias: depth bias to prevent self-occlusion (default 0.025).
+    // samples: sample count — 16, 32, or 64 (default 32, clamped).
+    auto ffe_enableSSAO = [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const float radius  = static_cast<float>(luaL_optnumber(state, 1, 0.5));
+        const float bias    = static_cast<float>(luaL_optnumber(state, 2, 0.025));
+        const int   samples = static_cast<int>(luaL_optinteger(state, 3, 32));
+
+        if (!std::isfinite(radius) || !std::isfinite(bias)) {
+            FFE_LOG_WARN("ScriptEngine", "ffe.enableSSAO: non-finite value rejected");
+            return 0;
+        }
+
+        auto* cfg = world->registry().ctx().find<ffe::renderer::SSAOConfig>();
+        if (cfg == nullptr) {
+            world->registry().ctx().emplace<ffe::renderer::SSAOConfig>();
+            cfg = world->registry().ctx().find<ffe::renderer::SSAOConfig>();
+        }
+
+        cfg->enabled     = true;
+        cfg->radius      = ffe::renderer::clampSSAORadius(radius);
+        cfg->bias        = ffe::renderer::clampSSAOBias(bias);
+        cfg->sampleCount = ffe::renderer::clampSSAOSamples(samples);
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_enableSSAO);
+    lua_setfield(L, -2, "enableSSAO");
+
+    // ffe.disableSSAO() -> nothing
+    // Disable screen-space ambient occlusion.
+    auto ffe_disableSSAO = [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        auto* cfg = world->registry().ctx().find<ffe::renderer::SSAOConfig>();
+        if (cfg != nullptr) {
+            cfg->enabled = false;
+        }
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_disableSSAO);
+    lua_setfield(L, -2, "disableSSAO");
+
+    // ffe.setSSAOIntensity(intensity: number) -> nothing
+    // Set the SSAO darkening multiplier (default 1.0).
+    // Higher values produce stronger ambient occlusion.
+    auto ffe_setSSAOIntensity = [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const float intensity = static_cast<float>(luaL_optnumber(state, 1, 1.0));
+        if (!std::isfinite(intensity)) {
+            FFE_LOG_WARN("ScriptEngine", "ffe.setSSAOIntensity: non-finite value rejected");
+            return 0;
+        }
+
+        auto* cfg = world->registry().ctx().find<ffe::renderer::SSAOConfig>();
+        if (cfg == nullptr) { return 0; }
+
+        cfg->intensity = ffe::renderer::clampSSAOIntensity(intensity);
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_setSSAOIntensity);
+    lua_setfield(L, -2, "setSSAOIntensity");
 
     // ----------------------------------------------------------------
     // Screenshot binding

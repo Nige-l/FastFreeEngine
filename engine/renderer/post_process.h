@@ -33,6 +33,10 @@ struct PostProcessConfig {
     // Anti-aliasing settings
     i32   aaMode           = 0;        // 0 = none, 1 = MSAA, 2 = FXAA
     i32   msaaSamples      = 2;        // MSAA sample count: 2, 4, or 8 (clamped)
+
+    // SSAO: the AO texture GL name is passed via this field each frame.
+    // 0 = no SSAO (ambient light at full strength).
+    u32   ssaoTexture      = 0;
 };
 
 // ---------------------------------------------------------------------------
@@ -61,6 +65,10 @@ void shutdownPostProcessing();
 
 /// Returns the GL name of the HDR scene FBO (for editor FBO integration if needed).
 u32 getSceneFBOHandle();
+
+/// Returns the GL name of the HDR scene depth texture.
+/// Used by SSAO to sample the depth buffer. Returns 0 if not initialised.
+u32 getSceneDepthTexture();
 
 /// Returns true if the post-processing pipeline has been initialised.
 bool isPostProcessingInitialised();

@@ -1,5 +1,6 @@
 #include "renderer/shader_library.h"
 #include "renderer/post_process.h"
+#include "renderer/ssao.h"
 #include "renderer/rhi.h"
 #include "core/logging.h"
 
@@ -967,11 +968,13 @@ in vec2 vUV;
 
 uniform sampler2D u_scene;
 uniform sampler2D u_bloom;
+uniform sampler2D u_ssaoTex;
 uniform int       u_bloomEnabled;
 uniform float     u_bloomIntensity;
 uniform int       u_toneMapper;    // 0 = none, 1 = Reinhard, 2 = ACES
 uniform int       u_gammaEnabled;
 uniform float     u_gamma;
+uniform int       u_ssaoEnabled;
 
 out vec4 fragColor;
 
@@ -987,6 +990,13 @@ vec3 tonemapACES(vec3 c) {
 
 void main() {
     vec3 color = texture(u_scene, vUV).rgb;
+
+    // Apply SSAO: multiply scene color by ambient occlusion factor.
+    // AO = 1.0 means no occlusion, 0.0 means fully occluded.
+    if (u_ssaoEnabled != 0) {
+        float ao = texture(u_ssaoTex, vUV).r;
+        color *= ao;
+    }
 
     // Add bloom
     if (u_bloomEnabled != 0) {
@@ -1176,6 +1186,131 @@ void main() {
 }
 )glsl";
 
+// --- SSAO: hemisphere sampling shader ---
+// Reconstructs view-space position from depth buffer, samples a hemisphere
+// of points, compares depths to determine occlusion. Outputs single float.
+// GLSL 330 core — all operations available in GL 3.3.
+
+static const char* const SSAO_PASS_FRAG_SOURCE = R"glsl(
+#version 330 core
+
+in vec2 vUV;
+
+uniform sampler2D u_depthTex;
+uniform sampler2D u_noiseTex;
+
+uniform mat4  u_projection;
+uniform mat4  u_invProjection;
+
+uniform vec3  u_samples[64];
+uniform int   u_kernelSize;
+uniform float u_radius;
+uniform float u_bias;
+uniform float u_intensity;
+uniform vec2  u_noiseScale;
+
+out float fragColor;
+
+// Reconstruct view-space position from depth buffer value and UV.
+vec3 reconstructViewPos(vec2 uv, float depth) {
+    // Convert to NDC: [0,1] -> [-1,1]
+    vec4 clipPos = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+    vec4 viewPos = u_invProjection * clipPos;
+    return viewPos.xyz / viewPos.w;
+}
+
+void main() {
+    // Sample depth at this fragment
+    float depth = texture(u_depthTex, vUV).r;
+
+    // Skip skybox / far plane fragments
+    if (depth >= 1.0) {
+        fragColor = 1.0;
+        return;
+    }
+
+    // Reconstruct view-space position
+    vec3 fragPos = reconstructViewPos(vUV, depth);
+
+    // Reconstruct view-space normal from depth buffer (cross product of
+    // partial derivatives). This avoids needing a separate normal G-buffer.
+    // The artifacts on thin geometry mentioned in the ADR are acceptable
+    // for LEGACY tier.
+    vec3 dFdxPos = dFdx(fragPos);
+    vec3 dFdyPos = dFdy(fragPos);
+    vec3 normal = normalize(cross(dFdxPos, dFdyPos));
+
+    // Sample the noise texture for random rotation in tangent plane
+    vec3 randomVec = texture(u_noiseTex, vUV * u_noiseScale).xyz;
+
+    // Build TBN matrix to orient the hemisphere along the surface normal
+    vec3 tangent = normalize(randomVec - normal * dot(randomVec, normal));
+    vec3 bitangent = cross(normal, tangent);
+    mat3 TBN = mat3(tangent, bitangent, normal);
+
+    // Accumulate occlusion
+    float occlusion = 0.0;
+
+    for (int i = 0; i < u_kernelSize; ++i) {
+        // Transform sample from tangent space to view space
+        vec3 samplePos = TBN * u_samples[i];
+        samplePos = fragPos + samplePos * u_radius;
+
+        // Project sample to screen space
+        vec4 offset = u_projection * vec4(samplePos, 1.0);
+        offset.xyz /= offset.w;
+        offset.xyz = offset.xyz * 0.5 + 0.5; // NDC -> [0,1]
+
+        // Sample depth at the projected position
+        float sampleDepth = texture(u_depthTex, offset.xy).r;
+        vec3 sampleViewPos = reconstructViewPos(offset.xy, sampleDepth);
+
+        // Range check: only count occlusion from samples within the radius
+        float rangeCheck = smoothstep(0.0, 1.0,
+            u_radius / max(abs(fragPos.z - sampleViewPos.z), 0.001));
+
+        // Compare: if the sample depth is closer to the camera than our
+        // sample point, it is occluded.
+        occlusion += (sampleViewPos.z >= samplePos.z + u_bias ? 1.0 : 0.0) * rangeCheck;
+    }
+
+    // Normalise and invert: 0 = fully occluded, 1 = no occlusion
+    occlusion = 1.0 - (occlusion / float(u_kernelSize));
+
+    // Apply intensity
+    fragColor = pow(occlusion, u_intensity);
+}
+)glsl";
+
+// --- SSAO: box blur shader ---
+// Simple 4x4 box blur to smooth the raw SSAO output and reduce noise.
+// GLSL 330 core.
+
+static const char* const SSAO_BLUR_FRAG_SOURCE = R"glsl(
+#version 330 core
+
+in vec2 vUV;
+
+uniform sampler2D u_ssaoInput;
+
+out float fragColor;
+
+void main() {
+    vec2 texelSize = 1.0 / vec2(textureSize(u_ssaoInput, 0));
+    float result = 0.0;
+
+    // 4x4 box blur centered on the fragment
+    for (int x = -2; x < 2; ++x) {
+        for (int y = -2; y < 2; ++y) {
+            vec2 offset = vec2(float(x) + 0.5, float(y) + 0.5) * texelSize;
+            result += texture(u_ssaoInput, vUV + offset).r;
+        }
+    }
+
+    fragColor = result / 16.0;
+}
+)glsl";
+
 // ==================== Library Implementation ====================
 
 struct ShaderPair {
@@ -1202,6 +1337,8 @@ static const ShaderPair PAIRS[] = {
     { MESH_PBR_INSTANCED_VERT_SOURCE,  MESH_PBR_FRAG_SOURCE,            "mesh_pbr_instanced"    },
     { SHADOW_DEPTH_INSTANCED_VERT_SOURCE, SHADOW_DEPTH_FRAG_SOURCE,     "shadow_depth_instanced"},
     { FULLSCREEN_VERT_SOURCE,          POST_FXAA_FRAG_SOURCE,           "post_fxaa"             },
+    { FULLSCREEN_VERT_SOURCE,          SSAO_PASS_FRAG_SOURCE,           "ssao_pass"             },
+    { FULLSCREEN_VERT_SOURCE,          SSAO_BLUR_FRAG_SOURCE,           "ssao_blur"             },
 };
 static_assert(sizeof(PAIRS) / sizeof(PAIRS[0]) == static_cast<u32>(BuiltinShader::COUNT));
 
@@ -1227,6 +1364,11 @@ bool initShaderLibrary(ShaderLibrary& library) {
 
     // Register FXAA shader handle for anti-aliasing post-process pass.
     setFxaaShader(library.handles[static_cast<u32>(BuiltinShader::POST_FXAA)]);
+
+    // Register SSAO shader handles for the SSAO pipeline.
+    setSSAOShaders(
+        library.handles[static_cast<u32>(BuiltinShader::SSAO_PASS)],
+        library.handles[static_cast<u32>(BuiltinShader::SSAO_BLUR)]);
 
     FFE_LOG_INFO("Shader", "Loaded %u built-in shaders", static_cast<u32>(BuiltinShader::COUNT));
     return true;
