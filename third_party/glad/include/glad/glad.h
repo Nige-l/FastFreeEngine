@@ -110,6 +110,7 @@ int gladLoadGLLoader(GLADloadproc load);
 #define GL_DEPTH_COMPONENT                0x1902
 #define GL_DEPTH_COMPONENT24              0x81A6
 #define GL_DEPTH24_STENCIL8               0x88F0
+#define GL_MAX_SAMPLES                    0x8D57
 #define GL_HALF_FLOAT                     0x140B
 #define GL_NONE                           0
 
@@ -315,6 +316,9 @@ typedef void     (GLAD_API_PTR *PFNGLFRAMEBUFFERRENDERBUFFERPROC)(GLenum, GLenum
 /* Framebuffer blit */
 typedef void     (GLAD_API_PTR *PFNGLBLITFRAMEBUFFERPROC)(GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLbitfield, GLenum);
 
+/* Multisample renderbuffer */
+typedef void     (GLAD_API_PTR *PFNGLRENDERBUFFERSTORAGEMULTISAMPLEPROC)(GLenum, GLsizei, GLenum, GLsizei, GLsizei);
+
 /* Pixel read functions */
 typedef void (GLAD_API_PTR *PFNGLREADPIXELSPROC)(GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, void*);
 
@@ -410,6 +414,7 @@ extern PFNGLBINDRENDERBUFFERPROC        glad_glBindRenderbuffer;
 extern PFNGLRENDERBUFFERSTORAGEPROC     glad_glRenderbufferStorage;
 extern PFNGLFRAMEBUFFERRENDERBUFFERPROC glad_glFramebufferRenderbuffer;
 extern PFNGLBLITFRAMEBUFFERPROC         glad_glBlitFramebuffer;
+extern PFNGLRENDERBUFFERSTORAGEMULTISAMPLEPROC glad_glRenderbufferStorageMultisample;
 
 extern PFNGLREADPIXELSPROC              glad_glReadPixels;
 
@@ -502,6 +507,7 @@ extern PFNGLDEBUGMESSAGECONTROLPROC     glad_glDebugMessageControl;
 #define glRenderbufferStorage     glad_glRenderbufferStorage
 #define glFramebufferRenderbuffer glad_glFramebufferRenderbuffer
 #define glBlitFramebuffer         glad_glBlitFramebuffer
+#define glRenderbufferStorageMultisample glad_glRenderbufferStorageMultisample
 
 #define glReadPixels              glad_glReadPixels
 

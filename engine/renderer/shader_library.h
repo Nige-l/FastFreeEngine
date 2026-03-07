@@ -22,6 +22,7 @@ enum class BuiltinShader : u8 {
     MESH_BLINN_PHONG_INSTANCED = 13, // Blinn-Phong instanced (model matrix from attribs)
     MESH_PBR_INSTANCED         = 14, // PBR instanced (model matrix from attribs)
     SHADOW_DEPTH_INSTANCED     = 15, // Shadow depth instanced (model matrix from attribs)
+    POST_FXAA                  = 16, // FXAA 3.11 anti-aliasing (post tone-map, pre gamma)
     COUNT
 };
 

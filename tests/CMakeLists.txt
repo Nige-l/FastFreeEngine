@@ -21,6 +21,7 @@ add_executable(ffe_tests
     renderer/test_pbr_material.cpp
     renderer/test_post_process.cpp
     renderer/test_gpu_instancing.cpp
+    renderer/test_anti_aliasing.cpp
 )
 
 target_link_libraries(ffe_tests

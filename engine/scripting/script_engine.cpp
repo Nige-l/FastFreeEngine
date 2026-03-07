@@ -5483,6 +5483,67 @@ void ScriptEngine::registerEcsBindings() {
     lua_pushcfunction(L, ffe_disablePostProcessing);
     lua_setfield(L, -2, "disablePostProcessing");
 
+    // ffe.setAntiAliasing(mode: int) -> nothing
+    // Set anti-aliasing mode: 0 = none, 1 = MSAA, 2 = FXAA.
+    // Creates a PostProcessConfig if one does not exist.
+    // When switching to MSAA (mode 1), the MSAA FBO is created/updated
+    // via updateAntiAliasingConfig. MSAA sample count defaults to 2 if
+    // not previously set via ffe.setMSAASamples.
+    auto ffe_setAntiAliasing = [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const int mode = static_cast<int>(luaL_optinteger(state, 1, 0));
+        if (mode < 0 || mode > 2) {
+            FFE_LOG_WARN("ScriptEngine",
+                         "ffe.setAntiAliasing: mode must be 0, 1, or 2 (got %d)", mode);
+            return 0;
+        }
+
+        auto* cfg = world->registry().ctx().find<ffe::renderer::PostProcessConfig>();
+        if (cfg == nullptr) {
+            world->registry().ctx().emplace<ffe::renderer::PostProcessConfig>();
+            cfg = world->registry().ctx().find<ffe::renderer::PostProcessConfig>();
+        }
+
+        cfg->aaMode = mode;
+        ffe::renderer::updateAntiAliasingConfig(*cfg);
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_setAntiAliasing);
+    lua_setfield(L, -2, "setAntiAliasing");
+
+    // ffe.setMSAASamples(count: int) -> nothing
+    // Set MSAA sample count: 2, 4, or 8. Clamped to nearest valid.
+    // Creates a PostProcessConfig if one does not exist.
+    // Takes effect immediately if aaMode is currently 1 (MSAA).
+    auto ffe_setMSAASamples = [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const int count = static_cast<int>(luaL_optinteger(state, 1, 2));
+
+        auto* cfg = world->registry().ctx().find<ffe::renderer::PostProcessConfig>();
+        if (cfg == nullptr) {
+            world->registry().ctx().emplace<ffe::renderer::PostProcessConfig>();
+            cfg = world->registry().ctx().find<ffe::renderer::PostProcessConfig>();
+        }
+
+        cfg->msaaSamples = ffe::renderer::clampMsaaSamples(count);
+        if (cfg->aaMode == 1) {
+            ffe::renderer::updateAntiAliasingConfig(*cfg);
+        }
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_setMSAASamples);
+    lua_setfield(L, -2, "setMSAASamples");
+
     // ----------------------------------------------------------------
     // Screenshot binding
     // ----------------------------------------------------------------

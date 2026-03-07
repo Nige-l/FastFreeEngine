@@ -40,6 +40,18 @@ static GLuint s_fullscreenVao = 0;
 static rhi::ShaderHandle s_thresholdShader{};
 static rhi::ShaderHandle s_blurShader{};
 static rhi::ShaderHandle s_finalShader{};
+static rhi::ShaderHandle s_fxaaShader{};
+
+// MSAA FBO (multisample — scene renders here when MSAA is active)
+static GLuint s_msaaFbo       = 0;
+static GLuint s_msaaColorRbo  = 0;  // Multisample color renderbuffer
+static GLuint s_msaaDepthRbo  = 0;  // Multisample depth renderbuffer
+static i32    s_msaaSamples   = 0;  // Currently configured MSAA sample count (0 = none)
+
+// Intermediate FBO for FXAA pass (between tone mapping and gamma)
+// Reuses the same resolution as the main HDR FBO but in LDR (GL_RGBA8).
+static GLuint s_fxaaFbo       = 0;
+static GLuint s_fxaaColorTex  = 0;
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -108,6 +120,113 @@ static void createBloomFbos(const i32 w, const i32 h) {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
+static void createMsaaFbo(const i32 w, const i32 h, const i32 samples) {
+    // Clamp to GPU-supported maximum
+    GLint maxSamples = 0;
+    glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
+    const i32 actualSamples = (samples > maxSamples) ? maxSamples : samples;
+    if (actualSamples < 2) {
+        s_msaaSamples = 0;
+        return; // GPU does not support MSAA
+    }
+
+    // Multisample color renderbuffer (GL_RGBA16F to match HDR FBO)
+    glGenRenderbuffers(1, &s_msaaColorRbo);
+    glBindRenderbuffer(GL_RENDERBUFFER, s_msaaColorRbo);
+    glRenderbufferStorageMultisample(GL_RENDERBUFFER,
+                                     static_cast<GLsizei>(actualSamples),
+                                     GL_RGBA16F,
+                                     static_cast<GLsizei>(w),
+                                     static_cast<GLsizei>(h));
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+
+    // Multisample depth renderbuffer
+    glGenRenderbuffers(1, &s_msaaDepthRbo);
+    glBindRenderbuffer(GL_RENDERBUFFER, s_msaaDepthRbo);
+    glRenderbufferStorageMultisample(GL_RENDERBUFFER,
+                                     static_cast<GLsizei>(actualSamples),
+                                     GL_DEPTH24_STENCIL8,
+                                     static_cast<GLsizei>(w),
+                                     static_cast<GLsizei>(h));
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+
+    // Assemble MSAA FBO
+    glGenFramebuffers(1, &s_msaaFbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, s_msaaFbo);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, s_msaaColorRbo);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, s_msaaDepthRbo);
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        FFE_LOG_ERROR("PostProcess", "MSAA FBO incomplete (status 0x%X, samples=%d)",
+                      glCheckFramebufferStatus(GL_FRAMEBUFFER), actualSamples);
+        // Clean up and disable MSAA
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteFramebuffers(1, &s_msaaFbo);
+        glDeleteRenderbuffers(1, &s_msaaColorRbo);
+        glDeleteRenderbuffers(1, &s_msaaDepthRbo);
+        s_msaaFbo      = 0;
+        s_msaaColorRbo = 0;
+        s_msaaDepthRbo = 0;
+        s_msaaSamples  = 0;
+        return;
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    s_msaaSamples = actualSamples;
+    FFE_LOG_INFO("PostProcess", "MSAA FBO created (%dx%d, %dx samples)",
+                 w, h, actualSamples);
+}
+
+static void destroyMsaaFbo() {
+    if (s_msaaFbo != 0) {
+        glDeleteFramebuffers(1, &s_msaaFbo);
+        s_msaaFbo = 0;
+    }
+    if (s_msaaColorRbo != 0) {
+        glDeleteRenderbuffers(1, &s_msaaColorRbo);
+        s_msaaColorRbo = 0;
+    }
+    if (s_msaaDepthRbo != 0) {
+        glDeleteRenderbuffers(1, &s_msaaDepthRbo);
+        s_msaaDepthRbo = 0;
+    }
+    s_msaaSamples = 0;
+}
+
+static void createFxaaFbo(const i32 w, const i32 h) {
+    // LDR texture for FXAA input (post tone-map, pre gamma)
+    glGenTextures(1, &s_fxaaColorTex);
+    glBindTexture(GL_TEXTURE_2D, s_fxaaColorTex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8,
+                 static_cast<GLsizei>(w), static_cast<GLsizei>(h),
+                 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    glGenFramebuffers(1, &s_fxaaFbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, s_fxaaFbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, s_fxaaColorTex, 0);
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        FFE_LOG_ERROR("PostProcess", "FXAA FBO incomplete");
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+static void destroyFxaaFbo() {
+    if (s_fxaaFbo != 0) {
+        glDeleteFramebuffers(1, &s_fxaaFbo);
+        s_fxaaFbo = 0;
+    }
+    if (s_fxaaColorTex != 0) {
+        glDeleteTextures(1, &s_fxaaColorTex);
+        s_fxaaColorTex = 0;
+    }
+}
+
 static void destroyFbos() {
     if (s_hdrFbo != 0) {
         glDeleteFramebuffers(1, &s_hdrFbo);
@@ -131,6 +250,8 @@ static void destroyFbos() {
             s_bloomTex[i] = 0;
         }
     }
+    destroyMsaaFbo();
+    destroyFxaaFbo();
 }
 
 /// Draw a fullscreen triangle using gl_VertexID (no VBO).
@@ -164,6 +285,7 @@ bool initPostProcessing(const i32 width, const i32 height) {
     // Create FBOs
     createHdrFbo(width, height);
     createBloomFbos(width, height);
+    createFxaaFbo(width, height);
 
     s_initialised = true;
 
@@ -180,10 +302,16 @@ void resizePostProcessing(const i32 width, const i32 height) {
     s_width  = width;
     s_height = height;
 
-    // Destroy and recreate FBOs at the new size
+    // Destroy and recreate FBOs at the new size.
+    // Save MSAA sample count before destroyFbos clears it.
+    const i32 savedMsaaSamples = s_msaaSamples;
     destroyFbos();
     createHdrFbo(width, height);
     createBloomFbos(width, height);
+    createFxaaFbo(width, height);
+    if (savedMsaaSamples > 0) {
+        createMsaaFbo(width, height, savedMsaaSamples);
+    }
 
     FFE_LOG_INFO("PostProcess", "Post-processing resized to %dx%d", width, height);
 }
@@ -191,7 +319,11 @@ void resizePostProcessing(const i32 width, const i32 height) {
 void beginSceneCapture() {
     if (!s_initialised) return;
 
-    glBindFramebuffer(GL_FRAMEBUFFER, s_hdrFbo);
+    // If MSAA is active, bind the MSAA FBO; otherwise bind the regular HDR FBO.
+    const GLuint targetFbo = (s_msaaSamples > 0 && s_msaaFbo != 0)
+                           ? s_msaaFbo
+                           : s_hdrFbo;
+    glBindFramebuffer(GL_FRAMEBUFFER, targetFbo);
     glViewport(0, 0, static_cast<GLsizei>(s_width), static_cast<GLsizei>(s_height));
 
     // Clear the HDR FBO (color + depth) so we start fresh each frame.
@@ -210,6 +342,23 @@ void executePostProcessing(const PostProcessConfig& config) {
                               rhi::isValid(s_blurShader) &&
                               rhi::isValid(s_finalShader);
 
+    const bool fxaaActive = (config.aaMode == 2) && rhi::isValid(s_fxaaShader) &&
+                            (s_fxaaFbo != 0) && (s_fxaaColorTex != 0);
+
+    // --- Step 0: MSAA resolve (if active) ---
+    // Blit from multisample FBO -> regular HDR FBO before any post-processing
+    // reads the scene texture. Post-process shaders cannot read MSAA textures
+    // directly on GL 3.3.
+    if (s_msaaSamples > 0 && s_msaaFbo != 0) {
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, s_msaaFbo);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, s_hdrFbo);
+        glBlitFramebuffer(0, 0, s_width, s_height,
+                          0, 0, s_width, s_height,
+                          GL_COLOR_BUFFER_BIT, GL_LINEAR);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+    }
+
     // Disable depth test and blending for fullscreen passes
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
@@ -218,7 +367,7 @@ void executePostProcessing(const PostProcessConfig& config) {
 
     GLuint bloomTexture = 0; // Will hold the blurred bloom result
 
-    // --- Bloom pass ---
+    // --- Step 1: Bloom pass ---
     if (config.bloomEnabled && shadersReady) {
         // Pass 1: Threshold extract (full-res HDR -> half-res bloom FBO 0)
         glBindFramebuffer(GL_FRAMEBUFFER, s_bloomFbo[0]);
@@ -256,8 +405,11 @@ void executePostProcessing(const PostProcessConfig& config) {
         bloomTexture = s_bloomTex[0]; // Final blurred bloom result
     }
 
-    // --- Final composite pass: bloom + tone map + gamma -> default framebuffer ---
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    // --- Step 2: Final composite pass (bloom + tone map) ---
+    // When FXAA is active: render to FXAA FBO WITHOUT gamma (gamma applied
+    // in the FXAA pass). Otherwise: render to default framebuffer with gamma.
+    const GLuint finalTarget = fxaaActive ? s_fxaaFbo : 0;
+    glBindFramebuffer(GL_FRAMEBUFFER, finalTarget);
     glViewport(0, 0, static_cast<GLsizei>(s_width), static_cast<GLsizei>(s_height));
 
     if (shadersReady) {
@@ -281,7 +433,14 @@ void executePostProcessing(const PostProcessConfig& config) {
         rhi::setUniformInt(s_finalShader, "u_bloomEnabled", config.bloomEnabled ? 1 : 0);
         rhi::setUniformFloat(s_finalShader, "u_bloomIntensity", config.bloomIntensity);
         rhi::setUniformInt(s_finalShader, "u_toneMapper", config.toneMapper);
-        rhi::setUniformInt(s_finalShader, "u_gammaEnabled", config.gammaEnabled ? 1 : 0);
+
+        // When FXAA is active, skip gamma in the final pass — FXAA shader
+        // applies gamma after edge detection (FXAA runs in linear space).
+        if (fxaaActive) {
+            rhi::setUniformInt(s_finalShader, "u_gammaEnabled", 0);
+        } else {
+            rhi::setUniformInt(s_finalShader, "u_gammaEnabled", config.gammaEnabled ? 1 : 0);
+        }
         rhi::setUniformFloat(s_finalShader, "u_gamma", config.gamma);
 
         drawFullscreenTriangle();
@@ -299,6 +458,32 @@ void executePostProcessing(const PostProcessConfig& config) {
                           0, 0, s_width, s_height,
                           GL_COLOR_BUFFER_BIT, GL_LINEAR);
         glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+        return; // No FXAA without working shaders
+    }
+
+    // --- Step 3: FXAA pass (if active) ---
+    // Reads from FXAA FBO texture (post tone-map, pre gamma), applies FXAA
+    // edge detection and sub-pixel smoothing, then writes to default framebuffer
+    // with gamma correction applied.
+    if (fxaaActive) {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glViewport(0, 0, static_cast<GLsizei>(s_width), static_cast<GLsizei>(s_height));
+
+        rhi::bindShader(s_fxaaShader);
+
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, s_fxaaColorTex);
+        rhi::setUniformInt(s_fxaaShader, "u_scene", 0);
+        rhi::setUniformVec2(s_fxaaShader, "u_inverseScreenSize",
+                            glm::vec2(1.0f / static_cast<f32>(s_width),
+                                      1.0f / static_cast<f32>(s_height)));
+        rhi::setUniformInt(s_fxaaShader, "u_gammaEnabled", config.gammaEnabled ? 1 : 0);
+        rhi::setUniformFloat(s_fxaaShader, "u_gamma", config.gamma);
+
+        drawFullscreenTriangle();
+
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, 0);
     }
 }
 
@@ -317,6 +502,7 @@ void shutdownPostProcessing() {
     s_thresholdShader = {};
     s_blurShader      = {};
     s_finalShader     = {};
+    s_fxaaShader      = {};
 
     s_initialised = false;
     s_width  = 0;
@@ -345,6 +531,27 @@ void setPostProcessShaders(const rhi::ShaderHandle threshold,
     s_thresholdShader = threshold;
     s_blurShader      = blur;
     s_finalShader     = final_;
+}
+
+void setFxaaShader(const rhi::ShaderHandle fxaa) {
+    s_fxaaShader = fxaa;
+}
+
+void updateAntiAliasingConfig(const PostProcessConfig& config) {
+    if (!s_initialised) return;
+    if (rhi::isHeadless()) return;
+
+    const i32 requestedSamples = (config.aaMode == 1)
+                               ? clampMsaaSamples(config.msaaSamples)
+                               : 0;
+
+    // Recreate MSAA FBO only if the sample count changed
+    if (requestedSamples != s_msaaSamples) {
+        destroyMsaaFbo();
+        if (requestedSamples > 0 && s_width > 0 && s_height > 0) {
+            createMsaaFbo(s_width, s_height, requestedSamples);
+        }
+    }
 }
 
 } // namespace ffe::renderer

@@ -6,9 +6,9 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 79 |
-| Total tests | 1115 (FAST build: Clang-18, zero warnings) |
-| Total Lua bindings | ~179 |
+| Last session | 80 |
+| Total tests | 1137 (FAST build: Clang-18, zero warnings) |
+| Total Lua bindings | ~181 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
 | Phase 2 (3D Foundation) | COMPLETE |
 | Phase 3 (Standalone Editor) | MVP COMPLETE (6 milestones, Sessions 51-56) |
@@ -42,11 +42,11 @@
 
 | Session | Summary |
 |---------|---------|
+| 80 | Phase 7 M4: Anti-Aliasing — MSAA (multisample FBO, configurable 2x/4x/8x, glBlitFramebuffer resolve) + FXAA 3.11 post-process. 2 Lua bindings, 22 new tests. 1137 tests (FAST). |
 | 79 | Phase 7 M3: GPU Instancing — automatic batching by MeshHandle (2+ non-skinned), glDrawElementsInstanced, 1024/batch, instanced shadow pass, ffe.getInstanceCount. 21 new tests. 1115 tests (FAST). |
 | 78 | Phase 7 M2: Post-processing pipeline — HDR FBO, bloom (half-res ping-pong), tone mapping (Reinhard/ACES), gamma correction. 6 Lua bindings, 42 new tests. 1094 tests (FAST). |
 | 77 | Showcase debug: inverted WASD (forward vector +sin/+cos fixed to -sin/-cos), ground Y-scale doubled + brighter colors, player scale 0.5->1.8, HUD text shortened for overflow. game-dev-tester SHIP 9/10. 1052 tests (FAST). |
 | 76 | Engine fix: framebuffer resize callback (stale screen dimensions), showcase halfExtents 2x mismatch fix, BattleMusic, director process reform. game-dev-tester SHIP 8/10. 1052 tests (FAST). |
-| 75 | Showcase demo 7 bugs fixed, 3 new Lua bindings (getMouseDeltaX/Y, setCursorCaptured), game-dev-tester process reformed (now mandatory for demo changes), director review. 1052 tests (FAST). |
 
 ## Phase 7 — Rendering Pipeline Modernisation (IN PROGRESS)
 
@@ -57,7 +57,7 @@
 - [x] M1 (Sessions 74-76): PBR Materials -- PBRMaterial component, Cook-Torrance BRDF shader, IBL, Lua bindings, tests. Sessions 75-76: showcase bug fixes, engine framebuffer resize fix, process reform.
 - [x] M2 (Sessions 77-78): Post-Processing -- HDR FBO (GL_RGBA16F), bloom (half-res ping-pong Gaussian), tone mapping (Reinhard/ACES), gamma correction. 6 Lua bindings, 42 tests.
 - [x] M3 (Session 79): GPU Instancing -- InstanceData (64B), MAX_INSTANCES_PER_BATCH=1024, shared instance VBO (64KB GL_STREAM_DRAW), 3 instanced shader variants, instanced shadow pass, ffe.getInstanceCount, 21 tests.
-- [ ] M4 (Sessions 80-81): Anti-Aliasing -- MSAA + FXAA
+- [x] M4 (Session 80): Anti-Aliasing -- MSAA (multisample HDR FBO, configurable 2x/4x/8x, glBlitFramebuffer resolve) + FXAA 3.11 (Timothy Lottes, post-process edge detection + sub-pixel AA). 2 Lua bindings, 22 tests.
 - [ ] M5 (Sessions 82-83): Skeletal Animation Completion -- crossfade blending, interpolation modes, root motion
 - [ ] M6 (Session 84): SSAO (STANDARD+ tier only)
 - [ ] M7 (Session 85): Sprite Batching 2.0 -- texture array batching

@@ -1010,6 +1010,172 @@ void main() {
 }
 )glsl";
 
+// --- Post-processing: FXAA 3.11 shader ---
+// Based on Timothy Lottes' FXAA algorithm (public domain).
+// Single-pass edge detection + sub-pixel anti-aliasing.
+// Runs after tone mapping, before gamma correction.
+// Input: LDR scene texture. Output: anti-aliased scene.
+
+static const char* const POST_FXAA_FRAG_SOURCE = R"glsl(
+#version 330 core
+
+in vec2 vUV;
+
+uniform sampler2D u_scene;
+uniform vec2      u_inverseScreenSize; // 1.0 / vec2(width, height)
+uniform int       u_gammaEnabled;
+uniform float     u_gamma;
+
+out vec4 fragColor;
+
+// Perceptual luma (same weights as NTSC/BT.601)
+float fxaaLuma(vec3 rgb) {
+    return dot(rgb, vec3(0.299, 0.587, 0.114));
+}
+
+void main() {
+    // Sample center and 4 neighbours
+    vec3 rgbM  = texture(u_scene, vUV).rgb;
+    vec3 rgbNW = texture(u_scene, vUV + vec2(-1.0, -1.0) * u_inverseScreenSize).rgb;
+    vec3 rgbNE = texture(u_scene, vUV + vec2( 1.0, -1.0) * u_inverseScreenSize).rgb;
+    vec3 rgbSW = texture(u_scene, vUV + vec2(-1.0,  1.0) * u_inverseScreenSize).rgb;
+    vec3 rgbSE = texture(u_scene, vUV + vec2( 1.0,  1.0) * u_inverseScreenSize).rgb;
+
+    float lumM  = fxaaLuma(rgbM);
+    float lumNW = fxaaLuma(rgbNW);
+    float lumNE = fxaaLuma(rgbNE);
+    float lumSW = fxaaLuma(rgbSW);
+    float lumSE = fxaaLuma(rgbSE);
+
+    float lumMin = min(lumM, min(min(lumNW, lumNE), min(lumSW, lumSE)));
+    float lumMax = max(lumM, max(max(lumNW, lumNE), max(lumSW, lumSE)));
+    float lumRange = lumMax - lumMin;
+
+    // Early exit: if contrast is below threshold, no AA needed.
+    // Threshold tuned for LEGACY quality preset.
+    float edgeThreshold    = 0.0833;  // 1/12 — visible edges
+    float edgeThresholdMin = 0.0625;  // 1/16 — avoid processing dark areas
+
+    if (lumRange < max(edgeThresholdMin, lumMax * edgeThreshold)) {
+        fragColor = vec4(rgbM, 1.0);
+        return;
+    }
+
+    // Compute edge direction from luma gradient
+    float lumNWSE = lumNW + lumSE;
+    float lumNESW = lumNE + lumSW;
+
+    // Additional samples along cardinal directions for better quality
+    vec3 rgbN = texture(u_scene, vUV + vec2( 0.0, -1.0) * u_inverseScreenSize).rgb;
+    vec3 rgbS = texture(u_scene, vUV + vec2( 0.0,  1.0) * u_inverseScreenSize).rgb;
+    vec3 rgbW = texture(u_scene, vUV + vec2(-1.0,  0.0) * u_inverseScreenSize).rgb;
+    vec3 rgbE = texture(u_scene, vUV + vec2( 1.0,  0.0) * u_inverseScreenSize).rgb;
+
+    float lumN = fxaaLuma(rgbN);
+    float lumS = fxaaLuma(rgbS);
+    float lumW = fxaaLuma(rgbW);
+    float lumE = fxaaLuma(rgbE);
+
+    float lumNS = lumN + lumS;
+    float lumWE = lumW + lumE;
+
+    // Edge-perpendicular direction
+    float edgeHorz = abs(-2.0 * lumW + lumNWSE) +
+                     abs(-2.0 * lumM + lumNS) * 2.0 +
+                     abs(-2.0 * lumE + lumNESW);
+    float edgeVert = abs(-2.0 * lumN + (lumNW + lumNE)) +
+                     abs(-2.0 * lumM + lumWE) * 2.0 +
+                     abs(-2.0 * lumS + (lumSW + lumSE));
+
+    bool isHorizontal = (edgeHorz >= edgeVert);
+
+    // Choose perpendicular step direction
+    float stepLength = isHorizontal ? u_inverseScreenSize.y : u_inverseScreenSize.x;
+
+    float lumPos = isHorizontal ? lumS : lumE;
+    float lumNeg = isHorizontal ? lumN : lumW;
+
+    float gradientPos = abs(lumPos - lumM);
+    float gradientNeg = abs(lumNeg - lumM);
+
+    if (gradientNeg > gradientPos) {
+        stepLength = -stepLength;
+    }
+
+    // Sub-pixel shift: average luma of neighbourhood vs center
+    float subpixNWSWNESE = lumNWSE + lumNESW;
+    float lumAvg = (1.0 / 12.0) * (2.0 * lumNS + 2.0 * lumWE + subpixNWSWNESE);
+    float subpixOffset = clamp(abs(lumAvg - lumM) / lumRange, 0.0, 1.0);
+    float subpixSmooth = (-2.0 * subpixOffset + 3.0) * subpixOffset * subpixOffset;
+
+    // Clamp subpixel AA strength (quality 12 preset)
+    float subpixTrim = 0.25;
+    subpixSmooth = min(subpixSmooth, subpixTrim);
+    subpixSmooth *= (1.0 / subpixTrim);
+
+    // Apply sub-pixel shift perpendicular to edge
+    vec2 posOffset = vUV;
+    if (isHorizontal) {
+        posOffset.y += stepLength * subpixSmooth;
+    } else {
+        posOffset.x += stepLength * subpixSmooth;
+    }
+
+    // Edge search along the edge direction (up to 8 steps each way)
+    vec2 edgeDir = isHorizontal ? vec2(u_inverseScreenSize.x, 0.0)
+                                : vec2(0.0, u_inverseScreenSize.y);
+    vec2 posP = posOffset + edgeDir;
+    vec2 posN = posOffset - edgeDir;
+
+    float lumEndP = fxaaLuma(texture(u_scene, posP).rgb) - lumM;
+    float lumEndN = fxaaLuma(texture(u_scene, posN).rgb) - lumM;
+
+    bool reachedP = abs(lumEndP) >= gradientPos * 0.5;
+    bool reachedN = abs(lumEndN) >= gradientNeg * 0.5;
+
+    // Search along edge (8 steps max for quality)
+    for (int i = 0; i < 8; ++i) {
+        if (!reachedP) {
+            posP += edgeDir;
+            lumEndP = fxaaLuma(texture(u_scene, posP).rgb) - lumM;
+            reachedP = abs(lumEndP) >= gradientPos * 0.5;
+        }
+        if (!reachedN) {
+            posN -= edgeDir;
+            lumEndN = fxaaLuma(texture(u_scene, posN).rgb) - lumM;
+            reachedN = abs(lumEndN) >= gradientNeg * 0.5;
+        }
+        if (reachedP && reachedN) break;
+    }
+
+    // Compute edge blend factor based on search distance
+    float distP = isHorizontal ? (posP.x - vUV.x) : (posP.y - vUV.y);
+    float distN = isHorizontal ? (vUV.x - posN.x) : (vUV.y - posN.y);
+
+    float spanLen = distP + distN;
+    float pixelOffset = -min(distN, distP) / spanLen + 0.5;
+
+    // Final blend: take the larger of edge-based and sub-pixel offsets
+    float finalOffset = max(pixelOffset * stepLength, stepLength * subpixSmooth);
+
+    vec2 finalPos = vUV;
+    if (isHorizontal) {
+        finalPos.y += finalOffset;
+    } else {
+        finalPos.x += finalOffset;
+    }
+
+    vec3 result = texture(u_scene, finalPos).rgb;
+
+    // Apply gamma correction (FXAA runs after tone mapping, before gamma)
+    if (u_gammaEnabled != 0) {
+        result = pow(max(result, vec3(0.0)), vec3(1.0 / u_gamma));
+    }
+
+    fragColor = vec4(result, 1.0);
+}
+)glsl";
+
 // ==================== Library Implementation ====================
 
 struct ShaderPair {
@@ -1035,6 +1201,7 @@ static const ShaderPair PAIRS[] = {
     { MESH_BLINN_PHONG_INSTANCED_VERT_SOURCE, MESH_BLINN_PHONG_FRAG_SOURCE, "mesh_blinn_phong_instanced" },
     { MESH_PBR_INSTANCED_VERT_SOURCE,  MESH_PBR_FRAG_SOURCE,            "mesh_pbr_instanced"    },
     { SHADOW_DEPTH_INSTANCED_VERT_SOURCE, SHADOW_DEPTH_FRAG_SOURCE,     "shadow_depth_instanced"},
+    { FULLSCREEN_VERT_SOURCE,          POST_FXAA_FRAG_SOURCE,           "post_fxaa"             },
 };
 static_assert(sizeof(PAIRS) / sizeof(PAIRS[0]) == static_cast<u32>(BuiltinShader::COUNT));
 
@@ -1057,6 +1224,9 @@ bool initShaderLibrary(ShaderLibrary& library) {
         library.handles[static_cast<u32>(BuiltinShader::POST_THRESHOLD)],
         library.handles[static_cast<u32>(BuiltinShader::POST_BLUR)],
         library.handles[static_cast<u32>(BuiltinShader::POST_FINAL)]);
+
+    // Register FXAA shader handle for anti-aliasing post-process pass.
+    setFxaaShader(library.handles[static_cast<u32>(BuiltinShader::POST_FXAA)]);
 
     FFE_LOG_INFO("Shader", "Loaded %u built-in shaders", static_cast<u32>(BuiltinShader::COUNT));
     return true;

@@ -3,6 +3,53 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 80: Phase 7 M4 — Anti-Aliasing (MSAA + FXAA)
+
+### Summary
+
+Session 80 implemented anti-aliasing for the rendering pipeline: MSAA via multisample HDR FBO with `glRenderbufferStorageMultisample` and `glBlitFramebuffer` resolve (configurable 2x/4x/8x samples), plus FXAA 3.11 (Timothy Lottes algorithm) as a post-process pass after tone mapping with edge detection and sub-pixel AA in GLSL 330. AntiAliasingConfig fields added to PostProcessConfig (aaMode, msaaSamples). Pass order: MSAA resolve -> bloom -> tone map -> FXAA -> gamma. 2 Lua bindings: `ffe.setAntiAliasing(mode)`, `ffe.setMSAASamples(count)`. GLAD additions: `glRenderbufferStorageMultisample`, `GL_MAX_SAMPLES`. Performance-critic: PASS. api-designer: .context.md updated. game-dev-tester: SKIPPED (no examples/ changes, AA is transparent). FAST build: 1137 tests, zero warnings.
+
+### Planned
+
+- Phase 7 M4: Anti-Aliasing — MSAA + FXAA
+
+### Delivered
+
+- **MSAA** -- Multisample HDR FBO, `glRenderbufferStorageMultisample`, `glBlitFramebuffer` resolve, configurable 2x/4x/8x samples
+- **FXAA 3.11** -- Timothy Lottes algorithm, post-process pass after tone mapping, edge detection + sub-pixel AA, GLSL 330
+- **AntiAliasingConfig** -- New fields in PostProcessConfig: aaMode (NONE/MSAA/FXAA), msaaSamples (2/4/8)
+- **Pass Order** -- MSAA resolve -> bloom -> tone map -> FXAA -> gamma
+- **2 Lua Bindings** -- `ffe.setAntiAliasing(mode)`, `ffe.setMSAASamples(count)`
+- **GLAD Extensions** -- `glRenderbufferStorageMultisample`, `GL_MAX_SAMPLES`
+- **22 New Tests** -- 17 anti-aliasing tests + 5 misc
+
+### Files Changed
+
+- `engine/renderer/post_process.h` (MODIFIED -- AntiAliasingConfig, MSAA FBO handles, FXAA pass)
+- `engine/renderer/post_process.cpp` (MODIFIED -- MSAA FBO creation/resolve, FXAA post-process pass)
+- `engine/renderer/shader_library.h` (MODIFIED -- FXAA shader enum)
+- `engine/renderer/shader_library.cpp` (MODIFIED -- FXAA 3.11 shader source)
+- `engine/renderer/.context.md` (MODIFIED -- anti-aliasing API documentation)
+- `engine/scripting/script_engine.cpp` (MODIFIED -- ffe.setAntiAliasing, ffe.setMSAASamples bindings)
+- `engine/scripting/.context.md` (MODIFIED -- AA binding docs)
+- `third_party/glad/include/glad/glad.h` (MODIFIED -- glRenderbufferStorageMultisample, GL_MAX_SAMPLES)
+- `third_party/glad/src/glad.c` (MODIFIED -- GL multisample function loader)
+- `tests/renderer/test_anti_aliasing.cpp` (NEW -- 17 AA tests)
+- `tests/renderer/test_gpu_instancing.cpp` (MODIFIED -- 5 additional tests)
+- `tests/CMakeLists.txt` (MODIFIED -- new test file)
+
+### Reviews
+
+- performance-critic: PASS
+- api-designer: PASS (.context.md updated)
+- game-dev-tester: SKIPPED (AA is transparent, no new API paradigm)
+
+### Next Session (81)
+
+Phase 7 M5: Skeletal Animation Completion — crossfade blending, interpolation modes, root motion.
+
+---
+
 ## 2026-03-07 — Session 79: Phase 7 M3 — GPU Instancing
 
 ### Summary

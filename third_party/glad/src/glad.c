@@ -88,6 +88,7 @@ PFNGLBINDRENDERBUFFERPROC        glad_glBindRenderbuffer = NULL;
 PFNGLRENDERBUFFERSTORAGEPROC     glad_glRenderbufferStorage = NULL;
 PFNGLFRAMEBUFFERRENDERBUFFERPROC glad_glFramebufferRenderbuffer = NULL;
 PFNGLBLITFRAMEBUFFERPROC         glad_glBlitFramebuffer = NULL;
+PFNGLRENDERBUFFERSTORAGEMULTISAMPLEPROC glad_glRenderbufferStorageMultisample = NULL;
 
 PFNGLREADPIXELSPROC              glad_glReadPixels = NULL;
 
@@ -217,6 +218,7 @@ int gladLoadGLLoader(GLADloadproc load) {
     glad_glRenderbufferStorage = (PFNGLRENDERBUFFERSTORAGEPROC)load("glRenderbufferStorage");
     glad_glFramebufferRenderbuffer = (PFNGLFRAMEBUFFERRENDERBUFFERPROC)load("glFramebufferRenderbuffer");
     glad_glBlitFramebuffer = (PFNGLBLITFRAMEBUFFERPROC)load("glBlitFramebuffer");
+    glad_glRenderbufferStorageMultisample = (PFNGLRENDERBUFFERSTORAGEMULTISAMPLEPROC)load("glRenderbufferStorageMultisample");
 
     glad_glReadPixels = (PFNGLREADPIXELSPROC)load("glReadPixels");
 

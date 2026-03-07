@@ -29,6 +29,10 @@ struct PostProcessConfig {
     i32   toneMapper       = 0;        // 0 = none, 1 = Reinhard, 2 = ACES filmic
     bool  gammaEnabled     = true;     // Apply pow(color, 1/gamma) in final pass
     f32   gamma            = 2.2f;     // Gamma exponent
+
+    // Anti-aliasing settings
+    i32   aaMode           = 0;        // 0 = none, 1 = MSAA, 2 = FXAA
+    i32   msaaSamples      = 2;        // MSAA sample count: 2, 4, or 8 (clamped)
 };
 
 // ---------------------------------------------------------------------------
@@ -68,6 +72,14 @@ void setPostProcessShaders(rhi::ShaderHandle threshold,
                            rhi::ShaderHandle blur,
                            rhi::ShaderHandle final_);
 
+/// Set the FXAA post-process shader handle. Called from initShaderLibrary.
+void setFxaaShader(rhi::ShaderHandle fxaa);
+
+/// Notify the post-process pipeline that the AA mode or MSAA sample count
+/// has changed. Recreates the MSAA FBO if needed. Safe to call any time
+/// after initPostProcessing.
+void updateAntiAliasingConfig(const PostProcessConfig& config);
+
 // ---------------------------------------------------------------------------
 // Math utilities (exposed for unit testing without GL context).
 // ---------------------------------------------------------------------------
@@ -106,6 +118,22 @@ inline void gammaCorrect(f32& r, f32& g, f32& b, const f32 gamma) {
 /// Luminance (ITU BT.709 weights). Used for bloom threshold test.
 inline f32 luminance(const f32 r, const f32 g, const f32 b) {
     return 0.2126f * r + 0.7152f * g + 0.0722f * b;
+}
+
+/// FXAA luma: dot(rgb, vec3(0.299, 0.587, 0.114)).
+/// Uses the same weights as the FXAA shader for perceptual luminance.
+/// Exposed for unit testing the luma calculation without a GL context.
+inline f32 fxaaLuma(const f32 r, const f32 g, const f32 b) {
+    return 0.299f * r + 0.587f * g + 0.114f * b;
+}
+
+/// Clamp an MSAA sample count to the nearest valid power-of-two: 2, 4, or 8.
+/// Rounds down to the nearest valid value:
+/// <=2 -> 2, 3 -> 2, 4 -> 4, 5-7 -> 4, 8+ -> 8.
+inline i32 clampMsaaSamples(const i32 requested) {
+    if (requested >= 8) return 8;
+    if (requested >= 4) return 4;
+    return 2;
 }
 
 } // namespace ffe::renderer
