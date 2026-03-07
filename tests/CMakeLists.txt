@@ -34,6 +34,7 @@ add_executable(ffe_tests_scripting
     test_main.cpp
     scripting/test_lua_sandbox.cpp
     scripting/test_save_load.cpp
+    scripting/test_camera3d_bindings.cpp
 )
 
 target_link_libraries(ffe_tests_scripting

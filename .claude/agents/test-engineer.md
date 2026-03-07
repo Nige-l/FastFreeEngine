@@ -8,7 +8,7 @@ tools:
 
 **STATUS: DORMANT**
 
-This agent is not dispatched during routine development sessions. `engine-dev` writes Catch2 tests alongside every implementation as part of the 3-phase development flow (see CLAUDE.md Section 7).
+This agent is not dispatched during routine development sessions. `engine-dev` writes Catch2 tests alongside every implementation as part of the 5-phase development flow (see CLAUDE.md Section 7).
 
 ### When to Invoke
 

@@ -18,7 +18,7 @@ Claude has two jobs: (1) relay between the user and the agent team, and (2) disp
 
 ### The Plan-Dispatch-Relay Loop
 
-1. **PM plans.** Claude invokes `project-manager` with the user's goal. PM reads context (CLAUDE.md, devlog, roadmap) and outputs an ordered plan: which agents to invoke, in what order, with what instructions, and which can run in parallel.
+1. **PM plans.** Claude invokes `project-manager` with the user's goal. PM reads context (CLAUDE.md, `docs/project-state.md`, recent devlog, roadmap) and outputs an ordered plan: which agents to invoke, in what order, with what instructions, and which can run in parallel.
 2. **Claude dispatches.** Claude reads PM's plan and spawns agents exactly as specified. When PM says agents can run in parallel, Claude dispatches them simultaneously. When PM says sequential, Claude waits for each to complete before spawning the next.
 3. **Claude relays results.** After agents complete, Claude feeds their output back to PM for decisions (fix cycles, commit, devlog).
 4. **Repeat.** PM may issue follow-up dispatches based on results. Claude executes those too.
@@ -63,13 +63,13 @@ When PM tried to dispatch agents itself, it could not — only Claude has access
 Every session follows this exact sequence:
 1. User states a goal
 2. Claude invokes `project-manager` with the goal and any relevant context
-3. PM reads context (CLAUDE.md, devlog, roadmap) and produces a session plan with explicit agent dispatch instructions
+3. PM reads context (CLAUDE.md, `docs/project-state.md`, recent devlog, roadmap) and produces a session plan with explicit agent dispatch instructions
 4. Claude dispatches agents according to PM's plan (parallel where PM says parallel, sequential where PM says sequential)
 5. Claude feeds agent results back to PM
 6. PM decides next steps: fix cycles, additional dispatches, or commit
 7. Claude executes any follow-up dispatches PM specifies (go to step 4)
 8. When PM says the session is complete, Claude relays final results to the user
-9. PM writes the devlog entry at end of session
+9. PM writes the devlog entry and updates `docs/project-state.md` at end of session
 
 Claude does not intervene in PM's decisions (steps 3, 6). Claude executes dispatch faithfully (steps 4, 7). Claude only deviates if the user explicitly overrides the process.
 
@@ -213,7 +213,9 @@ Each directory has a clear owner. Agents do not write to directories they do not
 | `tests/` | `engine-dev` (note: `test-engineer` is dormant — available for release audits, not routine sessions) |
 | `docs/architecture/` | `architect` |
 | `docs/agents/` | `director` |
+| `docs/project-state.md` | `project-manager` |
 | `docs/devlog.md` | `project-manager` |
+| `docs/devlog-archive.md` | `project-manager` |
 | `docs/environment.md` | `system-engineer` |
 | `docs/ROADMAP.md` | `project-manager` + `director` |
 | `.claude/agents/` | `director` |
@@ -281,7 +283,24 @@ PM defaults to FAST unless there is a specific reason to run FULL (e.g., end of 
 
 If build fails: `engine-dev` fixes -> `build-engineer` rebuilds (expect 0-1 fix cycles). `build-engineer` does NOT fix code — it only reports errors.
 
-After Phase 5 passes: **commit.**
+After Phase 5 passes: **commit** (see Git Commit Ownership below).
+
+### Git Commit Ownership
+
+`project-manager` owns all `git add`, `git commit`, and `git push` operations. No other agent commits code.
+
+| Scenario | Who commits |
+|----------|-------------|
+| Feature lands (Phase 5 passes) | `project-manager` |
+| Infrastructure-only changes (CI, environment, CMake) | `project-manager` |
+| Devlog-only updates | `project-manager` |
+| Process/documentation changes (CLAUDE.md, agent files) | `project-manager` (or `director` when restructuring the agent team) |
+
+**Rules:**
+- `project-manager` commits after Phase 5 passes and all agents have reported.
+- `project-manager` writes a [Conventional Commit](https://www.conventionalcommits.org/) message summarizing the session's changes.
+- No other agent runs `git commit`, `git push`, or `git add`. If an agent needs something committed mid-session (e.g., a CI fix that must be pushed to test), PM does the commit.
+- `build-engineer` never commits. `system-engineer` never commits. `engine-dev` never commits.
 
 ### game-dev-tester: Conditional Only
 
@@ -403,4 +422,6 @@ Performance is how we deliver on this mission. By running well on old hardware, 
 | Can Claude write code directly? | **No** — invoke `project-manager` for a plan, then dispatch the agents PM specifies |
 | Can Claude decide which agents to invoke? | **No** — PM's plan specifies agents and order; Claude dispatches, never decides |
 | Can Claude reorder or skip agents in PM's plan? | **No** — follow PM's plan exactly unless the user explicitly overrides |
-| Can Claude run builds or tests? | **No** — implementation agents do that; Claude only dispatches them |
+| Can Claude run builds or tests? | **No** — `build-engineer` does that; Claude only dispatches |
+| Who does git commits? | **`project-manager`** — no other agent commits |
+| Where do I get project context? | Read `docs/project-state.md` first, then recent `docs/devlog.md` if needed |

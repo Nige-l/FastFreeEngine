@@ -4014,6 +4014,107 @@ void ScriptEngine::registerEcsBindings() {
     lua_pushcfunction(L, ffe_set3DCamera);
     lua_setfield(L, -2, "set3DCamera");
 
+    // ffe.set3DCameraFPS(x, y, z, yaw_deg, pitch_deg) -> nothing
+    // First-person-shooter style camera: position + yaw/pitch angles.
+    // Yaw: 0 looks down +Z (right-hand Y-up). Pitch clamped to [-89, 89] degrees.
+    auto ffe_set3DCameraFPS = [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        auto* cam = world->registry().ctx().find<ffe::renderer::Camera*>();
+        if (cam == nullptr || *cam == nullptr) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.set3DCameraFPS: 3D camera not in ECS context");
+            return 0;
+        }
+
+        const ffe::f32 x         = static_cast<ffe::f32>(luaL_optnumber(state, 1, 0.0));
+        const ffe::f32 y         = static_cast<ffe::f32>(luaL_optnumber(state, 2, 0.0));
+        const ffe::f32 z         = static_cast<ffe::f32>(luaL_optnumber(state, 3, 0.0));
+        const ffe::f32 yaw_deg   = static_cast<ffe::f32>(luaL_optnumber(state, 4, 0.0));
+        const ffe::f32 pitch_deg = static_cast<ffe::f32>(luaL_optnumber(state, 5, 0.0));
+
+        static constexpr ffe::f32 PI        = 3.14159265358979323846f;
+        static constexpr ffe::f32 DEG_TO_RAD = PI / 180.0f;
+
+        const ffe::f32 pitch_clamped = std::max(-89.0f, std::min(89.0f, pitch_deg));
+        const ffe::f32 yaw_rad       = yaw_deg       * DEG_TO_RAD;
+        const ffe::f32 pitch_rad     = pitch_clamped  * DEG_TO_RAD;
+
+        const ffe::f32 fx = std::cos(pitch_rad) * std::sin(yaw_rad);
+        const ffe::f32 fy = std::sin(pitch_rad);
+        const ffe::f32 fz = std::cos(pitch_rad) * std::cos(yaw_rad);
+
+        (*cam)->position = {x, y, z};
+        (*cam)->target   = {x + fx, y + fy, z + fz};
+        // up vector remains {0,1,0} — not modified
+
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_set3DCameraFPS);
+    lua_setfield(L, -2, "set3DCameraFPS");
+
+    // ffe.set3DCameraOrbit(target_x, target_y, target_z, radius, yaw_deg, pitch_deg) -> nothing
+    // Orbit camera: camera circles a target point at the given radius.
+    // Pitch clamped to [-85, 85] degrees to prevent up-vector ambiguity at poles.
+    // No-op if radius <= 0 or any input is non-finite.
+    auto ffe_set3DCameraOrbit = [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        auto* cam = world->registry().ctx().find<ffe::renderer::Camera*>();
+        if (cam == nullptr || *cam == nullptr) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.set3DCameraOrbit: 3D camera not in ECS context");
+            return 0;
+        }
+
+        const ffe::f32 target_x  = static_cast<ffe::f32>(luaL_optnumber(state, 1, 0.0));
+        const ffe::f32 target_y  = static_cast<ffe::f32>(luaL_optnumber(state, 2, 0.0));
+        const ffe::f32 target_z  = static_cast<ffe::f32>(luaL_optnumber(state, 3, 0.0));
+        const ffe::f32 radius    = static_cast<ffe::f32>(luaL_optnumber(state, 4, 5.0));
+        const ffe::f32 yaw_deg   = static_cast<ffe::f32>(luaL_optnumber(state, 5, 0.0));
+        const ffe::f32 pitch_deg = static_cast<ffe::f32>(luaL_optnumber(state, 6, 0.0));
+
+        // Guard: NaN/Inf inputs
+        if (!std::isfinite(target_x) || !std::isfinite(target_y) || !std::isfinite(target_z) ||
+            !std::isfinite(radius)   || !std::isfinite(yaw_deg)   || !std::isfinite(pitch_deg)) {
+            FFE_LOG_WARN("ScriptEngine",
+                         "ffe.set3DCameraOrbit: non-finite input detected — call ignored");
+            return 0;
+        }
+
+        // Guard: radius must be positive
+        if (radius <= 0.0f) {
+            FFE_LOG_WARN("ScriptEngine",
+                         "ffe.set3DCameraOrbit: radius must be > 0 — call ignored");
+            return 0;
+        }
+
+        static constexpr ffe::f32 PI        = 3.14159265358979323846f;
+        static constexpr ffe::f32 DEG_TO_RAD = PI / 180.0f;
+
+        const ffe::f32 pitch_clamped = std::max(-85.0f, std::min(85.0f, pitch_deg));
+        const ffe::f32 yaw_rad       = yaw_deg       * DEG_TO_RAD;
+        const ffe::f32 pitch_rad     = pitch_clamped  * DEG_TO_RAD;
+
+        const ffe::f32 cx = target_x + radius * std::cos(pitch_rad) * std::sin(yaw_rad);
+        const ffe::f32 cy = target_y + radius * std::sin(pitch_rad);
+        const ffe::f32 cz = target_z + radius * std::cos(pitch_rad) * std::cos(yaw_rad);
+
+        (*cam)->position = {cx, cy, cz};
+        (*cam)->target   = {target_x, target_y, target_z};
+        // up vector remains {0,1,0} — not modified
+
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_set3DCameraOrbit);
+    lua_setfield(L, -2, "set3DCameraOrbit");
+
     // ffe.setMeshColor(entityId: integer, r, g, b, a: number) -> nothing
     // Set the diffuse color tint on a 3D entity's Material3D component.
     // Creates Material3D if not present on the entity.
@@ -4050,6 +4151,50 @@ void ScriptEngine::registerEcsBindings() {
     };
     lua_pushcfunction(L, ffe_setMeshColor);
     lua_setfield(L, -2, "setMeshColor");
+
+    // ffe.setMeshTexture(entityId: integer, textureHandle: integer) -> nothing
+    // Set the diffuse texture on a 3D entity's Material3D component.
+    // textureHandle is the integer returned by ffe.loadTexture (0 = clear / white fallback).
+    // Creates Material3D if not already present. Guards: entity must be valid; handle >= 0.
+    auto ffe_setMeshTexture = [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TNUMBER) {
+            FFE_LOG_ERROR("ScriptEngine",
+                          "ffe.setMeshTexture: argument 1 (entityId) must be a number");
+            return 0;
+        }
+
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = lua_tointeger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) { return 0; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) {
+            FFE_LOG_ERROR("ScriptEngine",
+                          "ffe.setMeshTexture: invalid entity ID %" PRId64,
+                          static_cast<long long>(rawId));
+            return 0;
+        }
+
+        // textureHandle: 0 = clear (white fallback), >0 = use this texture
+        const lua_Integer rawTex = luaL_optinteger(state, 2, 0);
+        if (rawTex < 0) {
+            FFE_LOG_WARN("ScriptEngine",
+                         "ffe.setMeshTexture: negative textureHandle ignored");
+            return 0;
+        }
+
+        ffe::Material3D& mat = world->registry().get_or_emplace<ffe::Material3D>(
+            static_cast<entt::entity>(entityId));
+        mat.diffuseTexture = ffe::rhi::TextureHandle{static_cast<ffe::u32>(rawTex)};
+
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_setMeshTexture);
+    lua_setfield(L, -2, "setMeshTexture");
 
     // ffe.setLightDirection(x, y, z: number) -> nothing
     // Set the scene directional light direction (world space).

@@ -1,11 +1,11 @@
 -- game.lua -- "3D Spinning Cubes" demo for FFE
 --
--- Demonstrates the 3D Mesh Rendering API introduced in Phase 2:
+-- Demonstrates the 3D Mesh Rendering API introduced in Phase 2 / Session 42:
 --   ffe.loadMesh / ffe.unloadMesh
 --   ffe.createEntity3D
 --   ffe.setTransform3D
 --   ffe.setMeshColor
---   ffe.set3DCamera
+--   ffe.set3DCameraOrbit  (replaces manual math.sin/cos camera computation)
 --   ffe.setLightDirection / ffe.setLightColor / ffe.setAmbientColor
 --
 -- Three mesh entities orbit the world origin at different speeds and radii,
@@ -82,13 +82,18 @@ local fpsDisplay  = 0
 
 -- ---------------------------------------------------------------------------
 -- Helper: compute camera world position from yaw/dist/elevation
+-- Uses ffe.set3DCameraOrbit: converts the horizontal camDist + vertical camElev
+-- into an orbit radius and pitch angle so the visual result is identical to
+-- the old manual computation.
 -- ---------------------------------------------------------------------------
 local function updateCamera()
-    local rad = math.rad(camYaw)
-    local cx = math.sin(rad) * camDist
-    local cz = math.cos(rad) * camDist
-    -- Camera looks at the world origin
-    ffe.set3DCamera(cx, camElev, cz,   0, 0, 0)
+    -- Total 3D distance from the world origin to the camera.
+    local radius = math.sqrt(camDist * camDist + camElev * camElev)
+    -- Pitch: angle above the XZ plane, in degrees.
+    local pitch  = math.deg(math.atan(camElev, camDist))
+    -- ffe.set3DCameraOrbit orbits around target (0,0,0) at the given radius,
+    -- yaw, and pitch.  The result is identical to the previous manual cx/cz math.
+    ffe.set3DCameraOrbit(0, 0, 0, radius, camYaw, pitch)
 end
 
 -- ---------------------------------------------------------------------------

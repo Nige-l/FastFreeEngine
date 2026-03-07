@@ -214,3 +214,77 @@ A formal "integration test" step where game-dev-tester verifies before commit wa
 | Agent description changes? | None |
 | Process changes? | (A) Shift security review to include ADR phase for attack-surface features. (B) Enforce game-dev-tester verification in session plans. (C) Sequence api-designer review before examples. (D) Defer formal integration test gate until Lua ships. |
 | Watch items carried forward | engine-dev scope breadth (from last review); known issues list growth; renderer fix ownership for graphics-specific bugs |
+
+---
+
+## 2026-03-07 — Session 42 Pre-Session: Process Fixes (Director Review)
+
+**Reviewer:** director
+**Trigger:** User raised process concerns after 41 sessions — devlog bloat, unclear git commit ownership, system-engineer scope creep
+
+### Changes Made
+
+#### 1. Devlog Restructuring
+
+**Problem:** `docs/devlog.md` was 2877 lines across 41 sessions. Agents reading the entire file each session was wasteful and slow.
+
+**Solution:** Three-part structure:
+- `docs/project-state.md` (NEW) — concise living document (<100 lines) with current project status, subsystem table, recent session summaries, and next-session plan. PM updates this each session. This is the primary context document agents read.
+- `docs/devlog.md` — trimmed to Sessions 35-41 (~694 lines). Header points to project-state.md and archive.
+- `docs/devlog-archive.md` (NEW) — Sessions 1-34 (~2192 lines). Historical reference only.
+
+PM is instructed to archive old sessions when devlog exceeds 1000 lines.
+
+**Files changed:** `docs/project-state.md` (new), `docs/devlog.md` (rewritten), `docs/devlog-archive.md` (new)
+
+#### 2. Git Commit Ownership Defined
+
+**Problem:** CLAUDE.md Section 7 said "After Phase 5 passes: commit" but never specified which agent. system-engineer had been doing `git commit` and `git push` in recent sessions, which is outside its defined scope.
+
+**Decision:** `project-manager` owns all git operations (`git add`, `git commit`, `git push`). Rationale:
+- PM already declares when a session is complete
+- PM writes the devlog entry (which is part of the commit)
+- PM writes the commit message content (conventional commits)
+- Concentrating commit authority in one agent prevents the same change being committed by different agents in different sessions
+
+**Files changed:**
+- `.claude/CLAUDE.md` Section 7: new "Git Commit Ownership" subsection with explicit table
+- `.claude/CLAUDE.md` Quick Reference: added "Who does git commits?" entry
+- `.claude/agents/project-manager.md`: added `Bash` tool, "Git Commit Ownership" section, updated session closeout to include git commit step
+- `.claude/agents/engine-dev.md`: clarified that engine-dev does not run git commit
+- `.claude/agents/system-engineer.md`: explicit "You do NOT: run git commit" in scope boundaries
+
+#### 3. system-engineer Scope Clarified
+
+**Problem:** system-engineer's scope was ambiguous about builds. While the agent file didn't instruct full builds, it also didn't prohibit them. system-engineer had been running full builds in some sessions.
+
+**Decision:** system-engineer may run diagnostic commands (cmake configure, pkg-config, minimal compile tests) but NOT full project builds or test suites. Added explicit "Scope Boundaries" section with DO/DO NOT lists.
+
+**Files changed:** `.claude/agents/system-engineer.md`: replaced generic "primary directive" with explicit scope boundaries section
+
+#### 4. Stale References Fixed
+
+- `.claude/agents/project-manager.md`: "3-phase flow" updated to "5-phase flow"
+- `.claude/agents/project-manager.md`: context reading updated to reference `docs/project-state.md` first, devlog second
+- `.claude/agents/engine-dev.md`: removed contradictory "After implementing anything you run the build" (conflicts with "Write Everything, Never Build" section below it)
+- `.claude/CLAUDE.md` Section 0: PM context reading references updated to include `docs/project-state.md`
+- `.claude/CLAUDE.md` Session Lifecycle step 9: now includes "updates `docs/project-state.md`"
+- `.claude/CLAUDE.md` Section 6: `docs/project-state.md` and `docs/devlog-archive.md` added to file ownership table
+
+### Summary
+
+| Change | Rationale |
+|--------|-----------|
+| `docs/project-state.md` | Agents get full context in <100 lines instead of reading 2877-line devlog |
+| Devlog split (current + archive) | Main devlog stays manageable; history preserved |
+| PM owns git commits | Single agent with commit authority prevents confusion and scope creep |
+| PM gets Bash tool | Needed to run git commands |
+| system-engineer scope boundaries | Explicit DO/DO NOT prevents builds and commits outside its role |
+| engine-dev contradiction removed | "run the build" line conflicted with "Write Everything, Never Build" |
+| 3-phase -> 5-phase in PM file | Stale reference from before Session 34 process change |
+
+### Watch Items
+
+- Monitor whether 1000-line devlog threshold triggers archiving too often or not often enough
+- PM now has Bash tool — monitor that PM only uses it for git commands, not for builds or code execution
+- project-state.md must stay under 100 lines — PM must be disciplined about this
