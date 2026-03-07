@@ -308,6 +308,7 @@ After Phase 5 passes: **commit** (see Git Commit Ownership below).
 **Rules:**
 - `project-manager` commits after Phase 5 passes and all agents have reported.
 - `project-manager` writes a [Conventional Commit](https://www.conventionalcommits.org/) message summarizing the session's changes.
+- `project-manager` pushes to remote at session end as a default. The user should not have to ask for it.
 - No other agent runs `git commit`, `git push`, or `git add`. If an agent needs something committed mid-session (e.g., a CI fix that must be pushed to test), PM does the commit.
 - `build-engineer` never commits. `system-engineer` never commits. `engine-dev` never commits.
 
@@ -434,4 +435,5 @@ Performance is how we deliver on this mission. By running well on old hardware, 
 | Can Claude reorder or skip agents in PM's plan? | **No** — follow PM's plan exactly unless the user explicitly overrides |
 | Can Claude run builds or tests? | **No** — `build-engineer` does that; Claude only dispatches |
 | Who does git commits? | **`project-manager`** — no other agent commits |
+| Who pushes to remote? | **`project-manager`** — pushes at session end by default |
 | Where do I get project context? | Read `docs/project-state.md` first (includes current-phase roadmap), then recent `docs/devlog.md` if needed. Full roadmap at `docs/ROADMAP.md` is archival — only for phase transitions. |

@@ -70,7 +70,7 @@ You prevent scope creep. If a task grows beyond what was planned you flag it rat
 
 At the end of every session you:
 
-1. **Commit.** Run `git add` for all changed files, then `git commit` with a [Conventional Commit](https://www.conventionalcommits.org/) message summarizing the session's changes. Do NOT push unless the user explicitly requests it.
+1. **Commit and push.** Run `git add` for all changed files, then `git commit` with a [Conventional Commit](https://www.conventionalcommits.org/) message summarizing the session's changes, then `git push` to the remote. Pushing at session end is the default — the user should not have to ask for it.
 2. **Update `docs/project-state.md`** with the new session number, test count, any status changes, and the current phase's delivered/remaining items. This file must stay under 100 lines and reflect the current truth. When a deliverable is completed, move it from "Remaining" to "Delivered" in the current phase section.
 3. **Write a devlog entry** to `docs/devlog.md` covering: what was planned, what was completed, what was deferred, and what the next session should start with.
 4. **Archive maintenance:** When `docs/devlog.md` exceeds 1000 lines, move the oldest sessions to `docs/devlog-archive.md` to keep the main devlog manageable.
