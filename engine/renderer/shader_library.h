@@ -14,6 +14,8 @@ enum class BuiltinShader : u8 {
     SKYBOX               = 5,  // Cubemap skybox rendering
     MESH_SKINNED         = 6,  // Blinn-Phong + bone skinning (skeletal animation)
     SHADOW_DEPTH_SKINNED = 7,  // Depth-only + bone skinning (skeletal animation shadow pass)
+    MESH_PBR             = 8,  // PBR metallic-roughness (Cook-Torrance BRDF)
+    MESH_PBR_SKINNED     = 9,  // PBR + bone skinning (skeletal animation)
     COUNT
 };
 

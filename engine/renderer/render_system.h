@@ -4,6 +4,7 @@
 #include "core/system.h"
 #include "renderer/rhi_types.h"
 #include "renderer/mesh_loader.h"
+#include "renderer/pbr_material.h"
 #include "renderer/render_queue.h"
 #include "renderer/skeleton.h"
 #include "renderer/sprite_batch.h"

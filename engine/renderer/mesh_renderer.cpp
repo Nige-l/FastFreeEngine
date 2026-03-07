@@ -13,6 +13,7 @@
 
 #include "renderer/mesh_renderer.h"
 #include "renderer/mesh_loader.h"
+#include "renderer/pbr_material.h"
 #include "renderer/render_system.h"
 #include "renderer/skeleton.h"
 #include "renderer/rhi.h"
@@ -314,7 +315,15 @@ void meshRenderSystem(World& world, const Camera& camera3d,
     // --- Get skinned mesh shader ---
     const rhi::ShaderHandle skinnedShader = getShader(*shaderLib, BuiltinShader::MESH_SKINNED);
 
-    // --- Bind mesh shader (static — will switch per-entity if skinned) ---
+    // --- Get PBR shaders ---
+    const rhi::ShaderHandle pbrShader = getShader(*shaderLib, BuiltinShader::MESH_PBR);
+    const rhi::ShaderHandle pbrSkinnedShader = getShader(*shaderLib, BuiltinShader::MESH_PBR_SKINNED);
+
+    // --- Get skybox config for IBL (PBR ambient specular from cubemap) ---
+    const auto* const* skyboxCfgPtr = world.registry().ctx().find<renderer::SkyboxConfig*>();
+    const SkyboxConfig* skyboxCfg = (skyboxCfgPtr != nullptr) ? *skyboxCfgPtr : nullptr;
+
+    // --- Bind mesh shader (static — will switch per-entity if skinned/PBR) ---
     rhi::bindShader(meshShader);
 
     // --- Upload scene-global uniforms (same for all mesh entities) ---
@@ -335,7 +344,27 @@ void meshRenderSystem(World& world, const Camera& camera3d,
         rhi::setUniformVec3(skinnedShader, "u_ambientColor", lighting->ambientColor);
         rhi::setUniformVec3(skinnedShader, "u_viewPos",      camera3d.position);
         rhi::setUniformMat4(skinnedShader, "u_viewProjection", vpMatrix);
-        // Re-bind static shader as default — will switch per-entity as needed
+        rhi::bindShader(meshShader);
+    }
+
+    // Upload scene-global uniforms to PBR shaders (if available).
+    // PBR shaders use the same light/view uniforms as Blinn-Phong.
+    if (rhi::isValid(pbrShader)) {
+        rhi::bindShader(pbrShader);
+        rhi::setUniformVec3(pbrShader, "u_lightDir",     lighting->lightDir);
+        rhi::setUniformVec3(pbrShader, "u_lightColor",   lighting->lightColor);
+        rhi::setUniformVec3(pbrShader, "u_ambientColor", lighting->ambientColor);
+        rhi::setUniformVec3(pbrShader, "u_viewPos",      camera3d.position);
+        rhi::setUniformMat4(pbrShader, "u_viewProjection", vpMatrix);
+        rhi::bindShader(meshShader);
+    }
+    if (rhi::isValid(pbrSkinnedShader)) {
+        rhi::bindShader(pbrSkinnedShader);
+        rhi::setUniformVec3(pbrSkinnedShader, "u_lightDir",     lighting->lightDir);
+        rhi::setUniformVec3(pbrSkinnedShader, "u_lightColor",   lighting->lightColor);
+        rhi::setUniformVec3(pbrSkinnedShader, "u_ambientColor", lighting->ambientColor);
+        rhi::setUniformVec3(pbrSkinnedShader, "u_viewPos",      camera3d.position);
+        rhi::setUniformMat4(pbrSkinnedShader, "u_viewProjection", vpMatrix);
         rhi::bindShader(meshShader);
     }
 
@@ -357,11 +386,14 @@ void meshRenderSystem(World& world, const Camera& camera3d,
             }
         }
 
-        // Upload point light count and arrays to both static and skinned shaders.
-        // Both use the same fragment shader (MESH_BLINN_PHONG_FRAG_SOURCE) which
-        // references these uniforms.
-        const rhi::ShaderHandle pointLightShaders[] = { meshShader, skinnedShader };
-        const u32 plShaderCount = rhi::isValid(skinnedShader) ? 2u : 1u;
+        // Upload point light count and arrays to all mesh shaders (Blinn-Phong + PBR).
+        // All share the same point light uniform names.
+        rhi::ShaderHandle pointLightShaders[4];
+        u32 plShaderCount = 0;
+        pointLightShaders[plShaderCount++] = meshShader;
+        if (rhi::isValid(skinnedShader))    pointLightShaders[plShaderCount++] = skinnedShader;
+        if (rhi::isValid(pbrShader))        pointLightShaders[plShaderCount++] = pbrShader;
+        if (rhi::isValid(pbrSkinnedShader)) pointLightShaders[plShaderCount++] = pbrSkinnedShader;
 
         for (u32 si = 0; si < plShaderCount; ++si) {
             const rhi::ShaderHandle sh = pointLightShaders[si];
@@ -387,38 +419,45 @@ void meshRenderSystem(World& world, const Camera& camera3d,
         rhi::bindShader(meshShader);
     }
 
-    // --- Shadow map uniforms for both static and skinned Blinn-Phong passes ---
-    if (shadowCfg.enabled && shadowMap.depthTexture != 0) {
-        glActiveTexture(GL_TEXTURE0 + 1);
-        glBindTexture(GL_TEXTURE_2D, shadowMap.depthTexture);
+    // --- Shadow map uniforms for all mesh shaders (Blinn-Phong + PBR) ---
+    {
+        rhi::ShaderHandle shadowShaders[4];
+        u32 shadowShaderCount = 0;
+        shadowShaders[shadowShaderCount++] = meshShader;
+        if (rhi::isValid(skinnedShader))    shadowShaders[shadowShaderCount++] = skinnedShader;
+        if (rhi::isValid(pbrShader))        shadowShaders[shadowShaderCount++] = pbrShader;
+        if (rhi::isValid(pbrSkinnedShader)) shadowShaders[shadowShaderCount++] = pbrSkinnedShader;
 
-        rhi::bindShader(meshShader);
-        rhi::setUniformInt(meshShader, "u_shadowMap", 1);
-        rhi::setUniformInt(meshShader, "u_shadowsEnabled", 1);
-        rhi::setUniformFloat(meshShader, "u_shadowBias", shadowCfg.bias);
-        rhi::setUniformMat4(meshShader, "u_lightSpaceMatrix", lightSpaceMat);
+        if (shadowCfg.enabled && shadowMap.depthTexture != 0) {
+            glActiveTexture(GL_TEXTURE0 + 1);
+            glBindTexture(GL_TEXTURE_2D, shadowMap.depthTexture);
 
-        if (rhi::isValid(skinnedShader)) {
-            rhi::bindShader(skinnedShader);
-            rhi::setUniformInt(skinnedShader, "u_shadowMap", 1);
-            rhi::setUniformInt(skinnedShader, "u_shadowsEnabled", 1);
-            rhi::setUniformFloat(skinnedShader, "u_shadowBias", shadowCfg.bias);
-            rhi::setUniformMat4(skinnedShader, "u_lightSpaceMatrix", lightSpaceMat);
+            for (u32 si = 0; si < shadowShaderCount; ++si) {
+                const rhi::ShaderHandle sh = shadowShaders[si];
+                rhi::bindShader(sh);
+                rhi::setUniformInt(sh, "u_shadowMap", 1);
+                rhi::setUniformInt(sh, "u_shadowsEnabled", 1);
+                rhi::setUniformFloat(sh, "u_shadowBias", shadowCfg.bias);
+                rhi::setUniformMat4(sh, "u_lightSpaceMatrix", lightSpaceMat);
+            }
+        } else {
+            for (u32 si = 0; si < shadowShaderCount; ++si) {
+                const rhi::ShaderHandle sh = shadowShaders[si];
+                rhi::bindShader(sh);
+                rhi::setUniformInt(sh, "u_shadowsEnabled", 0);
+            }
         }
         rhi::bindShader(meshShader);
-    } else {
-        rhi::setUniformInt(meshShader, "u_shadowsEnabled", 0);
-        if (rhi::isValid(skinnedShader)) {
-            rhi::bindShader(skinnedShader);
-            rhi::setUniformInt(skinnedShader, "u_shadowsEnabled", 0);
-            rhi::bindShader(meshShader);
-        }
     }
 
-    // --- Fog uniforms for both static and skinned Blinn-Phong passes ---
+    // --- Fog uniforms for all mesh shaders (Blinn-Phong + PBR) ---
     {
-        const rhi::ShaderHandle fogShaders[] = { meshShader, skinnedShader };
-        const u32 fogShaderCount = rhi::isValid(skinnedShader) ? 2u : 1u;
+        rhi::ShaderHandle fogShaders[4];
+        u32 fogShaderCount = 0;
+        fogShaders[fogShaderCount++] = meshShader;
+        if (rhi::isValid(skinnedShader))    fogShaders[fogShaderCount++] = skinnedShader;
+        if (rhi::isValid(pbrShader))        fogShaders[fogShaderCount++] = pbrShader;
+        if (rhi::isValid(pbrSkinnedShader)) fogShaders[fogShaderCount++] = pbrSkinnedShader;
 
         for (u32 si = 0; si < fogShaderCount; ++si) {
             const rhi::ShaderHandle sh = fogShaders[si];
@@ -430,6 +469,34 @@ void meshRenderSystem(World& world, const Camera& camera3d,
                 rhi::setUniformFloat(sh, "u_fogFar", fog.farDist);
             } else {
                 rhi::setUniformInt(sh, "u_fogEnabled", 0);
+            }
+        }
+        rhi::bindShader(meshShader);
+    }
+
+    // --- Upload skybox/IBL uniforms to PBR shaders ---
+    // The PBR fragment shader uses u_skybox (samplerCube) and u_hasSkybox (int)
+    // for IBL ambient specular. Bind the cubemap to texture unit 6.
+    {
+        const bool hasSkybox = (skyboxCfg != nullptr) && skyboxCfg->enabled
+                               && (skyboxCfg->cubemapTexture != 0);
+
+        rhi::ShaderHandle iblShaders[2];
+        u32 iblShaderCount = 0;
+        if (rhi::isValid(pbrShader))        iblShaders[iblShaderCount++] = pbrShader;
+        if (rhi::isValid(pbrSkinnedShader)) iblShaders[iblShaderCount++] = pbrSkinnedShader;
+
+        if (hasSkybox) {
+            glActiveTexture(GL_TEXTURE0 + 6);
+            glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxCfg->cubemapTexture);
+        }
+
+        for (u32 si = 0; si < iblShaderCount; ++si) {
+            const rhi::ShaderHandle sh = iblShaders[si];
+            rhi::bindShader(sh);
+            rhi::setUniformInt(sh, "u_hasSkybox", hasSkybox ? 1 : 0);
+            if (hasSkybox) {
+                rhi::setUniformInt(sh, "u_skybox", 6);
             }
         }
         rhi::bindShader(meshShader);
@@ -449,27 +516,24 @@ void meshRenderSystem(World& world, const Camera& camera3d,
             continue;
         }
 
-        // --- Detect skinned entity and select appropriate shader ---
+        // --- Detect PBR material, skinned entity, and select appropriate shader ---
         const bool hasSkeleton = rec->hasSkeleton &&
             world.registry().all_of<ffe::Skeleton>(entity);
-        const rhi::ShaderHandle targetShader = (hasSkeleton && rhi::isValid(skinnedShader))
-            ? skinnedShader : meshShader;
+        const auto* pbrMat = world.registry().try_get<renderer::PBRMaterial>(entity);
+        const bool usePbr = (pbrMat != nullptr) && rhi::isValid(pbrShader);
+
+        rhi::ShaderHandle targetShader = meshShader;
+        if (usePbr) {
+            targetShader = (hasSkeleton && rhi::isValid(pbrSkinnedShader))
+                ? pbrSkinnedShader : pbrShader;
+        } else {
+            targetShader = (hasSkeleton && rhi::isValid(skinnedShader))
+                ? skinnedShader : meshShader;
+        }
 
         if (targetShader.id != currentShader.id) {
             rhi::bindShader(targetShader);
             currentShader = targetShader;
-
-            // Re-upload shadow uniforms after shader switch
-            if (shadowCfg.enabled && shadowMap.depthTexture != 0) {
-                glActiveTexture(GL_TEXTURE0 + 1);
-                glBindTexture(GL_TEXTURE_2D, shadowMap.depthTexture);
-                rhi::setUniformInt(currentShader, "u_shadowMap", 1);
-                rhi::setUniformInt(currentShader, "u_shadowsEnabled", 1);
-                rhi::setUniformFloat(currentShader, "u_shadowBias", shadowCfg.bias);
-                rhi::setUniformMat4(currentShader, "u_lightSpaceMatrix", lightSpaceMat);
-            } else {
-                rhi::setUniformInt(currentShader, "u_shadowsEnabled", 0);
-            }
         }
 
         // --- Build model matrix from Transform3D ---
@@ -496,54 +560,116 @@ void meshRenderSystem(World& world, const Camera& camera3d,
                                      skeleton.boneCount > 0 ? skeleton.boneCount : 1);
         }
 
-        // --- Per-entity material (from Material3D if present, else defaults) ---
-        glm::vec4 diffuseColor{1.0f, 1.0f, 1.0f, 1.0f};
-        rhi::TextureHandle diffuseTex = defaultWhite;
-        glm::vec3 specularColor{1.0f, 1.0f, 1.0f};
-        f32 shininess = 32.0f;
-        rhi::TextureHandle normalMapTex{};
-        rhi::TextureHandle specularMapTex{};
+        if (usePbr) {
+            // ---- PBR material path ----
+            // Upload PBR material scalar uniforms
+            rhi::setUniformVec4(currentShader,  "u_albedo",          pbrMat->albedo);
+            rhi::setUniformFloat(currentShader, "u_metallic",        pbrMat->metallic);
+            rhi::setUniformFloat(currentShader, "u_roughness",       pbrMat->roughness);
+            rhi::setUniformFloat(currentShader, "u_normalScale",     pbrMat->normalScale);
+            rhi::setUniformFloat(currentShader, "u_ao",              pbrMat->ao);
+            rhi::setUniformVec3(currentShader,  "u_emissiveFactor",  pbrMat->emissiveFactor);
 
-        const Material3D* mat = world.registry().try_get<Material3D>(entity);
-        if (mat != nullptr) {
-            diffuseColor = mat->diffuseColor;
-            if (rhi::isValid(mat->diffuseTexture)) {
-                diffuseTex = mat->diffuseTexture;
+            // Bind albedo map to unit 0
+            if (rhi::isValid(pbrMat->albedoMap)) {
+                rhi::bindTexture(pbrMat->albedoMap, 0);
+                rhi::setUniformInt(currentShader, "u_albedoMap", 0);
+                rhi::setUniformInt(currentShader, "u_hasAlbedoMap", 1);
+            } else {
+                rhi::bindTexture(defaultWhite, 0);
+                rhi::setUniformInt(currentShader, "u_albedoMap", 0);
+                rhi::setUniformInt(currentShader, "u_hasAlbedoMap", 0);
             }
-            specularColor = mat->specularColor;
-            shininess     = mat->shininess;
-            normalMapTex  = mat->normalMapTexture;
-            specularMapTex = mat->specularMapTexture;
-        }
 
-        rhi::setUniformVec4(currentShader, "u_diffuseColor", diffuseColor);
+            // Bind normal map to unit 2 (unit 1 is shadow map)
+            if (rhi::isValid(pbrMat->normalMap)) {
+                glActiveTexture(GL_TEXTURE0 + 2);
+                glBindTexture(GL_TEXTURE_2D, pbrMat->normalMap.id);
+                rhi::setUniformInt(currentShader, "u_normalMap", 2);
+                rhi::setUniformInt(currentShader, "u_hasNormalMap", 1);
+            } else {
+                rhi::setUniformInt(currentShader, "u_hasNormalMap", 0);
+            }
 
-        // Bind diffuse texture to unit 0
-        rhi::bindTexture(diffuseTex, 0);
-        rhi::setUniformInt(currentShader, "u_diffuseTexture", 0);
+            // Bind metallic-roughness map to unit 3
+            if (rhi::isValid(pbrMat->metallicRoughnessMap)) {
+                glActiveTexture(GL_TEXTURE0 + 3);
+                glBindTexture(GL_TEXTURE_2D, pbrMat->metallicRoughnessMap.id);
+                rhi::setUniformInt(currentShader, "u_metallicRoughnessMap", 3);
+                rhi::setUniformInt(currentShader, "u_hasMetallicRoughnessMap", 1);
+            } else {
+                rhi::setUniformInt(currentShader, "u_hasMetallicRoughnessMap", 0);
+            }
 
-        // Upload specular material properties
-        rhi::setUniformVec3(currentShader, "u_specularColor", specularColor);
-        rhi::setUniformFloat(currentShader, "u_shininess", shininess);
+            // Bind AO map to unit 4
+            if (rhi::isValid(pbrMat->aoMap)) {
+                glActiveTexture(GL_TEXTURE0 + 4);
+                glBindTexture(GL_TEXTURE_2D, pbrMat->aoMap.id);
+                rhi::setUniformInt(currentShader, "u_aoMap", 4);
+                rhi::setUniformInt(currentShader, "u_hasAoMap", 1);
+            } else {
+                rhi::setUniformInt(currentShader, "u_hasAoMap", 0);
+            }
 
-        // Bind normal map to unit 2 (unit 1 is shadow map)
-        if (rhi::isValid(normalMapTex)) {
-            glActiveTexture(GL_TEXTURE0 + 2);
-            glBindTexture(GL_TEXTURE_2D, normalMapTex.id);
-            rhi::setUniformInt(currentShader, "u_normalMap", 2);
-            rhi::setUniformInt(currentShader, "u_hasNormalMap", 1);
+            // Bind emissive map to unit 5
+            if (rhi::isValid(pbrMat->emissiveMap)) {
+                glActiveTexture(GL_TEXTURE0 + 5);
+                glBindTexture(GL_TEXTURE_2D, pbrMat->emissiveMap.id);
+                rhi::setUniformInt(currentShader, "u_emissiveMap", 5);
+                rhi::setUniformInt(currentShader, "u_hasEmissiveMap", 1);
+            } else {
+                rhi::setUniformInt(currentShader, "u_hasEmissiveMap", 0);
+            }
         } else {
-            rhi::setUniformInt(currentShader, "u_hasNormalMap", 0);
-        }
+            // ---- Blinn-Phong material path (unchanged) ----
+            glm::vec4 diffuseColor{1.0f, 1.0f, 1.0f, 1.0f};
+            rhi::TextureHandle diffuseTex = defaultWhite;
+            glm::vec3 specularColor{1.0f, 1.0f, 1.0f};
+            f32 shininess = 32.0f;
+            rhi::TextureHandle normalMapTex{};
+            rhi::TextureHandle specularMapTex{};
 
-        // Bind specular map to unit 3
-        if (rhi::isValid(specularMapTex)) {
-            glActiveTexture(GL_TEXTURE0 + 3);
-            glBindTexture(GL_TEXTURE_2D, specularMapTex.id);
-            rhi::setUniformInt(currentShader, "u_specularMap", 3);
-            rhi::setUniformInt(currentShader, "u_hasSpecularMap", 1);
-        } else {
-            rhi::setUniformInt(currentShader, "u_hasSpecularMap", 0);
+            const Material3D* mat = world.registry().try_get<Material3D>(entity);
+            if (mat != nullptr) {
+                diffuseColor = mat->diffuseColor;
+                if (rhi::isValid(mat->diffuseTexture)) {
+                    diffuseTex = mat->diffuseTexture;
+                }
+                specularColor = mat->specularColor;
+                shininess     = mat->shininess;
+                normalMapTex  = mat->normalMapTexture;
+                specularMapTex = mat->specularMapTexture;
+            }
+
+            rhi::setUniformVec4(currentShader, "u_diffuseColor", diffuseColor);
+
+            // Bind diffuse texture to unit 0
+            rhi::bindTexture(diffuseTex, 0);
+            rhi::setUniformInt(currentShader, "u_diffuseTexture", 0);
+
+            // Upload specular material properties
+            rhi::setUniformVec3(currentShader, "u_specularColor", specularColor);
+            rhi::setUniformFloat(currentShader, "u_shininess", shininess);
+
+            // Bind normal map to unit 2 (unit 1 is shadow map)
+            if (rhi::isValid(normalMapTex)) {
+                glActiveTexture(GL_TEXTURE0 + 2);
+                glBindTexture(GL_TEXTURE_2D, normalMapTex.id);
+                rhi::setUniformInt(currentShader, "u_normalMap", 2);
+                rhi::setUniformInt(currentShader, "u_hasNormalMap", 1);
+            } else {
+                rhi::setUniformInt(currentShader, "u_hasNormalMap", 0);
+            }
+
+            // Bind specular map to unit 3
+            if (rhi::isValid(specularMapTex)) {
+                glActiveTexture(GL_TEXTURE0 + 3);
+                glBindTexture(GL_TEXTURE_2D, specularMapTex.id);
+                rhi::setUniformInt(currentShader, "u_specularMap", 3);
+                rhi::setUniformInt(currentShader, "u_hasSpecularMap", 1);
+            } else {
+                rhi::setUniformInt(currentShader, "u_hasSpecularMap", 0);
+            }
         }
 
         // --- Issue indexed draw call via the mesh VAO ---
@@ -556,8 +682,16 @@ void meshRenderSystem(World& world, const Camera& camera3d,
     }
     glBindVertexArray(0);
 
-    // --- Unbind textures from units 1-3 after all entities drawn ---
-    // Unit 1: shadow map, Unit 2: normal map, Unit 3: specular map
+    // --- Unbind textures from units 1-6 after all entities drawn ---
+    // Unit 0: albedo/diffuse, Unit 1: shadow map, Unit 2: normal map,
+    // Unit 3: metallic-roughness/specular, Unit 4: AO, Unit 5: emissive,
+    // Unit 6: skybox cubemap (IBL)
+    glActiveTexture(GL_TEXTURE0 + 6);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+    glActiveTexture(GL_TEXTURE0 + 5);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE0 + 4);
+    glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE0 + 3);
     glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE0 + 2);

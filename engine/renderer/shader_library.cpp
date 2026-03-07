@@ -442,6 +442,325 @@ void main() {
 
 // Fragment shader for skinned shadow depth is identical to the static version.
 
+// --- PBR metallic-roughness shaders (Cook-Torrance BRDF) ---
+// Vertex shader is identical to MESH_BLINN_PHONG — same attributes:
+// position(loc 0), normal(loc 1), texcoord(loc 2), tangent(loc 3).
+// Fragment shader implements GGX/Smith-Schlick/Fresnel-Schlick BRDF.
+
+static const char* const MESH_PBR_FRAG_SOURCE = R"glsl(
+#version 330 core
+
+#define MAX_POINT_LIGHTS 8
+#define PI 3.14159265359
+
+in vec3 v_fragPos;
+in vec3 v_normal;
+in vec2 v_texcoord;
+in vec4 v_fragPosLightSpace;
+in vec3 v_tangent;
+
+// --- Material uniforms ---
+uniform vec4      u_albedo;
+uniform float     u_metallic;
+uniform float     u_roughness;
+uniform float     u_normalScale;
+uniform float     u_ao;
+uniform vec3      u_emissiveFactor;
+
+// --- Material texture maps ---
+uniform sampler2D u_albedoMap;
+uniform int       u_hasAlbedoMap;
+uniform sampler2D u_metallicRoughnessMap;
+uniform int       u_hasMetallicRoughnessMap;
+uniform sampler2D u_normalMap;
+uniform int       u_hasNormalMap;
+uniform sampler2D u_aoMap;
+uniform int       u_hasAoMap;
+uniform sampler2D u_emissiveMap;
+uniform int       u_hasEmissiveMap;
+
+// --- Scene lighting ---
+uniform vec3      u_lightDir;
+uniform vec3      u_lightColor;
+uniform vec3      u_ambientColor;
+uniform vec3      u_viewPos;
+
+// --- Point lights ---
+uniform int   u_pointLightCount;
+uniform vec3  u_pointLightPos[MAX_POINT_LIGHTS];
+uniform vec3  u_pointLightColor[MAX_POINT_LIGHTS];
+uniform float u_pointLightRadius[MAX_POINT_LIGHTS];
+
+// --- Shadow map ---
+uniform sampler2D u_shadowMap;
+uniform int       u_shadowsEnabled;
+uniform float     u_shadowBias;
+uniform mat4      u_lightSpaceMatrix;
+
+// --- Fog ---
+uniform int   u_fogEnabled;
+uniform vec3  u_fogColor;
+uniform float u_fogNear;
+uniform float u_fogFar;
+
+// --- Skybox for IBL approximation ---
+uniform samplerCube u_skybox;
+uniform int         u_hasSkybox;
+
+out vec4 fragColor;
+
+// ----- Cook-Torrance BRDF functions -----
+
+// GGX/Trowbridge-Reitz Normal Distribution Function
+float distributionGGX(vec3 N, vec3 H, float roughness) {
+    float a  = roughness * roughness;
+    float a2 = a * a;
+    float NdotH  = max(dot(N, H), 0.0);
+    float NdotH2 = NdotH * NdotH;
+    float denom  = NdotH2 * (a2 - 1.0) + 1.0;
+    denom = PI * denom * denom;
+    return a2 / max(denom, 0.0000001);
+}
+
+// Smith-Schlick Geometry Function (single direction)
+float geometrySchlickGGX(float NdotV, float roughness) {
+    float r = roughness + 1.0;
+    float k = (r * r) / 8.0;
+    return NdotV / (NdotV * (1.0 - k) + k);
+}
+
+// Smith Geometry Function (both view and light directions)
+float geometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
+    float NdotV = max(dot(N, V), 0.0);
+    float NdotL = max(dot(N, L), 0.0);
+    float ggx1  = geometrySchlickGGX(NdotV, roughness);
+    float ggx2  = geometrySchlickGGX(NdotL, roughness);
+    return ggx1 * ggx2;
+}
+
+// Schlick Fresnel Approximation
+vec3 fresnelSchlick(float cosTheta, vec3 F0) {
+    return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
+// Schlick Fresnel with roughness (for IBL ambient specular)
+vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness) {
+    return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
+// ----- Normal mapping -----
+
+vec3 getNormal() {
+    vec3 N = normalize(v_normal);
+    if (u_hasNormalMap != 0) {
+        float tangentLen = length(v_tangent);
+        if (tangentLen > 0.001) {
+            vec3 T = v_tangent / tangentLen;
+            T = normalize(T - dot(T, N) * N);
+            vec3 B = cross(N, T);
+            mat3 TBN = mat3(T, B, N);
+            vec3 mapNormal = texture(u_normalMap, v_texcoord).rgb * 2.0 - 1.0;
+            mapNormal.xy *= u_normalScale;
+            N = normalize(TBN * mapNormal);
+        }
+    }
+    return N;
+}
+
+// ----- Shadow calculation (reused from Blinn-Phong) -----
+
+float calcShadow(vec4 fragPosLS) {
+    if (u_shadowsEnabled == 0) return 1.0;
+    vec3 projCoords = fragPosLS.xyz / fragPosLS.w;
+    projCoords = projCoords * 0.5 + 0.5;
+    if (projCoords.z > 1.0) return 1.0;
+    float shadow = 0.0;
+    vec2 texelSize = 1.0 / vec2(textureSize(u_shadowMap, 0));
+    for (int x = -1; x <= 1; ++x) {
+        for (int y = -1; y <= 1; ++y) {
+            float pcfDepth = texture(u_shadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
+            shadow += (projCoords.z - u_shadowBias) > pcfDepth ? 1.0 : 0.0;
+        }
+    }
+    return 1.0 - (shadow / 9.0);
+}
+
+// ----- Cook-Torrance reflectance for a single light -----
+
+vec3 calcReflectance(vec3 N, vec3 V, vec3 L, vec3 radiance,
+                     vec3 albedo, float metallic, float roughness, vec3 F0) {
+    vec3 H = normalize(V + L);
+
+    float NDF = distributionGGX(N, H, roughness);
+    float G   = geometrySmith(N, V, L, roughness);
+    vec3  F   = fresnelSchlick(max(dot(H, V), 0.0), F0);
+
+    // Specular BRDF: D * G * F / (4 * NdotL * NdotV)
+    float NdotL = max(dot(N, L), 0.0);
+    float NdotV = max(dot(N, V), 0.0);
+    vec3  numerator   = NDF * G * F;
+    float denominator = 4.0 * NdotV * NdotL + 0.0001;
+    vec3  specular    = numerator / denominator;
+
+    // Energy conservation: diffuse = (1 - F) * (1 - metallic)
+    vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);
+
+    // Lambertian diffuse
+    return (kD * albedo / PI + specular) * radiance * NdotL;
+}
+
+void main() {
+    // --- Sample material properties ---
+    vec4 albedoSample = u_albedo;
+    if (u_hasAlbedoMap != 0) {
+        albedoSample *= texture(u_albedoMap, v_texcoord);
+    }
+    vec3 albedo = albedoSample.rgb;
+    float alpha = albedoSample.a;
+
+    float metallic  = u_metallic;
+    float roughness = u_roughness;
+    if (u_hasMetallicRoughnessMap != 0) {
+        vec4 mrSample = texture(u_metallicRoughnessMap, v_texcoord);
+        roughness *= mrSample.g;  // Green = roughness (glTF)
+        metallic  *= mrSample.b;  // Blue  = metallic  (glTF)
+    }
+    // Clamp roughness to avoid division by zero in GGX
+    roughness = clamp(roughness, 0.04, 1.0);
+
+    float aoFactor = u_ao;
+    if (u_hasAoMap != 0) {
+        aoFactor *= texture(u_aoMap, v_texcoord).r;
+    }
+
+    vec3 emissive = u_emissiveFactor;
+    if (u_hasEmissiveMap != 0) {
+        emissive *= texture(u_emissiveMap, v_texcoord).rgb;
+    }
+
+    // --- Geometric terms ---
+    vec3 N = getNormal();
+    vec3 V = normalize(u_viewPos - v_fragPos);
+
+    // F0: base reflectivity. Dielectrics ~ 0.04, metals use albedo.
+    vec3 F0 = mix(vec3(0.04), albedo, metallic);
+
+    // --- Directional light ---
+    vec3 Lo = vec3(0.0);
+    {
+        vec3 L = normalize(-u_lightDir);
+        float shadowFactor = calcShadow(v_fragPosLightSpace);
+        vec3 radiance = u_lightColor * shadowFactor;
+        Lo += calcReflectance(N, V, L, radiance, albedo, metallic, roughness, F0);
+    }
+
+    // --- Point lights ---
+    for (int i = 0; i < u_pointLightCount; ++i) {
+        vec3  toLight = u_pointLightPos[i] - v_fragPos;
+        float dist    = length(toLight);
+        float r       = u_pointLightRadius[i];
+        float dr      = dist / max(r, 0.001);
+        float atten   = 1.0 / (1.0 + 2.0 * dr + dr * dr);
+
+        vec3 L = normalize(toLight);
+        vec3 radiance = u_pointLightColor[i] * atten;
+        Lo += calcReflectance(N, V, L, radiance, albedo, metallic, roughness, F0);
+    }
+
+    // --- Ambient / IBL approximation ---
+    vec3 ambient;
+    float NdotV = max(dot(N, V), 0.0);
+    vec3 F = fresnelSchlickRoughness(NdotV, F0, roughness);
+    vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);
+
+    if (u_hasSkybox != 0) {
+        // IBL approximation: sample skybox at high mip for blurred result.
+        // Diffuse: sample at normal direction (approximates irradiance).
+        // Specular: sample at reflected direction (approximates prefiltered env).
+        // This is a rough approximation — proper IBL uses precomputed irradiance
+        // and prefiltered cubemaps. Sufficient for M1 visual quality.
+        vec3 R = reflect(-V, N);
+
+        // Use textureLod with roughness-based mip level for specular blur.
+        // Most cubemaps have ~5 mip levels. Roughness 0 = sharp, 1 = blurry.
+        float specularMip = roughness * 4.0;
+        vec3 prefilteredColor = textureLod(u_skybox, R, specularMip).rgb;
+
+        // Diffuse irradiance: sample at normal with high mip (very blurred).
+        vec3 irradiance = textureLod(u_skybox, N, 4.0).rgb;
+
+        vec3 diffuseIBL  = irradiance * albedo * kD;
+        vec3 specularIBL = prefilteredColor * F;
+        ambient = (diffuseIBL + specularIBL) * aoFactor;
+    } else {
+        // No skybox — fall back to flat ambient (same as Blinn-Phong fallback).
+        ambient = u_ambientColor * albedo * kD * aoFactor;
+    }
+
+    vec3 color = ambient + Lo + emissive;
+
+    // --- Fog ---
+    if (u_fogEnabled != 0) {
+        float dist = length(v_fragPos - u_viewPos);
+        float fogFactor = clamp((u_fogFar - dist) / (u_fogFar - u_fogNear), 0.0, 1.0);
+        color = mix(u_fogColor, color, fogFactor);
+    }
+
+    // Output HDR linear color — tone mapping is applied in a later pass (M2).
+    fragColor = vec4(color, alpha);
+}
+)glsl";
+
+// --- PBR skinned vertex shader ---
+// Extends MESH_PBR with bone matrix vertex transformation.
+// Same as MESH_SKINNED_VERT_SOURCE but for the PBR pipeline.
+
+static const char* const MESH_PBR_SKINNED_VERT_SOURCE = R"glsl(
+#version 330 core
+
+#define MAX_BONES 64
+
+layout(location = 0) in vec3 a_position;
+layout(location = 1) in vec3 a_normal;
+layout(location = 2) in vec2 a_texcoord;
+layout(location = 3) in vec3 a_tangent;
+layout(location = 4) in ivec4 a_joints;
+layout(location = 5) in vec4  a_weights;
+
+uniform mat4 u_model;
+uniform mat4 u_viewProjection;
+uniform mat3 u_normalMatrix;
+uniform mat4 u_lightSpaceMatrix;
+uniform mat4 u_boneMatrices[MAX_BONES];
+
+out vec3 v_fragPos;
+out vec3 v_normal;
+out vec2 v_texcoord;
+out vec4 v_fragPosLightSpace;
+out vec3 v_tangent;
+
+void main() {
+    mat4 skinMatrix = a_weights.x * u_boneMatrices[a_joints.x]
+                    + a_weights.y * u_boneMatrices[a_joints.y]
+                    + a_weights.z * u_boneMatrices[a_joints.z]
+                    + a_weights.w * u_boneMatrices[a_joints.w];
+
+    vec4 skinnedPos    = skinMatrix * vec4(a_position, 1.0);
+    vec3 skinnedNormal = mat3(skinMatrix) * a_normal;
+
+    vec4 worldPos       = u_model * skinnedPos;
+    v_fragPos           = worldPos.xyz;
+    v_normal            = u_normalMatrix * skinnedNormal;
+    v_tangent           = u_normalMatrix * (mat3(skinMatrix) * a_tangent);
+    v_texcoord          = a_texcoord;
+    v_fragPosLightSpace = u_lightSpaceMatrix * worldPos;
+    gl_Position         = u_viewProjection * worldPos;
+}
+)glsl";
+
+// Fragment shader for PBR skinned is identical to the static PBR version.
+// Both share the same fragment shader string pointer (MESH_PBR_FRAG_SOURCE).
+
 // ==================== Library Implementation ====================
 
 struct ShaderPair {
@@ -459,6 +778,8 @@ static const ShaderPair PAIRS[] = {
     { SKYBOX_VERT_SOURCE,              SKYBOX_FRAG_SOURCE,              "skybox"                },
     { MESH_SKINNED_VERT_SOURCE,        MESH_BLINN_PHONG_FRAG_SOURCE,    "mesh_skinned"          },
     { SHADOW_DEPTH_SKINNED_VERT_SOURCE, SHADOW_DEPTH_FRAG_SOURCE,       "shadow_depth_skinned"  },
+    { MESH_BLINN_PHONG_VERT_SOURCE,    MESH_PBR_FRAG_SOURCE,            "mesh_pbr"              },
+    { MESH_PBR_SKINNED_VERT_SOURCE,    MESH_PBR_FRAG_SOURCE,            "mesh_pbr_skinned"      },
 };
 static_assert(sizeof(PAIRS) / sizeof(PAIRS[0]) == static_cast<u32>(BuiltinShader::COUNT));
 

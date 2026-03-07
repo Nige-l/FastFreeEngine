@@ -20,6 +20,7 @@ extern "C" {
 #include "renderer/rhi.h"
 #include "renderer/texture_loader.h"
 #include "renderer/camera.h"
+#include "renderer/pbr_material.h"
 
 #include "audio/audio.h"
 #include "renderer/text_renderer.h"
@@ -4529,6 +4530,197 @@ void ScriptEngine::registerEcsBindings() {
     };
     lua_pushcfunction(L, ffe_setMeshSpecularMap);
     lua_setfield(L, -2, "setMeshSpecularMap");
+
+    // =========================================================================
+    // PBR Material bindings
+    // =========================================================================
+
+    // ffe.setPBRMaterial(entityId: integer, params: table) -> nothing
+    // Create or update a PBRMaterial component on the entity.
+    // params is a table with optional fields:
+    //   albedo = {r, g, b, a}     (default 1,1,1,1)
+    //   metallic = number         (default 0.0, clamped 0-1)
+    //   roughness = number        (default 0.5, clamped 0.04-1.0)
+    //   normalScale = number      (default 1.0)
+    //   ao = number               (default 1.0, clamped 0-1)
+    //   emissive = {r, g, b}      (default 0,0,0)
+    auto ffe_setPBRMaterial = [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TNUMBER) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.setPBRMaterial: argument 1 (entityId) must be a number");
+            return 0;
+        }
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = lua_tointeger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) { return 0; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.setPBRMaterial: invalid entity ID %" PRId64,
+                          static_cast<long long>(rawId));
+            return 0;
+        }
+
+        ffe::renderer::PBRMaterial& mat = world->registry().get_or_emplace<ffe::renderer::PBRMaterial>(
+            static_cast<entt::entity>(entityId));
+
+        // If arg 2 is a table, read optional fields from it
+        if (lua_istable(state, 2)) {
+            // albedo = {r, g, b, a}
+            lua_getfield(state, 2, "albedo");
+            if (lua_istable(state, -1)) {
+                lua_rawgeti(state, -1, 1);
+                const ffe::f32 r = static_cast<ffe::f32>(luaL_optnumber(state, -1, 1.0));
+                lua_pop(state, 1);
+                lua_rawgeti(state, -1, 2);
+                const ffe::f32 g = static_cast<ffe::f32>(luaL_optnumber(state, -1, 1.0));
+                lua_pop(state, 1);
+                lua_rawgeti(state, -1, 3);
+                const ffe::f32 b = static_cast<ffe::f32>(luaL_optnumber(state, -1, 1.0));
+                lua_pop(state, 1);
+                lua_rawgeti(state, -1, 4);
+                const ffe::f32 a = static_cast<ffe::f32>(luaL_optnumber(state, -1, 1.0));
+                lua_pop(state, 1);
+                mat.albedo = {r, g, b, a};
+            }
+            lua_pop(state, 1);
+
+            // metallic (clamped 0-1)
+            lua_getfield(state, 2, "metallic");
+            if (lua_isnumber(state, -1)) {
+                mat.metallic = std::clamp(static_cast<ffe::f32>(lua_tonumber(state, -1)), 0.0f, 1.0f);
+            }
+            lua_pop(state, 1);
+
+            // roughness (clamped 0.04-1.0)
+            lua_getfield(state, 2, "roughness");
+            if (lua_isnumber(state, -1)) {
+                mat.roughness = std::clamp(static_cast<ffe::f32>(lua_tonumber(state, -1)), 0.04f, 1.0f);
+            }
+            lua_pop(state, 1);
+
+            // normalScale
+            lua_getfield(state, 2, "normalScale");
+            if (lua_isnumber(state, -1)) {
+                mat.normalScale = static_cast<ffe::f32>(lua_tonumber(state, -1));
+            }
+            lua_pop(state, 1);
+
+            // ao (clamped 0-1)
+            lua_getfield(state, 2, "ao");
+            if (lua_isnumber(state, -1)) {
+                mat.ao = std::clamp(static_cast<ffe::f32>(lua_tonumber(state, -1)), 0.0f, 1.0f);
+            }
+            lua_pop(state, 1);
+
+            // emissive = {r, g, b}
+            lua_getfield(state, 2, "emissive");
+            if (lua_istable(state, -1)) {
+                lua_rawgeti(state, -1, 1);
+                const ffe::f32 er = static_cast<ffe::f32>(luaL_optnumber(state, -1, 0.0));
+                lua_pop(state, 1);
+                lua_rawgeti(state, -1, 2);
+                const ffe::f32 eg = static_cast<ffe::f32>(luaL_optnumber(state, -1, 0.0));
+                lua_pop(state, 1);
+                lua_rawgeti(state, -1, 3);
+                const ffe::f32 eb = static_cast<ffe::f32>(luaL_optnumber(state, -1, 0.0));
+                lua_pop(state, 1);
+                mat.emissiveFactor = {er, eg, eb};
+            }
+            lua_pop(state, 1);
+        }
+
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_setPBRMaterial);
+    lua_setfield(L, -2, "setPBRMaterial");
+
+    // ffe.setPBRTexture(entityId: integer, slot: string, textureHandle: integer) -> nothing
+    // Set a texture map on the entity's PBRMaterial.
+    // slot: "albedo", "metallicRoughness", "normal", "ao", "emissive"
+    // textureHandle: integer from ffe.loadTexture (0 = clear).
+    auto ffe_setPBRTexture = [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TNUMBER) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.setPBRTexture: argument 1 (entityId) must be a number");
+            return 0;
+        }
+        if (lua_type(state, 2) != LUA_TSTRING) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.setPBRTexture: argument 2 (slot) must be a string");
+            return 0;
+        }
+
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = lua_tointeger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) { return 0; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.setPBRTexture: invalid entity ID %" PRId64,
+                          static_cast<long long>(rawId));
+            return 0;
+        }
+
+        const char* slot = lua_tostring(state, 2);
+        const lua_Integer rawTex = luaL_optinteger(state, 3, 0);
+        if (rawTex < 0) {
+            FFE_LOG_WARN("ScriptEngine", "ffe.setPBRTexture: negative textureHandle ignored");
+            return 0;
+        }
+        const ffe::rhi::TextureHandle texHandle{static_cast<ffe::u32>(rawTex)};
+
+        ffe::renderer::PBRMaterial& mat = world->registry().get_or_emplace<ffe::renderer::PBRMaterial>(
+            static_cast<entt::entity>(entityId));
+
+        if (std::strcmp(slot, "albedo") == 0) {
+            mat.albedoMap = texHandle;
+        } else if (std::strcmp(slot, "metallicRoughness") == 0) {
+            mat.metallicRoughnessMap = texHandle;
+        } else if (std::strcmp(slot, "normal") == 0) {
+            mat.normalMap = texHandle;
+        } else if (std::strcmp(slot, "ao") == 0) {
+            mat.aoMap = texHandle;
+        } else if (std::strcmp(slot, "emissive") == 0) {
+            mat.emissiveMap = texHandle;
+        } else {
+            FFE_LOG_WARN("ScriptEngine", "ffe.setPBRTexture: unknown slot '%s'", slot);
+        }
+
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_setPBRTexture);
+    lua_setfield(L, -2, "setPBRTexture");
+
+    // ffe.removePBRMaterial(entityId: integer) -> nothing
+    // Remove PBRMaterial component; entity falls back to Material3D / Blinn-Phong.
+    auto ffe_removePBRMaterial = [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TNUMBER) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.removePBRMaterial: argument 1 (entityId) must be a number");
+            return 0;
+        }
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = lua_tointeger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) { return 0; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) { return 0; }
+        if (!world->hasComponent<ffe::renderer::PBRMaterial>(entityId)) { return 0; }
+
+        world->removeComponent<ffe::renderer::PBRMaterial>(entityId);
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_removePBRMaterial);
+    lua_setfield(L, -2, "removePBRMaterial");
 
     // ffe.setLightDirection(x, y, z: number) -> nothing
     // Set the scene directional light direction (world space).

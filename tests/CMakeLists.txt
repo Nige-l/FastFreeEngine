@@ -18,6 +18,7 @@ add_executable(ffe_tests
     renderer/test_skybox.cpp
     renderer/test_skeleton.cpp
     renderer/test_fog.cpp
+    renderer/test_pbr_material.cpp
 )
 
 target_link_libraries(ffe_tests
@@ -49,6 +50,7 @@ add_executable(ffe_tests_scripting
     scripting/test_physics3d_collision_bindings.cpp
     scripting/test_scene_load_binding.cpp
     scripting/test_networking_bindings.cpp
+    scripting/test_pbr_bindings.cpp
 )
 
 target_link_libraries(ffe_tests_scripting
