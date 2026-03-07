@@ -24,22 +24,30 @@ FFE is free and open source forever. MIT licensed. That is not up for debate.
 
 ## Showcase: "Echoes of the Ancients"
 
-FFE's flagship demo is a **multi-level 3D action-exploration game** built entirely in Lua on top of the engine. It proves that FFE can ship real, playable games -- not just tech demos.
+FFE's flagship demo is a **3-level 3D action-exploration game** showcasing the engine's full capabilities. Built entirely in Lua on top of the engine, it proves that FFE can ship real, playable games -- not just tech demos.
 
-**The game features:**
-- 3 distinct levels: an outdoor courtyard, an underground temple, and a tower summit
+**3 Levels:**
+- **The Courtyard** -- Outdoor ruins with push-block puzzles, guardian enemies, destructible walls, fog, directional shadows, and 4 point lights
+- **The Temple** -- Underground temple with dark atmospheric lighting, lava pits, crystal sequence puzzles, timed disappearing bridges, and a boss guardian
+- **The Summit** -- Floating islands above the clouds, dramatic sunset skybox, timed platforms, and a final boss encounter
+
+**Game Features:**
+- Real 3D models (.glb) from Khronos glTF samples (damaged helmet, animated characters, fox, duck, and more)
 - Third-person orbit camera with physics-based movement and jumping
 - Combat system with melee attacks, health, and damage
 - Guardian enemies with patrol/chase AI state machines
-- Physics puzzles: push-blocks, pressure plates, gates, destructible walls
-- Crystal puzzle sequences and timed disappearing platforms
-- Boss guardians with increased HP and distinct behavior
-- Real CC0 3D models (.glb): characters, helmets, animals, and more
+- Push-block puzzles, crystal sequence puzzles, timed platforms, pressure plates, destructible walls
+- Boss fights with increased HP and distinct behavior
 - Atmospheric lighting: directional shadows, up to 4 point lights, linear fog
 - Skybox environments, particle effects, and spatial audio
 - Original music tracks per level
-- Full gamepad support (Xbox controller)
+- Main menu with gamepad support and victory screen with completion stats
+- Full Xbox controller and keyboard+mouse support
 - HUD with health bar, artifact count, and interaction prompts
+
+```bash
+./build/examples/runtime/ffe_runtime examples/showcase/game.lua
+```
 
 The showcase exercises every major engine subsystem in a single cohesive experience and serves as a reference implementation for developers learning FFE.
 
@@ -278,10 +286,10 @@ cmake -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++-18 -DFFE_TIER=MODERN
 
 ### Echoes of the Ancients (Showcase)
 
-The flagship 3D showcase game -- a multi-level action-exploration experience exercising every engine subsystem. Real CC0 3D models, atmospheric lighting, physics puzzles, combat, and original music.
+The flagship 3-level 3D action-exploration game exercising every engine subsystem. Real CC0 3D models (Khronos glTF samples), atmospheric lighting, physics puzzles, combat, and original music.
 
 ```bash
-./build/examples/showcase/ffe_showcase
+./build/examples/runtime/ffe_runtime examples/showcase/game.lua
 ```
 
 - **WASD** to move, **Space** to jump, **Mouse** to orbit camera
@@ -289,6 +297,7 @@ The flagship 3D showcase game -- a multi-level action-exploration experience exe
 - **Xbox controller** fully supported (left stick move, A jump, X attack, Y interact)
 - 3 levels: The Courtyard, The Temple, The Summit
 - Collect artifacts, defeat guardians, solve puzzles
+- Main menu, victory screen with completion stats
 
 ### Collect the Stars (lua_demo)
 
@@ -484,7 +493,7 @@ FastFreeEngine is licensed under the [MIT License](LICENSE). Free and open sourc
 
 ## Status
 
-**Active development.** All five original phases are complete. Phase 6 (showcase game) is in progress, with an ambitious roadmap ahead.
+**Active development.** All six phases are complete. Phase 7 (Rendering Pipeline Modernization) is next.
 
 | Phase | Status |
 |-------|--------|
@@ -493,21 +502,22 @@ FastFreeEngine is licensed under the [MIT License](LICENSE). Free and open sourc
 | Phase 3 -- Standalone Editor | MVP COMPLETE |
 | Phase 4 -- Networking / Multiplayer | COMPLETE |
 | Phase 5 -- Website / Learning Platform | COMPLETE |
-| Phase 6 -- Showcase Game ("Echoes of the Ancients") | IN PROGRESS |
+| Phase 6 -- Showcase Game ("Echoes of the Ancients") | COMPLETE |
+| Phase 7 -- Rendering Pipeline Modernization | NEXT |
 
-### Phase 6: "Echoes of the Ancients"
+### Phase 7: Rendering Pipeline Modernization
 
-The current focus is a multi-level 3D showcase game that proves FFE can ship real, playable games. Built entirely in Lua using the engine's public API:
+The next phase focuses on bringing the renderer up to modern standards while maintaining LEGACY tier compatibility:
 
-- **Level 1 "The Courtyard"** -- Outdoor ruins with push-block puzzles, guardian enemies, destructible walls, fog, directional shadows, 4 point lights. COMPLETE.
-- **Level 2 "The Temple"** -- Underground temple with dark atmospheric lighting, lava pits, crystal puzzle sequences, timed disappearing bridges, boss guardian, battle music. COMPLETE.
-- **Level 3 "The Summit"** -- Floating platforms above the clouds, dramatic sunset skybox, moving platforms, final boss encounter. IN PROGRESS.
-- **Real 3D models** -- 7 CC0 .glb models (damaged helmet, animated characters, fox, duck, and more) replacing placeholder cubes.
-- **Original music** -- Suno-generated tracks for each level.
+- **PBR Materials** -- Physically-based rendering with metallic-roughness workflow
+- **Post-Processing Pipeline** -- Bloom, tone mapping (HDR), and configurable effect chain
+- **GPU Instancing** -- Batched draw calls for repeated meshes (vegetation, props, crowds)
+- **SSAO** -- Screen-space ambient occlusion for improved depth perception
+- **Anti-Aliasing** -- MSAA and/or FXAA for clean edges on all tiers
 
 ### Planned Future Phases
 
-FFE has an ambitious roadmap beyond Phase 6. Planned work includes:
+FFE has an ambitious roadmap beyond Phase 7. Planned work includes:
 
 - **Vulkan Renderer** -- A modern Vulkan backend alongside the existing OpenGL 3.3, enabling STANDARD and MODERN tier features (compute shaders, GPU-driven rendering, ray tracing on MODERN tier)
 - **Terrain System** -- Heightmap-based terrain with LOD, texture splatting, and vegetation placement for open-world games
@@ -515,10 +525,9 @@ FFE has an ambitious roadmap beyond Phase 6. Planned work includes:
 - **Cross-Platform Native Builds** -- Native Windows (MSVC), native macOS (Xcode), Linux packaging (AppImage/Flatpak)
 - **Asset Pipeline** -- Texture compression, mesh optimization, asset bundling, hot-reload during development
 - **Plugin/Extension System** -- C++ and Lua plugin API for community extensions, custom renderers, and tool integrations
-- **Advanced Rendering** -- PBR materials, screen-space reflections, post-processing pipeline, instanced rendering
 - **AI Tooling** -- LLM integration panel in the editor, AI-assisted level design, code generation from natural language
 
-1005 tests pass on both compilers with zero warnings. The engine supports full 2D and 3D game development with multiplayer networking, a standalone editor, 3D physics, skeletal animation, shadow mapping, and more -- demonstrated across six playable demos.
+1005 tests pass on both compilers with zero warnings. The engine supports full 2D and 3D game development with multiplayer networking, a standalone editor, 3D physics, skeletal animation, shadow mapping, and more -- demonstrated across six playable demos including the flagship "Echoes of the Ancients" showcase.
 
 See `docs/devlog.md` for the full session-by-session development history.
 

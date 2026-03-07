@@ -124,7 +124,7 @@ This document defines the phased development plan for FFE. Each phase builds on 
 
 ---
 
-## Phase 5: Website and Learning Platform — COMPLETE
+## Phase 5: Website and Learning Platform — COMPLETE (Sessions 62-65)
 
 **Goal:** A documentation and training website that gets young people into game development and engineering.
 
@@ -146,6 +146,152 @@ This document defines the phased development plan for FFE. Each phase builds on 
 - Site must be fast and accessible (no heavy JS frameworks, works on old browsers)
 - Content must be maintainable — generated from source where possible
 - Tutorials must be tested against the current engine version (CI validates examples)
+
+---
+
+## Phase 6: Showcase Game — COMPLETE (Session 66)
+
+**Goal:** Build a non-trivial 3D game that stress-tests the engine across all subsystems and proves FFE can ship a real, playable experience.
+
+### Delivered
+- [x] "Echoes of the Ancients" — 3-level 3D showcase game with main menu and victory flow
+- [x] Real CC0 3D models from Khronos glTF sample library (not placeholder cubes)
+- [x] Crystal collection puzzles (per-level tracking, particle feedback)
+- [x] Push-block puzzles (grid-based movement, pressure plates, state tracking)
+- [x] Timed platforms (cycling on/off with visual feedback)
+- [x] Boss fights (projectile dodging, hit-point tracking, attack patterns)
+- [x] Gamepad support with dead-zone handling and dynamic HUD (icons swap keyboard/gamepad)
+- [x] Fog rendering system (ffe.setFog / ffe.disableFog, linear depth fog in fragment shaders)
+- [x] Editor ImGui key migration fix (GLFW key codes to ImGuiKey enum)
+
+### Architecture Notes
+- Fog system integrated into the forward renderer at LEGACY tier (OpenGL 3.3)
+- Gamepad dead-zones configurable per-axis, applied before action mapping
+- Showcase game runs entirely in Lua — validates the scripting API completeness for 3D games
+
+---
+
+## Phase 7: Rendering Pipeline Modernization
+
+**Goal:** Upgrade the renderer from basic Blinn-Phong to a modern PBR pipeline with post-processing, while keeping LEGACY tier support for non-PBR paths.
+
+### Milestones
+
+#### M1: PBR Materials
+- [ ] Metallic-roughness workflow (albedo, metallic, roughness, AO, emissive maps)
+- [ ] Cook-Torrance BRDF (GGX normal distribution, Smith geometry, Fresnel-Schlick)
+- [ ] Image-Based Lighting (IBL) — irradiance and prefiltered environment maps
+- [ ] Lua bindings for PBR material properties
+- [ ] Fallback to Blinn-Phong on LEGACY tier
+
+#### M2: Post-Processing Pipeline
+- [ ] Framebuffer-based post-processing stack (render to FBO, apply fullscreen passes)
+- [ ] Bloom (bright-pass extraction, Gaussian blur, additive blend)
+- [ ] Tone mapping (Reinhard, ACES, configurable from Lua)
+- [ ] Gamma correction (linear workflow internally, sRGB output)
+
+#### M3: GPU Instancing
+- [ ] Instanced draw calls for repeated meshes (trees, rocks, particles)
+- [ ] Instance buffer management (per-instance transforms, colors)
+- [ ] Automatic batching of identical mesh+material pairs
+
+#### M4: Skeletal Animation Completion
+- [ ] Animation blending (crossfade between clips, layered blending)
+- [ ] Animation state machine (states, transitions, conditions)
+- [ ] Lua API for state machine control
+- [ ] Root motion extraction
+
+#### M5: Anti-Aliasing
+- [ ] MSAA (multisample anti-aliasing, configurable 2x/4x/8x)
+- [ ] FXAA post-process pass (LEGACY-friendly, low cost)
+- [ ] Configurable from Lua and editor settings
+
+#### M6: SSAO (STANDARD+ Tier)
+- [ ] Screen-Space Ambient Occlusion (hemisphere sampling, blur pass)
+- [ ] STANDARD tier minimum (requires depth buffer access and multiple passes)
+- [ ] Disabled on LEGACY/RETRO tiers — no silent degradation
+
+#### M7: Sprite Batching 2.0
+- [ ] Texture atlas auto-packing (runtime atlas generation for 2D sprites)
+- [ ] Reduced draw calls for multi-texture 2D scenes
+- [ ] Backward-compatible with existing sprite API
+
+#### M8: Phase Close + Showcase Update
+- [ ] Update "Echoes of the Ancients" to use PBR materials and post-processing
+- [ ] Performance validation on LEGACY tier (non-PBR path stays 60fps)
+- [ ] Full build verification (Clang-18 + GCC-13)
+- [ ] Documentation and .context.md updates for all new systems
+
+### Architecture Constraints
+- PBR and post-processing are STANDARD+ by default; LEGACY falls back to Blinn-Phong
+- Post-processing stack must be composable — developers enable/disable passes individually
+- No new dependencies without explicit approval (shader-only implementations preferred)
+- All new rendering features must declare their tier in .context.md
+
+---
+
+## Phase 8: Vulkan Backend
+
+**Goal:** Add a Vulkan rendering backend alongside OpenGL, targeting STANDARD and MODERN tiers for significantly improved draw call throughput and GPU utilization.
+
+### Deliverables (planned)
+- [ ] Vulkan RHI implementation behind existing abstraction layer
+- [ ] Runtime backend selection (OpenGL or Vulkan)
+- [ ] Validation layer integration for development builds
+- [ ] Vulkan-specific optimizations (pipeline caching, descriptor sets)
+- [ ] MODERN tier features (compute shaders, ray tracing hooks)
+
+---
+
+## Phase 9: Terrain and Open World
+
+**Goal:** Large-scale outdoor environment support with terrain rendering, LOD, and streaming.
+
+### Deliverables (planned)
+- [ ] Heightmap terrain rendering (chunked, LOD)
+- [ ] Terrain texturing (splat maps, triplanar projection)
+- [ ] Vegetation system (grass, trees with billboarding)
+- [ ] World streaming (load/unload chunks based on camera position)
+- [ ] Water rendering (reflections, refractions on STANDARD+ tier)
+
+---
+
+## Phase 10: Advanced Editor
+
+**Goal:** Bring the editor to feature parity with commercial engines for common workflows.
+
+### Deliverables (planned)
+- [ ] Visual scripting (node-based graph editor as alternative to Lua)
+- [ ] Prefab system (reusable entity templates with overrides)
+- [ ] LLM integration panel (connect AI assistant, generate code, explain systems)
+- [ ] Editor preferences and project wizard
+- [ ] Animation editor (timeline, keyframes, state machine visualization)
+
+---
+
+## Phase 11: Cross-Platform Native Builds
+
+**Goal:** Native compilation on all major platforms without cross-compilation.
+
+### Deliverables (planned)
+- [ ] MSVC build support (Visual Studio 2022+ on Windows)
+- [ ] Xcode build support (native macOS and iOS)
+- [ ] AppImage packaging for Linux distribution
+- [ ] Mobile targets (Android NDK, iOS — stretch goal)
+- [ ] CI pipelines for all native platforms
+
+---
+
+## Phase 12: Asset Pipeline and Plugin System
+
+**Goal:** A robust asset import/export pipeline and a plugin architecture for extending the engine.
+
+### Deliverables (planned)
+- [ ] Asset import pipeline (model conversion, texture compression, audio transcoding)
+- [ ] Asset caching and hot-reload (detect changes, reimport automatically)
+- [ ] Plugin API (C++ shared libraries, versioned ABI)
+- [ ] Lua plugin distribution (package format, dependency resolution)
+- [ ] Asset store integration (browse, download, import community assets)
 
 ---
 
