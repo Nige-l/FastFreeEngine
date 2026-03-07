@@ -321,6 +321,34 @@ VkInitResult createLogicalDevice(VulkanContext& ctx) {
 }
 
 // ============================================================================
+// VMA Allocator Creation
+// ============================================================================
+
+VkInitResult createAllocator(VulkanContext& ctx) {
+    // VMA needs Vulkan function pointers. Since we use volk (dynamic loading),
+    // we must provide the function pointers explicitly via VmaVulkanFunctions.
+    VmaVulkanFunctions vulkanFunctions{};
+    vulkanFunctions.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
+    vulkanFunctions.vkGetDeviceProcAddr   = vkGetDeviceProcAddr;
+
+    VmaAllocatorCreateInfo allocatorInfo{};
+    allocatorInfo.vulkanApiVersion = VK_API_VERSION_1_0;
+    allocatorInfo.physicalDevice   = ctx.physicalDevice;
+    allocatorInfo.device           = ctx.device;
+    allocatorInfo.instance         = ctx.instance;
+    allocatorInfo.pVulkanFunctions = &vulkanFunctions;
+
+    const VkResult result = vmaCreateAllocator(&allocatorInfo, &ctx.allocator);
+    if (result != VK_SUCCESS) {
+        FFE_LOG_ERROR("Vulkan", "vmaCreateAllocator failed with VkResult %d", static_cast<int>(result));
+        return {false, "Failed to create VMA allocator"};
+    }
+
+    FFE_LOG_INFO("Vulkan", "VMA allocator created");
+    return {true, ""};
+}
+
+// ============================================================================
 // Swap Chain Creation
 // ============================================================================
 
@@ -655,6 +683,12 @@ void shutdownVulkan(VulkanContext& ctx) {
 
     // Swap chain resources (framebuffers, render pass, image views, swap chain)
     destroySwapChainResources(ctx);
+
+    // VMA allocator — destroyed after all buffers/textures, before device
+    if (ctx.allocator != VK_NULL_HANDLE) {
+        vmaDestroyAllocator(ctx.allocator);
+        ctx.allocator = VK_NULL_HANDLE;
+    }
 
     // Logical device
     if (ctx.device != VK_NULL_HANDLE) {

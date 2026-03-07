@@ -13,6 +13,18 @@
 // Define VOLK_IMPLEMENTATION in exactly one translation unit (vk_init.cpp).
 #include <volk.h>
 
+// VMA header (implementation defined in vk_buffer.cpp via VMA_IMPLEMENTATION).
+// We only need the type declarations here; VMA_IMPLEMENTATION is NOT defined in headers.
+// These defines tell VMA to use volk's dynamic function loading rather than
+// statically linking against libvulkan.
+#ifndef VMA_STATIC_VULKAN_FUNCTIONS
+    #define VMA_STATIC_VULKAN_FUNCTIONS 0
+#endif
+#ifndef VMA_DYNAMIC_VULKAN_FUNCTIONS
+    #define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
+#endif
+#include <vk_mem_alloc.h>
+
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 
@@ -85,6 +97,13 @@ struct VulkanContext {
     u32 acquiredImageIndex = 0;
     bool imageAcquired = false;
 
+    // VMA allocator (M2+)
+    VmaAllocator allocator = VK_NULL_HANDLE;
+
+    // Triangle demo pipeline (M2)
+    VkPipeline       trianglePipeline       = VK_NULL_HANDLE;
+    VkPipelineLayout trianglePipelineLayout  = VK_NULL_HANDLE;
+
     // Config snapshot
     bool vsync = true;
     bool debugEnabled = false;
@@ -109,6 +128,9 @@ VkInitResult createSwapChain(VulkanContext& ctx, u32 preferredImageCount);
 
 /// Create semaphores and fences for frame synchronisation.
 VkInitResult createSyncObjects(VulkanContext& ctx);
+
+/// Create VMA allocator for GPU memory management.
+VkInitResult createAllocator(VulkanContext& ctx);
 
 /// Create command pool and allocate command buffers.
 VkInitResult createCommandBuffers(VulkanContext& ctx);

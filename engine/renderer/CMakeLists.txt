@@ -35,6 +35,9 @@ if(FFE_BACKEND STREQUAL "VULKAN")
     list(APPEND RENDERER_SOURCES
         vulkan/rhi_vulkan.cpp
         vulkan/vk_init.cpp
+        vulkan/vk_buffer.cpp
+        vulkan/vk_shader.cpp
+        vulkan/vk_pipeline.cpp
     )
 else()
     # OPENGL backend (default for RETRO, LEGACY, STANDARD)
@@ -64,7 +67,8 @@ target_link_libraries(ffe_renderer
 # Backend-specific link dependencies and compile definitions
 if(FFE_BACKEND STREQUAL "VULKAN")
     find_package(volk CONFIG REQUIRED)
-    target_link_libraries(ffe_renderer PRIVATE volk::volk)
+    find_package(VulkanMemoryAllocator CONFIG REQUIRED)
+    target_link_libraries(ffe_renderer PRIVATE volk::volk GPUOpen::VulkanMemoryAllocator)
     target_compile_definitions(ffe_renderer PUBLIC FFE_BACKEND_VULKAN=1)
 else()
     target_link_libraries(ffe_renderer PRIVATE glad)
