@@ -118,4 +118,84 @@ void applyImpulse(BodyHandle3D handle, const glm::vec3& impulse);
 void      setGravity(const glm::vec3& g);
 glm::vec3 getGravity();
 
+// ---------------------------------------------------------------------------
+// Collision Event System
+// ---------------------------------------------------------------------------
+enum class CollisionEventType : u8 { ENTER, STAY, EXIT };
+
+// Collision event — one per contact pair per frame.
+// Fixed-size, POD, no heap allocation.
+struct CollisionEvent3D {
+    u32 entityA = 0xFFFFFFFF;  // EnTT entity ID (raw value), 0xFFFFFFFF = unmapped
+    u32 entityB = 0xFFFFFFFF;
+    glm::vec3 contactPoint  = {0.0f, 0.0f, 0.0f};
+    glm::vec3 contactNormal = {0.0f, 0.0f, 0.0f};
+    CollisionEventType type = CollisionEventType::ENTER;
+};
+
+// Max collision events buffered per frame.
+inline constexpr u32 MAX_COLLISION_EVENTS = 256;
+
+// Max bodies tracked for BodyID -> entity mapping.
+inline constexpr u32 MAX_BODIES = 1024;
+
+// Get the collision events from the last physics step.
+// Returns a pointer to the internal buffer and the count.
+const CollisionEvent3D* getCollisionEvents3D(u32& outCount);
+
+// Clear collision events (called at start of each physics step).
+void clearCollisionEvents3D();
+
+// ---------------------------------------------------------------------------
+// Body management (entity-aware overload)
+// ---------------------------------------------------------------------------
+BodyHandle3D createBody(const BodyDef3D& def, u32 entityId);
+
+// Look up the entity ID associated with a body handle.
+// Returns 0xFFFFFFFF if the handle is invalid or has no entity mapping.
+u32 getBodyEntityId(BodyHandle3D handle);
+
+// ---------------------------------------------------------------------------
+// Raycasting
+// ---------------------------------------------------------------------------
+
+// Ray hit result — POD, no heap allocation.
+struct RayHit3D {
+    u32 entityId = 0xFFFFFFFF;  // entity that was hit
+    glm::vec3 hitPoint  = {0.0f, 0.0f, 0.0f};
+    glm::vec3 hitNormal = {0.0f, 0.0f, 0.0f};
+    f32 distance = 0.0f;
+    bool valid = false;
+};
+
+inline constexpr u32 MAX_RAY_HITS = 32;
+
+// Cast ray, return first hit.
+RayHit3D castRay(const glm::vec3& origin, const glm::vec3& direction, f32 maxDistance);
+
+// Cast ray, return all hits (up to maxHits, capped at MAX_RAY_HITS).
+// Results written to outHits, sorted by distance (nearest first).
+// Returns number of hits written.
+u32 castRayAll(const glm::vec3& origin, const glm::vec3& direction, f32 maxDistance,
+               RayHit3D* outHits, u32 maxHits = MAX_RAY_HITS);
+
+// ---------------------------------------------------------------------------
+// Collision Callback Dispatch
+// ---------------------------------------------------------------------------
+
+// Function pointer callback type — no std::function (hot-path safe).
+// userData is forwarded from setCollisionCallback3D.
+using CollisionCallback3D = void(*)(const CollisionEvent3D& event, void* userData);
+
+// Register a global collision callback. Only one callback at a time.
+// Pass nullptr to remove.
+void setCollisionCallback3D(CollisionCallback3D callback, void* userData = nullptr);
+
+// Remove the registered collision callback (equivalent to setCollisionCallback3D(nullptr)).
+void removeCollisionCallback3D();
+
+// Dispatch all buffered collision events through the registered callback.
+// Called once per frame after stepPhysics3D(). Safe to call if no callback is set.
+void dispatchCollisionEvents3D();
+
 } // namespace ffe::physics

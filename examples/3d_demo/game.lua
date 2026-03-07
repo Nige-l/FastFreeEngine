@@ -1,4 +1,4 @@
--- game.lua -- "3D Spinning Cubes" demo for FFE
+-- game.lua -- "3D Spinning Cubes + Physics" demo for FFE
 --
 -- Demonstrates the 3D Mesh Rendering API:
 --   ffe.loadMesh / ffe.unloadMesh
@@ -9,6 +9,12 @@
 --   ffe.setLightDirection / ffe.setLightColor / ffe.setAmbientColor
 --   ffe.addPointLight / ffe.setPointLightPosition / ffe.removePointLight
 --
+-- Demonstrates the 3D Physics API:
+--   ffe.createPhysicsBody  (static ground + dynamic falling objects)
+--   ffe.onCollision3D      (collision event callback)
+--   ffe.castRay             (raycast from camera on key press)
+--   ffe.applyImpulse       (kick objects upward on collision)
+--
 -- Three mesh entities orbit the world origin at different speeds and radii,
 -- each tinted a distinct color with specular highlights. Two point lights
 -- orbit the scene to demonstrate dynamic local illumination. A 2D HUD
@@ -16,10 +22,15 @@
 -- ffe.drawText / ffe.drawRect API, showing how 3D and 2D coexist in the
 -- same frame.
 --
+-- Physics: A static ground plane sits at y=-3.  Four dynamic cubes spawn
+-- above it and fall under gravity.  Collision callbacks log impacts.
+-- Press F to cast a ray from the camera and log what it hits.
+--
 -- Controls:
 --   WASD          orbit camera left/right, zoom in/out
 --   UP/DOWN       raise/lower camera elevation
 --   R             reset camera to default position
+--   F             fire raycast from camera
 --   ESC           quit
 --
 -- Asset path: "models/cube.glb" relative to the asset root.
@@ -90,6 +101,18 @@ local camElev = CAM_DEFAULT_ELEV
 local fpsTimer    = 0.0
 local fpsFrames   = 0
 local fpsDisplay  = 0
+
+-- ---------------------------------------------------------------------------
+-- Physics demo state
+-- ---------------------------------------------------------------------------
+local PHYSICS_GROUND_Y    = -3.0    -- ground plane Y position
+local PHYSICS_SPAWN_Y     = 12.0    -- height where dynamic cubes spawn
+local PHYSICS_CUBE_COUNT  = 4       -- number of falling cubes
+
+local physicsCubes   = {}           -- entity IDs of dynamic cubes
+local physicsGround  = 0            -- entity ID of static ground plane
+local collisionCount = 0            -- total collision events received
+local lastRayHitMsg  = ""           -- HUD message for last raycast result
 
 -- ---------------------------------------------------------------------------
 -- Helper: compute camera world position from yaw/dist/elevation
@@ -209,6 +232,72 @@ else
     end
 
     meshLoaded = (entityA ~= 0)
+
+    -- -----------------------------------------------------------------
+    -- Physics demo: static ground plane + falling dynamic cubes
+    -- -----------------------------------------------------------------
+
+    -- Static ground plane: a large, flat box at PHYSICS_GROUND_Y.
+    -- Reuses the cube mesh scaled flat and wide.
+    physicsGround = ffe.createEntity3D(meshHandle, 0, PHYSICS_GROUND_Y, 0)
+    if physicsGround ~= 0 then
+        ffe.setMeshColor(physicsGround, 0.35, 0.55, 0.35, 1.0)  -- muted green
+        ffe.setMeshSpecular(physicsGround, 0.2, 0.2, 0.2, 16)
+        ffe.setTransform3D(physicsGround,
+            0, PHYSICS_GROUND_Y, 0,   -- position
+            0, 0, 0,                  -- rotation
+            50, 0.5, 50)             -- scale: wide and thin
+        ffe.createPhysicsBody(physicsGround, {
+            shape       = "box",
+            halfExtents = {50, 0.5, 50},
+            motion      = "static"
+        })
+        ffe.log("Physics: static ground plane created id=" .. tostring(physicsGround))
+    end
+
+    -- Spawn dynamic cubes that fall under gravity.
+    -- Spread them across the X axis so they don't stack directly.
+    local cubeColors = {
+        {1.0, 0.4, 0.1},   -- orange
+        {0.3, 0.8, 1.0},   -- cyan
+        {1.0, 0.9, 0.2},   -- yellow
+        {0.8, 0.3, 0.9},   -- purple
+    }
+    for i = 1, PHYSICS_CUBE_COUNT do
+        local spawnX = (i - 1) * 2.5 - 3.75  -- spread from -3.75 to 3.75
+        local spawnY = PHYSICS_SPAWN_Y + (i - 1) * 2.0  -- stagger heights
+        local cube = ffe.createEntity3D(meshHandle, spawnX, spawnY, 0)
+        if cube ~= 0 then
+            local c = cubeColors[i]
+            ffe.setMeshColor(cube, c[1], c[2], c[3], 1.0)
+            ffe.setMeshSpecular(cube, 0.5, 0.5, 0.5, 64)
+            ffe.setTransform3D(cube,
+                spawnX, spawnY, 0,
+                0, 0, 0,
+                0.7, 0.7, 0.7)
+            ffe.createPhysicsBody(cube, {
+                shape       = "box",
+                halfExtents = {0.35, 0.35, 0.35},  -- half of 0.7 scale
+                motion      = "dynamic",
+                mass        = 1.0,
+                restitution = 0.4,
+                friction    = 0.6
+            })
+            physicsCubes[i] = cube
+            ffe.log("Physics: dynamic cube " .. i .. " created id=" .. tostring(cube))
+        end
+    end
+
+    -- Register a collision callback to log when objects hit the ground.
+    ffe.onCollision3D(function(entityA, entityB, px, py, pz, nx, ny, nz, eventType)
+        if eventType == "enter" then
+            collisionCount = collisionCount + 1
+            ffe.log("Collision #" .. collisionCount
+                .. " between " .. tostring(entityA) .. " and " .. tostring(entityB)
+                .. " at (" .. string.format("%.1f, %.1f, %.1f", px, py, pz) .. ")")
+        end
+    end)
+    ffe.log("Physics: collision callback registered")
 end
 
 -- ---------------------------------------------------------------------------
@@ -279,6 +368,43 @@ function update(entityId, dt)
     end
 
     updateCamera()
+
+    -- ------------------------------------------------------------------
+    -- Physics raycast: press F to cast a ray from the camera forward
+    -- ------------------------------------------------------------------
+    if ffe.isKeyPressed(ffe.KEY_F) then
+        -- Compute camera position from orbit parameters (same math as updateCamera)
+        local radius = math.sqrt(camDist * camDist + camElev * camElev)
+        local pitch  = math.atan(camElev, camDist)
+        local yawRad = math.rad(camYaw)
+
+        -- Camera world position (matches orbit camera math)
+        local camX = math.sin(yawRad) * math.cos(pitch) * radius
+        local camY = math.sin(pitch) * radius
+        local camZ = math.cos(yawRad) * math.cos(pitch) * radius
+
+        -- Direction: camera looks toward the orbit target (origin)
+        local dirX = -camX
+        local dirY = -camY
+        local dirZ = -camZ
+        -- Normalize direction
+        local len = math.sqrt(dirX * dirX + dirY * dirY + dirZ * dirZ)
+        if len > 0.001 then
+            dirX = dirX / len
+            dirY = dirY / len
+            dirZ = dirZ / len
+        end
+
+        local hitEntity, hx, hy, hz = ffe.castRay(camX, camY, camZ, dirX, dirY, dirZ, 100.0)
+        if hitEntity then
+            lastRayHitMsg = "Ray hit entity " .. tostring(hitEntity)
+                .. " at (" .. string.format("%.1f, %.1f, %.1f", hx, hy, hz) .. ")"
+            ffe.log(lastRayHitMsg)
+        else
+            lastRayHitMsg = "Ray hit nothing"
+            ffe.log(lastRayHitMsg)
+        end
+    end
 
     -- ------------------------------------------------------------------
     -- Animate point lights (orbit around the scene)
@@ -368,17 +494,18 @@ function update(entityId, dt)
     -- Status: mesh load result
     if meshLoaded then
         local skyStr = skyboxLoaded and "Skybox: ON" or "Skybox: OFF"
-        local entStr = "Entities: 4  |  Mesh: cube.glb  |  Shadows: ON  |  " .. skyStr .. "  |  Point Lights: 2"
+        local physStr = "Physics: " .. tostring(PHYSICS_CUBE_COUNT) .. " cubes"
+        local entStr = "Mesh: cube.glb  |  Shadows: ON  |  " .. skyStr .. "  |  Lights: 2  |  " .. physStr
         ffe.drawText(entStr, sw / 2 - (#entStr * 8), 8, 2, 0.6, 0.8, 1.0, 0.85)
     else
         ffe.drawText("cube.glb NOT FOUND -- HUD only mode", 12, 44, 2, 1, 0.4, 0.2, 1)
     end
 
     -- Control hint bar at bottom
-    ffe.drawRect(0, 692, sw, 28, 0, 0, 0, 0.5)
+    ffe.drawRect(0, 680, sw, 40, 0, 0, 0, 0.5)
     ffe.drawText(
-        "WASD: orbit/zoom  |  UP/DOWN: elevation  |  R: reset  |  ESC: quit",
-        12, 697, 2, 0.45, 0.55, 0.65, 0.9)
+        "WASD: orbit/zoom  |  UP/DOWN: elevation  |  R: reset  |  F: raycast  |  ESC: quit",
+        12, 685, 2, 0.45, 0.55, 0.65, 0.9)
 
     -- Color key for the three cubes and point lights
     if meshLoaded then
@@ -387,6 +514,13 @@ function update(entityId, dt)
         ffe.drawText("BLUE: outer orbit (shininess=32)", 12, 92, 2, 0.3, 0.55, 1.0, 1)
         ffe.drawText("POINT LIGHT 0: warm orange (orbiting)", 12, 116, 2, 1.0, 0.6, 0.2, 1)
         ffe.drawText("POINT LIGHT 1: cool blue (orbiting)", 12, 140, 2, 0.2, 0.5, 1.0, 1)
+
+        -- Physics info
+        ffe.drawText("PHYSICS: " .. tostring(PHYSICS_CUBE_COUNT) .. " falling cubes  |  Collisions: " .. tostring(collisionCount),
+            12, 172, 2, 0.9, 0.75, 0.3, 1)
+        if lastRayHitMsg ~= "" then
+            ffe.drawText("RAYCAST: " .. lastRayHitMsg, 12, 196, 2, 0.5, 1.0, 0.5, 1)
+        end
     end
 
     -- ------------------------------------------------------------------
@@ -407,6 +541,18 @@ function shutdown()
     -- Remove point lights before shutdown.
     ffe.removePointLight(0)
     ffe.removePointLight(1)
+
+    -- Clean up physics bodies before destroying entities.
+    for i = 1, #physicsCubes do
+        if physicsCubes[i] ~= 0 then
+            ffe.destroyPhysicsBody(physicsCubes[i])
+        end
+    end
+    if physicsGround ~= 0 then
+        ffe.destroyPhysicsBody(physicsGround)
+    end
+    physicsCubes = {}
+    physicsGround = 0
 
     -- Disable shadows before unloading mesh to release GPU resources.
     ffe.disableShadows()

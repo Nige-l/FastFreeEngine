@@ -513,6 +513,11 @@ void Application::tick(const float dt) {
     // physics3dSyncSystem (priority 60) will read back the results.
     physics::stepPhysics3D(dt);
 
+    // Dispatch 3D collision events through the registered callback (if any).
+    // Must happen after stepPhysics3D (which populates the event buffer) and
+    // before ECS systems run (so Lua onCollision3D callbacks fire this frame).
+    physics::dispatchCollisionEvents3D();
+
     for (const auto& system : m_world.systems()) {
         ZoneScoped;
         ZoneName(system.name, system.nameLength);

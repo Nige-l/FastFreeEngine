@@ -10,7 +10,9 @@
 #include "physics/physics3d.h"
 #include "core/logging.h"
 
+#include <algorithm>
 #include <cmath>
+#include <cstring>
 
 // Jolt headers — must be included after Jolt.h
 #include <Jolt/Jolt.h>
@@ -18,11 +20,18 @@
 #include <Jolt/Core/Factory.h>
 #include <Jolt/Core/JobSystemThreadPool.h>
 #include <Jolt/Core/TempAllocator.h>
+#include <Jolt/Physics/Body/Body.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyInterface.h>
+#include <Jolt/Physics/Body/BodyLock.h>
 #include <Jolt/Physics/Collision/BroadPhase/BroadPhaseLayerInterfaceTable.h>
 #include <Jolt/Physics/Collision/BroadPhase/ObjectVsBroadPhaseLayerFilterTable.h>
+#include <Jolt/Physics/Collision/CastResult.h>
+#include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
+#include <Jolt/Physics/Collision/ContactListener.h>
+#include <Jolt/Physics/Collision/NarrowPhaseQuery.h>
 #include <Jolt/Physics/Collision/ObjectLayerPairFilterTable.h>
+#include <Jolt/Physics/Collision/RayCast.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
@@ -105,6 +114,156 @@ constexpr JPH::uint            NUM_BP_LAYERS = 2;
 } // anonymous namespace
 
 // ---------------------------------------------------------------------------
+// Entity-Body Mapping (fixed-size array, no heap)
+// ---------------------------------------------------------------------------
+namespace {
+
+using ffe::u32;
+
+// BodyID index -> entity ID mapping. 0xFFFFFFFF = unmapped.
+// Jolt BodyID index is the lower 22 bits of GetIndexAndSequenceNumber().
+// We use MAX_BODIES slots (matching Jolt's maxBodies config default of 1024).
+constexpr u32 INVALID_ENTITY = 0xFFFFFFFF;
+
+u32 s_bodyToEntity[ffe::physics::MAX_BODIES];
+u32 s_bodyToEntityCount = 0; // for stats, not iteration
+
+static void initBodyEntityMapping() {
+    std::memset(s_bodyToEntity, 0xFF, sizeof(s_bodyToEntity));
+    s_bodyToEntityCount = 0;
+}
+
+// Jolt BodyID stores index in lower bits. Extract it for our mapping array.
+static inline u32 bodyIdToIndex(const JPH::BodyID& bodyId) {
+    return bodyId.GetIndex();
+}
+
+static void mapBodyToEntity(const JPH::BodyID& bodyId, const u32 entityId) {
+    const u32 idx = bodyIdToIndex(bodyId);
+    if (idx < ffe::physics::MAX_BODIES) {
+        s_bodyToEntity[idx] = entityId;
+        ++s_bodyToEntityCount;
+    }
+}
+
+static void unmapBody(const JPH::BodyID& bodyId) {
+    const u32 idx = bodyIdToIndex(bodyId);
+    if (idx < ffe::physics::MAX_BODIES) {
+        if (s_bodyToEntity[idx] != INVALID_ENTITY) {
+            s_bodyToEntity[idx] = INVALID_ENTITY;
+            if (s_bodyToEntityCount > 0) { --s_bodyToEntityCount; }
+        }
+    }
+}
+
+static u32 lookupEntity(const JPH::BodyID& bodyId) {
+    const u32 idx = bodyIdToIndex(bodyId);
+    if (idx < ffe::physics::MAX_BODIES) {
+        return s_bodyToEntity[idx];
+    }
+    return INVALID_ENTITY;
+}
+
+} // anonymous namespace
+
+// ---------------------------------------------------------------------------
+// Collision Event Buffer (fixed-size, no heap)
+// ---------------------------------------------------------------------------
+namespace {
+
+ffe::physics::CollisionEvent3D s_collisionEvents[ffe::physics::MAX_COLLISION_EVENTS];
+u32 s_collisionEventCount = 0;
+
+static void pushCollisionEvent(const ffe::physics::CollisionEvent3D& evt) {
+    if (s_collisionEventCount < ffe::physics::MAX_COLLISION_EVENTS) {
+        s_collisionEvents[s_collisionEventCount] = evt;
+        ++s_collisionEventCount;
+    }
+    // Silently drop if buffer full — log at warn would thrash in busy scenes.
+}
+
+} // anonymous namespace
+
+// ---------------------------------------------------------------------------
+// FFEContactListener — Jolt ContactListener that writes to the event buffer.
+//
+// Thread safety note: With 1 job thread (LEGACY tier) and Jolt's discrete
+// collision mode, contact callbacks fire on the thread calling Update() (main
+// thread). No mutex is needed for the event buffer.
+// ---------------------------------------------------------------------------
+namespace {
+
+class FFEContactListener final : public JPH::ContactListener {
+public:
+    void OnContactAdded(
+        const JPH::Body& inBody1,
+        const JPH::Body& inBody2,
+        const JPH::ContactManifold& inManifold,
+        [[maybe_unused]] JPH::ContactSettings& ioSettings) override
+    {
+        ffe::physics::CollisionEvent3D evt;
+        evt.entityA = lookupEntity(inBody1.GetID());
+        evt.entityB = lookupEntity(inBody2.GetID());
+        evt.type = ffe::physics::CollisionEventType::ENTER;
+
+        // Use the first contact point on body 1 (world space).
+        if (inManifold.mRelativeContactPointsOn1.size() > 0) {
+            const JPH::RVec3 wp = inManifold.mBaseOffset + inManifold.mRelativeContactPointsOn1[0];
+            evt.contactPoint = fromJoltR(wp);
+        }
+        evt.contactNormal = fromJolt(inManifold.mWorldSpaceNormal);
+
+        pushCollisionEvent(evt);
+    }
+
+    void OnContactPersisted(
+        const JPH::Body& inBody1,
+        const JPH::Body& inBody2,
+        const JPH::ContactManifold& inManifold,
+        [[maybe_unused]] JPH::ContactSettings& ioSettings) override
+    {
+        ffe::physics::CollisionEvent3D evt;
+        evt.entityA = lookupEntity(inBody1.GetID());
+        evt.entityB = lookupEntity(inBody2.GetID());
+        evt.type = ffe::physics::CollisionEventType::STAY;
+
+        if (inManifold.mRelativeContactPointsOn1.size() > 0) {
+            const JPH::RVec3 wp = inManifold.mBaseOffset + inManifold.mRelativeContactPointsOn1[0];
+            evt.contactPoint = fromJoltR(wp);
+        }
+        evt.contactNormal = fromJolt(inManifold.mWorldSpaceNormal);
+
+        pushCollisionEvent(evt);
+    }
+
+    void OnContactRemoved(const JPH::SubShapeIDPair& inSubShapePair) override {
+        // During OnContactRemoved, body data is NOT accessible (Jolt docs).
+        // We can only get the BodyIDs from the sub-shape pair.
+        ffe::physics::CollisionEvent3D evt;
+        evt.entityA = lookupEntity(inSubShapePair.GetBody1ID());
+        evt.entityB = lookupEntity(inSubShapePair.GetBody2ID());
+        evt.type = ffe::physics::CollisionEventType::EXIT;
+        // contactPoint and contactNormal remain zero — not available for EXIT events.
+
+        pushCollisionEvent(evt);
+    }
+};
+
+FFEContactListener s_contactListener;
+
+} // anonymous namespace
+
+// ---------------------------------------------------------------------------
+// Collision Callback State (file-scoped)
+// ---------------------------------------------------------------------------
+namespace {
+
+ffe::physics::CollisionCallback3D s_collisionCallback = nullptr;
+void* s_collisionCallbackUserData = nullptr;
+
+} // anonymous namespace
+
+// ---------------------------------------------------------------------------
 // Module-level state (file-scoped statics)
 // ---------------------------------------------------------------------------
 namespace {
@@ -139,6 +298,16 @@ bool initPhysics3D(const Physics3DConfig& config) {
         FFE_LOG_WARN("Physics3D", "initPhysics3D called when already initialized — no-op");
         return true;
     }
+
+    // Initialize entity-body mapping
+    initBodyEntityMapping();
+
+    // Clear collision event buffer
+    s_collisionEventCount = 0;
+
+    // Clear collision callback
+    s_collisionCallback = nullptr;
+    s_collisionCallbackUserData = nullptr;
 
     // Jolt global init (cold path — heap allocations are fine here)
     JPH::RegisterDefaultAllocator();
@@ -183,6 +352,9 @@ bool initPhysics3D(const Physics3DConfig& config) {
         *s_state.objVsBpFilter,
         *s_state.objPairFilter);
 
+    // Register contact listener for collision events
+    s_state.physicsSystem->SetContactListener(&s_contactListener);
+
     // Set gravity
     const glm::vec3 g = sanitizeVec3(config.gravity);
     s_state.physicsSystem->SetGravity(toJolt(g));
@@ -199,6 +371,11 @@ void shutdownPhysics3D() {
         return;
     }
 
+    // Unregister contact listener before destroying physics system
+    if (s_state.physicsSystem != nullptr) {
+        s_state.physicsSystem->SetContactListener(nullptr);
+    }
+
     delete s_state.physicsSystem;    s_state.physicsSystem = nullptr;
     delete s_state.jobSystem;        s_state.jobSystem     = nullptr;
     delete s_state.tempAllocator;    s_state.tempAllocator = nullptr;
@@ -211,6 +388,12 @@ void shutdownPhysics3D() {
     // Destroy factory
     delete JPH::Factory::sInstance;
     JPH::Factory::sInstance = nullptr;
+
+    // Clear entity mapping and collision state
+    initBodyEntityMapping();
+    s_collisionEventCount = 0;
+    s_collisionCallback = nullptr;
+    s_collisionCallbackUserData = nullptr;
 
     s_state.initialized = false;
     FFE_LOG_INFO("Physics3D", "Jolt Physics shut down");
@@ -230,6 +413,9 @@ void stepPhysics3D(const float dt) {
     const float safeDt = sanitize(dt);
     if (safeDt <= 0.0f) { return; }
 
+    // Clear collision events at start of each physics step
+    s_collisionEventCount = 0;
+
     // 1 collision step per update (sufficient for fixed-rate 60 Hz)
     s_state.physicsSystem->Update(safeDt, 1,
                                   s_state.tempAllocator,
@@ -237,15 +423,9 @@ void stepPhysics3D(const float dt) {
 }
 
 // ---------------------------------------------------------------------------
-// Body management
+// Body management — internal helper for shared creation logic
 // ---------------------------------------------------------------------------
-
-BodyHandle3D createBody(const BodyDef3D& def) {
-    if (!s_state.initialized) {
-        FFE_LOG_ERROR("Physics3D", "createBody called before initPhysics3D");
-        return BodyHandle3D{};
-    }
-
+static BodyHandle3D createBodyInternal(const BodyDef3D& def) {
     // Build shape (cold path — heap allocation inside Jolt is acceptable)
     JPH::RefConst<JPH::Shape> shape;
     switch (def.shapeType) {
@@ -323,11 +503,50 @@ BodyHandle3D createBody(const BodyDef3D& def) {
     return BodyHandle3D{bodyId.GetIndexAndSequenceNumber()};
 }
 
+// ---------------------------------------------------------------------------
+// Body management — public API
+// ---------------------------------------------------------------------------
+
+BodyHandle3D createBody(const BodyDef3D& def) {
+    if (!s_state.initialized) {
+        FFE_LOG_ERROR("Physics3D", "createBody called before initPhysics3D");
+        return BodyHandle3D{};
+    }
+
+    const BodyHandle3D handle = createBodyInternal(def);
+    // No entity mapping for the legacy overload (entityId remains INVALID_ENTITY)
+    return handle;
+}
+
+BodyHandle3D createBody(const BodyDef3D& def, const u32 entityId) {
+    if (!s_state.initialized) {
+        FFE_LOG_ERROR("Physics3D", "createBody called before initPhysics3D");
+        return BodyHandle3D{};
+    }
+
+    const BodyHandle3D handle = createBodyInternal(def);
+    if (isValid(handle)) {
+        const JPH::BodyID bodyId(handle.id);
+        mapBodyToEntity(bodyId, entityId);
+    }
+    return handle;
+}
+
+u32 getBodyEntityId(const BodyHandle3D handle) {
+    if (!isValid(handle)) { return INVALID_ENTITY; }
+    const JPH::BodyID bodyId(handle.id);
+    return lookupEntity(bodyId);
+}
+
 void destroyBody(const BodyHandle3D handle) {
     if (!s_state.initialized || !isValid(handle)) { return; }
 
-    JPH::BodyInterface& bodyInterface = s_state.physicsSystem->GetBodyInterface();
     const JPH::BodyID bodyId(handle.id);
+
+    // Clear entity mapping before removing the body
+    unmapBody(bodyId);
+
+    JPH::BodyInterface& bodyInterface = s_state.physicsSystem->GetBodyInterface();
 
     // Check if the body still exists (safe against double-destroy)
     if (!bodyInterface.IsAdded(bodyId)) { return; }
@@ -414,6 +633,158 @@ void setGravity(const glm::vec3& g) {
 glm::vec3 getGravity() {
     if (!s_state.initialized) { return {0.0f, -9.81f, 0.0f}; }
     return fromJolt(s_state.physicsSystem->GetGravity());
+}
+
+// ---------------------------------------------------------------------------
+// Collision Event System
+// ---------------------------------------------------------------------------
+
+const CollisionEvent3D* getCollisionEvents3D(u32& outCount) {
+    outCount = s_collisionEventCount;
+    return s_collisionEvents;
+}
+
+void clearCollisionEvents3D() {
+    s_collisionEventCount = 0;
+}
+
+// ---------------------------------------------------------------------------
+// Collision Callback Dispatch
+// ---------------------------------------------------------------------------
+
+void setCollisionCallback3D(const CollisionCallback3D callback, void* userData) {
+    s_collisionCallback = callback;
+    s_collisionCallbackUserData = userData;
+}
+
+void removeCollisionCallback3D() {
+    s_collisionCallback = nullptr;
+    s_collisionCallbackUserData = nullptr;
+}
+
+void dispatchCollisionEvents3D() {
+    if (s_collisionCallback == nullptr || s_collisionEventCount == 0) {
+        return;
+    }
+
+    // Iterate over all buffered events and fire the callback.
+    // The callback is a raw function pointer — no virtual dispatch, no heap.
+    for (u32 i = 0; i < s_collisionEventCount; ++i) {
+        s_collisionCallback(s_collisionEvents[i], s_collisionCallbackUserData);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Raycasting
+// ---------------------------------------------------------------------------
+
+RayHit3D castRay(const glm::vec3& origin, const glm::vec3& direction, const f32 maxDistance) {
+    RayHit3D result;
+
+    if (!s_state.initialized) { return result; }
+
+    // NaN/Inf guards
+    const glm::vec3 safeOrigin = sanitizeVec3(origin);
+    const glm::vec3 safeDir    = sanitizeVec3(direction);
+    const float safeDist       = sanitize(maxDistance);
+
+    if (safeDist <= 0.0f) { return result; }
+
+    // Direction must be non-zero
+    const float dirLenSq = safeDir.x * safeDir.x + safeDir.y * safeDir.y + safeDir.z * safeDir.z;
+    if (dirLenSq < 1e-12f) { return result; }
+
+    // Normalize direction and scale by maxDistance.
+    // Jolt's RRayCast.mDirection encodes both direction and length —
+    // hits are reported as a fraction [0, 1] of the full ray length.
+    const float dirLen = std::sqrt(dirLenSq);
+    const glm::vec3 normDir = safeDir / dirLen;
+    const glm::vec3 scaledDir = normDir * safeDist;
+
+    const JPH::RRayCast ray(toJoltR(safeOrigin), toJolt(scaledDir));
+    JPH::RayCastResult hit;
+
+    const JPH::NarrowPhaseQuery& query = s_state.physicsSystem->GetNarrowPhaseQuery();
+    if (query.CastRay(ray, hit)) {
+        result.valid = true;
+        result.distance = hit.mFraction * safeDist;
+        result.entityId = lookupEntity(hit.mBodyID);
+
+        // Compute hit point
+        const JPH::RVec3 hitPointJolt = ray.GetPointOnRay(hit.mFraction);
+        result.hitPoint = fromJoltR(hitPointJolt);
+
+        // Get the surface normal using the body lock interface (no-lock variant
+        // since we're outside of physics update — safe to use locking interface).
+        JPH::BodyLockRead lock(s_state.physicsSystem->GetBodyLockInterface(), hit.mBodyID);
+        if (lock.Succeeded()) {
+            const JPH::Body& body = lock.GetBody();
+            result.hitNormal = fromJolt(
+                body.GetWorldSpaceSurfaceNormal(hit.mSubShapeID2, hitPointJolt));
+        }
+    }
+
+    return result;
+}
+
+u32 castRayAll(const glm::vec3& origin, const glm::vec3& direction, const f32 maxDistance,
+               RayHit3D* outHits, const u32 maxHits) {
+    if (outHits == nullptr || maxHits == 0) { return 0; }
+    if (!s_state.initialized) { return 0; }
+
+    // NaN/Inf guards
+    const glm::vec3 safeOrigin = sanitizeVec3(origin);
+    const glm::vec3 safeDir    = sanitizeVec3(direction);
+    const float safeDist       = sanitize(maxDistance);
+
+    if (safeDist <= 0.0f) { return 0; }
+
+    const float dirLenSq = safeDir.x * safeDir.x + safeDir.y * safeDir.y + safeDir.z * safeDir.z;
+    if (dirLenSq < 1e-12f) { return 0; }
+
+    const float dirLen = std::sqrt(dirLenSq);
+    const glm::vec3 normDir = safeDir / dirLen;
+    const glm::vec3 scaledDir = normDir * safeDist;
+
+    const JPH::RRayCast ray(toJoltR(safeOrigin), toJolt(scaledDir));
+
+    // Use AllHitCollisionCollector (Jolt's built-in, uses std::vector internally
+    // but this is not a per-frame hot path — raycasts are user-initiated queries).
+    JPH::AllHitCollisionCollector<JPH::CastRayCollector> collector;
+    JPH::RayCastSettings settings;
+
+    const JPH::NarrowPhaseQuery& query = s_state.physicsSystem->GetNarrowPhaseQuery();
+    query.CastRay(ray, settings, collector);
+
+    if (!collector.HadHit()) { return 0; }
+
+    // Sort by distance (nearest first)
+    collector.Sort();
+
+    const u32 cap = std::min(static_cast<u32>(collector.mHits.size()),
+                             std::min(maxHits, MAX_RAY_HITS));
+
+    for (u32 i = 0; i < cap; ++i) {
+        const JPH::RayCastResult& joltHit = collector.mHits[i];
+
+        RayHit3D& out = outHits[i];
+        out.valid = true;
+        out.distance = joltHit.mFraction * safeDist;
+        out.entityId = lookupEntity(joltHit.mBodyID);
+
+        const JPH::RVec3 hitPointJolt = ray.GetPointOnRay(joltHit.mFraction);
+        out.hitPoint = fromJoltR(hitPointJolt);
+
+        // Get surface normal via body lock
+        JPH::BodyLockRead lock(s_state.physicsSystem->GetBodyLockInterface(), joltHit.mBodyID);
+        if (lock.Succeeded()) {
+            const JPH::Body& body = lock.GetBody();
+            out.hitNormal = fromJolt(
+                body.GetWorldSpaceSurfaceNormal(joltHit.mSubShapeID2, hitPointJolt));
+        }
+    }
+
+    return cap;
 }
 
 } // namespace ffe::physics

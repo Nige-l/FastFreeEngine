@@ -60,6 +60,10 @@ static int s_engineRegistryKey = 0;
 // Stores an integer (luaL_ref result) as light userdata.
 static int s_collisionCallbackKey = 0;
 
+// Registry key for the 3D collision callback Lua function reference.
+// Same pattern as s_collisionCallbackKey but for 3D physics events.
+static int s_collision3DCallbackKey = 0;
+
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
@@ -3167,6 +3171,20 @@ void ScriptEngine::registerEcsBindings() {
             world->registry().ctx().get<ffe::CollisionCallbackRef>().luaRef = -2;
         }
 
+        // 2b. Clear the 3D collision callback Lua ref.
+        lua_pushlightuserdata(state, &s_collision3DCallbackKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (!lua_isnil(state, -1)) {
+            const int old3DRef = static_cast<int>(lua_tointeger(state, -1));
+            if (old3DRef != -2) { // LUA_NOREF
+                luaL_unref(state, LUA_REGISTRYINDEX, old3DRef);
+            }
+        }
+        lua_pop(state, 1);
+        lua_pushlightuserdata(state, &s_collision3DCallbackKey);
+        lua_pushinteger(state, -2); // LUA_NOREF
+        lua_settable(state, LUA_REGISTRYINDEX);
+
         // 3. Cancel all active timers so callbacks don't fire on dead entities.
         lua_pushlightuserdata(state, &s_engineRegistryKey);
         lua_gettable(state, LUA_REGISTRYINDEX);
@@ -5336,7 +5354,8 @@ void ScriptEngine::registerEcsBindings() {
         }
 
         // NaN/Inf guard — all floats are sanitised inside createBody()
-        const ffe::physics::BodyHandle3D handle = ffe::physics::createBody(def);
+        // Pass entityId so collision events report correct ECS entity IDs.
+        const ffe::physics::BodyHandle3D handle = ffe::physics::createBody(def, static_cast<ffe::u32>(entityId));
         if (!ffe::physics::isValid(handle)) {
             FFE_LOG_ERROR("ScriptEngine", "ffe.createPhysicsBody: body creation failed");
             lua_pushboolean(state, 0);
@@ -5544,6 +5563,224 @@ void ScriptEngine::registerEcsBindings() {
     };
     lua_pushcfunction(L, ffe_getGravity3D);
     lua_setfield(L, -2, "getGravity");
+
+    // ----------------------------------------------------------------
+    // 3D collision callback bindings (Session 49)
+    // ----------------------------------------------------------------
+
+    // ffe.onCollision3D(callback) -> nothing
+    // Registers a global Lua callback for 3D collision events.
+    // callback(entityA, entityB, px, py, pz, nx, ny, nz, eventType)
+    // eventType is "enter", "stay", or "exit".
+    auto ffe_onCollision3D = [](lua_State* state) -> int {
+        luaL_checktype(state, 1, LUA_TFUNCTION);
+
+        // Release old ref if any.
+        lua_pushlightuserdata(state, &s_collision3DCallbackKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (!lua_isnil(state, -1)) {
+            const int oldRef = static_cast<int>(lua_tointeger(state, -1));
+            if (oldRef != -2) { // LUA_NOREF
+                luaL_unref(state, LUA_REGISTRYINDEX, oldRef);
+            }
+        }
+        lua_pop(state, 1);
+
+        // Create a new reference to the callback function.
+        lua_pushvalue(state, 1);
+        const int ref = luaL_ref(state, LUA_REGISTRYINDEX);
+
+        // Store the ref integer in the registry under our key.
+        lua_pushlightuserdata(state, &s_collision3DCallbackKey);
+        lua_pushinteger(state, static_cast<lua_Integer>(ref));
+        lua_settable(state, LUA_REGISTRYINDEX);
+
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_onCollision3D);
+    lua_setfield(L, -2, "onCollision3D");
+
+    // ffe.removeCollision3DCallback() -> nothing
+    // Unregisters the 3D collision callback.
+    auto ffe_removeCollision3DCallback = [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_collision3DCallbackKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (!lua_isnil(state, -1)) {
+            const int oldRef = static_cast<int>(lua_tointeger(state, -1));
+            if (oldRef != -2) { // LUA_NOREF
+                luaL_unref(state, LUA_REGISTRYINDEX, oldRef);
+            }
+        }
+        lua_pop(state, 1);
+
+        // Store LUA_NOREF sentinel.
+        lua_pushlightuserdata(state, &s_collision3DCallbackKey);
+        lua_pushinteger(state, -2); // LUA_NOREF
+        lua_settable(state, LUA_REGISTRYINDEX);
+
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_removeCollision3DCallback);
+    lua_setfield(L, -2, "removeCollision3DCallback");
+
+    // ffe.dispatchCollision3DEvents() -> nothing
+    // Iterates getCollisionEvents3D() and calls the registered Lua callback.
+    // Called once per frame from the game loop (or from Lua for testing).
+    // No heap allocations — event strings are compile-time constants.
+    auto ffe_dispatchCollision3DEvents = [](lua_State* state) -> int {
+        // Retrieve the callback ref.
+        lua_pushlightuserdata(state, &s_collision3DCallbackKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        const int ref = static_cast<int>(lua_tointeger(state, -1));
+        lua_pop(state, 1);
+        if (ref == -2) { return 0; } // LUA_NOREF
+
+        ffe::u32 count = 0;
+        const ffe::physics::CollisionEvent3D* events = ffe::physics::getCollisionEvents3D(count);
+        if (count == 0 || events == nullptr) { return 0; }
+
+        // Compile-time event type strings (no allocation).
+        static const char* const s_eventTypeNames[] = {"enter", "stay", "exit"};
+
+        for (ffe::u32 i = 0; i < count; ++i) {
+            lua_rawgeti(state, LUA_REGISTRYINDEX, ref);
+            if (!lua_isfunction(state, -1)) {
+                lua_pop(state, 1);
+                // Unregister broken callback.
+                luaL_unref(state, LUA_REGISTRYINDEX, ref);
+                lua_pushlightuserdata(state, &s_collision3DCallbackKey);
+                lua_pushinteger(state, -2); // LUA_NOREF
+                lua_settable(state, LUA_REGISTRYINDEX);
+                return 0;
+            }
+
+            const auto& evt = events[i];
+            lua_pushinteger(state, static_cast<lua_Integer>(evt.entityA));
+            lua_pushinteger(state, static_cast<lua_Integer>(evt.entityB));
+            lua_pushnumber(state, static_cast<double>(evt.contactPoint.x));
+            lua_pushnumber(state, static_cast<double>(evt.contactPoint.y));
+            lua_pushnumber(state, static_cast<double>(evt.contactPoint.z));
+            lua_pushnumber(state, static_cast<double>(evt.contactNormal.x));
+            lua_pushnumber(state, static_cast<double>(evt.contactNormal.y));
+            lua_pushnumber(state, static_cast<double>(evt.contactNormal.z));
+
+            const auto typeIdx = static_cast<ffe::u8>(evt.type);
+            lua_pushstring(state, s_eventTypeNames[typeIdx < 3 ? typeIdx : 0]);
+
+            if (lua_pcall(state, 9, 0, 0) != 0) {
+                const char* err = lua_tostring(state, -1);
+                FFE_LOG_ERROR("ScriptEngine", "3D collision callback error: %s",
+                              err != nullptr ? err : "(unknown)");
+                lua_pop(state, 1);
+                // Continue delivering remaining events despite error.
+            }
+        }
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_dispatchCollision3DEvents);
+    lua_setfield(L, -2, "dispatchCollision3DEvents");
+
+    // ----------------------------------------------------------------
+    // Raycasting bindings (Session 49)
+    // ----------------------------------------------------------------
+
+    // ffe.castRay(ox, oy, oz, dx, dy, dz, maxDist) -> entity, hx, hy, hz, nx, ny, nz, dist | nil
+    auto ffe_castRay = [](lua_State* state) -> int {
+        const ffe::f32 ox = static_cast<ffe::f32>(luaL_checknumber(state, 1));
+        const ffe::f32 oy = static_cast<ffe::f32>(luaL_checknumber(state, 2));
+        const ffe::f32 oz = static_cast<ffe::f32>(luaL_checknumber(state, 3));
+        const ffe::f32 dx = static_cast<ffe::f32>(luaL_checknumber(state, 4));
+        const ffe::f32 dy = static_cast<ffe::f32>(luaL_checknumber(state, 5));
+        const ffe::f32 dz = static_cast<ffe::f32>(luaL_checknumber(state, 6));
+        const ffe::f32 maxDist = static_cast<ffe::f32>(luaL_checknumber(state, 7));
+
+        // NaN/Inf guard
+        if (!std::isfinite(ox) || !std::isfinite(oy) || !std::isfinite(oz) ||
+            !std::isfinite(dx) || !std::isfinite(dy) || !std::isfinite(dz) ||
+            !std::isfinite(maxDist)) {
+            FFE_LOG_WARN("ScriptEngine", "ffe.castRay: non-finite input — returning nil");
+            lua_pushnil(state);
+            return 1;
+        }
+
+        const ffe::physics::RayHit3D hit = ffe::physics::castRay({ox, oy, oz}, {dx, dy, dz}, maxDist);
+        if (!hit.valid) {
+            lua_pushnil(state);
+            return 1;
+        }
+
+        lua_pushinteger(state, static_cast<lua_Integer>(hit.entityId));
+        lua_pushnumber(state, static_cast<double>(hit.hitPoint.x));
+        lua_pushnumber(state, static_cast<double>(hit.hitPoint.y));
+        lua_pushnumber(state, static_cast<double>(hit.hitPoint.z));
+        lua_pushnumber(state, static_cast<double>(hit.hitNormal.x));
+        lua_pushnumber(state, static_cast<double>(hit.hitNormal.y));
+        lua_pushnumber(state, static_cast<double>(hit.hitNormal.z));
+        lua_pushnumber(state, static_cast<double>(hit.distance));
+        return 8;
+    };
+    lua_pushcfunction(L, ffe_castRay);
+    lua_setfield(L, -2, "castRay");
+
+    // ffe.castRayAll(ox, oy, oz, dx, dy, dz, maxDist) -> array of tables | empty table
+    // Each table: { entity=id, x=.., y=.., z=.., nx=.., ny=.., nz=.., distance=.. }
+    auto ffe_castRayAll = [](lua_State* state) -> int {
+        const ffe::f32 ox = static_cast<ffe::f32>(luaL_checknumber(state, 1));
+        const ffe::f32 oy = static_cast<ffe::f32>(luaL_checknumber(state, 2));
+        const ffe::f32 oz = static_cast<ffe::f32>(luaL_checknumber(state, 3));
+        const ffe::f32 dx = static_cast<ffe::f32>(luaL_checknumber(state, 4));
+        const ffe::f32 dy = static_cast<ffe::f32>(luaL_checknumber(state, 5));
+        const ffe::f32 dz = static_cast<ffe::f32>(luaL_checknumber(state, 6));
+        const ffe::f32 maxDist = static_cast<ffe::f32>(luaL_checknumber(state, 7));
+
+        // NaN/Inf guard
+        if (!std::isfinite(ox) || !std::isfinite(oy) || !std::isfinite(oz) ||
+            !std::isfinite(dx) || !std::isfinite(dy) || !std::isfinite(dz) ||
+            !std::isfinite(maxDist)) {
+            FFE_LOG_WARN("ScriptEngine", "ffe.castRayAll: non-finite input — returning empty table");
+            lua_newtable(state);
+            return 1;
+        }
+
+        // Stack-allocated hit buffer — no heap allocation.
+        ffe::physics::RayHit3D hits[ffe::physics::MAX_RAY_HITS];
+        const ffe::u32 hitCount = ffe::physics::castRayAll({ox, oy, oz}, {dx, dy, dz}, maxDist,
+                                                            hits, ffe::physics::MAX_RAY_HITS);
+
+        // Create the result table.
+        lua_createtable(state, static_cast<int>(hitCount), 0);
+
+        for (ffe::u32 i = 0; i < hitCount; ++i) {
+            lua_createtable(state, 0, 8); // 8 named fields
+
+            lua_pushinteger(state, static_cast<lua_Integer>(hits[i].entityId));
+            lua_setfield(state, -2, "entity");
+
+            lua_pushnumber(state, static_cast<double>(hits[i].hitPoint.x));
+            lua_setfield(state, -2, "x");
+            lua_pushnumber(state, static_cast<double>(hits[i].hitPoint.y));
+            lua_setfield(state, -2, "y");
+            lua_pushnumber(state, static_cast<double>(hits[i].hitPoint.z));
+            lua_setfield(state, -2, "z");
+
+            lua_pushnumber(state, static_cast<double>(hits[i].hitNormal.x));
+            lua_setfield(state, -2, "nx");
+            lua_pushnumber(state, static_cast<double>(hits[i].hitNormal.y));
+            lua_setfield(state, -2, "ny");
+            lua_pushnumber(state, static_cast<double>(hits[i].hitNormal.z));
+            lua_setfield(state, -2, "nz");
+
+            lua_pushnumber(state, static_cast<double>(hits[i].distance));
+            lua_setfield(state, -2, "distance");
+
+            lua_rawseti(state, -2, static_cast<int>(i + 1)); // Lua arrays are 1-based
+        }
+
+        return 1;
+    };
+    lua_pushcfunction(L, ffe_castRayAll);
+    lua_setfield(L, -2, "castRayAll");
 
     lua_setglobal(L, "ffe");
 }

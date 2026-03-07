@@ -45,6 +45,7 @@ add_executable(ffe_tests_scripting
     scripting/test_animation3d_bindings.cpp
     scripting/test_audio3d_bindings.cpp
     scripting/test_physics3d_bindings.cpp
+    scripting/test_physics3d_collision_bindings.cpp
 )
 
 target_link_libraries(ffe_tests_scripting
@@ -62,6 +63,8 @@ catch_discover_tests(ffe_tests_scripting)
 add_executable(ffe_tests_physics
     test_main.cpp
     physics/test_physics3d.cpp
+    physics/test_physics3d_collisions.cpp
+    physics/test_physics3d_raycast.cpp
 )
 
 target_link_libraries(ffe_tests_physics
