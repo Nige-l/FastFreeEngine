@@ -3,6 +3,55 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 72: Phase 6 M4b — Main Menu, Pause Menu, Victory Polish, Gamepad
+
+### Summary
+
+Session 72 delivered the Phase 6 M4b polish pass for "Echoes of the Ancients." Added a full main menu with animated title, fog bands, and control help. Implemented a navigable pause menu (Resume/Restart/Quit) with keyboard and gamepad support. Polished the victory sequence with 20 animated gold sparkle particles, staggered stat reveal, a rank system, and return-to-menu flow. Applied dead-zone filtering on both gamepad sticks and added dynamic HUD control labels that switch between keyboard/gamepad prompts. All 3 levels verified working with real models, puzzles, and portals. FAST build: 1005 tests, zero warnings.
+
+### Planned
+
+- Main menu screen with title and controls help
+- Pause menu with Resume/Restart/Quit
+- Victory sequence polish (particles, rank)
+- Gamepad dead-zones and dynamic HUD labels
+- Level verification across all 3 levels
+
+### Delivered
+
+- **Main menu** -- Title screen with "ECHOES OF THE ANCIENTS" title, animated fog bands, control help overlay, gamepad START support.
+- **Pause menu** -- ESC/gamepad START toggles pause. Navigable menu with Resume, Restart, Quit options. Keyboard and gamepad D-pad navigation.
+- **Victory polish** -- 20 animated gold sparkle particles with staggered timing, stat reveal animation, rank system (S/A/B/C based on time+artifacts+enemies), return to main menu.
+- **Gamepad polish** -- Dead-zone filtering on both analog sticks, dynamic HUD labels that detect controller vs keyboard input.
+- **Level verification** -- All 3 levels confirmed working end-to-end with real .glb models, puzzles, portals, and progression.
+
+### Files Changed
+
+- `examples/showcase/lib/menus.lua` (CREATED -- menu system module)
+- `examples/showcase/game.lua` (MODIFIED -- menu integration, pause, victory flow)
+- `examples/showcase/lib/player.lua` (MODIFIED -- dead-zone filtering)
+- `examples/showcase/lib/camera.lua` (MODIFIED -- dead-zone filtering)
+- `examples/showcase/lib/hud.lua` (MODIFIED -- dynamic control labels)
+- `examples/showcase/levels/level1.lua` (MODIFIED -- minor fixes)
+- `examples/showcase/levels/level2.lua` (MODIFIED -- minor fixes)
+- `examples/showcase/levels/level3.lua` (MODIFIED -- minor fixes)
+
+### Reviews
+
+- No expert panel this session (Lua-only showcase polish, no engine C++ changes)
+- game-dev-tester: SKIPPED (no new API paradigm)
+- security-auditor: SKIPPED (no new attack surface)
+
+### Next Session (73)
+
+Phase 6 M5 close-out and Phase 7 planning:
+1. Phase 6 assessment -- is the showcase game complete?
+2. README update with showcase game section
+3. Phase 6 close and transition planning
+4. Begin Phase 7 -- high-impact engine features to compete with mainstream engines
+
+---
+
 ## 2026-03-07 — Session 71: Phase 6 M4 — Level 3 "The Summit" + Victory Sequence
 
 ### Summary

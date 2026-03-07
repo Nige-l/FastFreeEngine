@@ -6,7 +6,7 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 71 |
+| Last session | 72 |
 | Total tests | 1005 (FAST build: Clang-18, zero warnings) |
 | Total Lua bindings | ~169 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
@@ -26,7 +26,7 @@
 3. **Breakout** -- brick-breaker 2D, Lua-only
 4. **3D Demo** -- mesh loading, Blinn-Phong, point lights, materials, shadows, skybox
 5. **Net Arena** -- 2D multiplayer arena, client-side prediction, server reconciliation
-6. **Echoes of the Ancients** -- 3D showcase (IN PROGRESS: Levels 1-3 complete, polish pass next)
+6. **Echoes of the Ancients** -- 3D showcase (IN PROGRESS: Levels 1-3 complete, menus + polish done)
 
 ## Known Issues / Deferred Items
 
@@ -40,6 +40,7 @@
 
 | Session | Summary |
 |---------|---------|
+| 72 | Phase 6 M4b: Polish pass -- main menu, pause menu, victory particles/rank, gamepad dead-zones, dynamic HUD labels. 1005 tests (FAST). |
 | 71 | Phase 6 M4: Level 3 "The Summit" (floating platforms, moving platforms, sunset lighting, 4 guardians + boss, victory sequence with stats). 1005 tests (FAST). |
 | 70 | Phase 6 M3 (part 2): Real CC0 3D models (7 .glb), Suno music integration, Level 2 gameplay (crystal puzzle, timed bridges, boss guardian, portal victory), GitHub Pages fix, macOS CI disabled. README update. 1005 tests (FAST). |
 | 69 | Phase 6 M3 (part 1): Level 2 "The Temple" (underground, dark lighting, crystal puzzle, boss guardian, artifact). 1005 tests (FAST). |
@@ -55,8 +56,8 @@
 - [x] M2 (Session 68): Level 1 -- The Courtyard (outdoor, puzzles, guardians, artifacts)
 - [x] M3 (Sessions 69-70): Level 2 -- The Temple (underground, dark lighting, crystal puzzle, timed bridges, boss guardian, real 3D models, music)
 - [x] M4 (Session 71): Level 3 -- The Summit (floating platforms, moving platforms, sunset lighting, victory sequence)
-- [ ] M4b (Session 72): Polish pass, main menu, gamepad verification
-- [ ] M5 (Sessions 73-74): Screenshots, README update, final polish, Phase 6 close
+- [x] M4b (Session 72): Polish pass -- main menu, pause menu, victory particles/rank, gamepad dead-zones
+- [ ] M5 (Session 73): Phase 6 assessment, README update, Phase 6 close + Phase 7 planning
 - [ ] Optional M6: Stretch goals (skeletal anim, minimap, time-of-day)
 
 ### Planned Future Phases (beyond Phase 6)
