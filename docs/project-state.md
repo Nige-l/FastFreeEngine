@@ -6,7 +6,7 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 72 |
+| Last session | 73 |
 | Total tests | 1005 (FAST build: Clang-18, zero warnings) |
 | Total Lua bindings | ~169 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
@@ -14,7 +14,8 @@
 | Phase 3 (Standalone Editor) | MVP COMPLETE (6 milestones, Sessions 51-56) |
 | Phase 4 (Networking) | COMPLETE (Sessions 57-60) |
 | Phase 5 (Website/Learning) | COMPLETE (Sessions 62-65) |
-| Phase 6 (Showcase Game) | IN PROGRESS (Sessions 66-present) |
+| Phase 6 (Showcase Game) | COMPLETE (Sessions 66-73) |
+| Phase 7 (Rendering Pipeline) | IN PROGRESS (Session 74+) |
 | Windows build | DONE (MinGW-w64 cross-compilation) |
 | macOS build | DISABLED (upstream LuaJIT arm64-osx vcpkg issue) |
 | GitHub Actions CI | DONE (Linux Clang-18, Linux GCC-13) |
@@ -26,7 +27,7 @@
 3. **Breakout** -- brick-breaker 2D, Lua-only
 4. **3D Demo** -- mesh loading, Blinn-Phong, point lights, materials, shadows, skybox
 5. **Net Arena** -- 2D multiplayer arena, client-side prediction, server reconciliation
-6. **Echoes of the Ancients** -- 3D showcase (IN PROGRESS: Levels 1-3 complete, menus + polish done)
+6. **Echoes of the Ancients** -- 3-level 3D showcase game (COMPLETE: menus, puzzles, combat, victory)
 
 ## Known Issues / Deferred Items
 
@@ -40,33 +41,26 @@
 
 | Session | Summary |
 |---------|---------|
+| 73 | Phase 6 COMPLETE. Phase 7 ADR approved (PBR, post-processing, instancing, skeletal anim, AA, SSAO). README + ROADMAP updated. No C++ changes. |
 | 72 | Phase 6 M4b: Polish pass -- main menu, pause menu, victory particles/rank, gamepad dead-zones, dynamic HUD labels. 1005 tests (FAST). |
 | 71 | Phase 6 M4: Level 3 "The Summit" (floating platforms, moving platforms, sunset lighting, 4 guardians + boss, victory sequence with stats). 1005 tests (FAST). |
-| 70 | Phase 6 M3 (part 2): Real CC0 3D models (7 .glb), Suno music integration, Level 2 gameplay (crystal puzzle, timed bridges, boss guardian, portal victory), GitHub Pages fix, macOS CI disabled. README update. 1005 tests (FAST). |
+| 70 | Phase 6 M3 (part 2): Real CC0 3D models (7 .glb), Suno music integration, Level 2 gameplay, GitHub Pages fix, macOS CI disabled. 1005 tests (FAST). |
 | 69 | Phase 6 M3 (part 1): Level 2 "The Temple" (underground, dark lighting, crystal puzzle, boss guardian, artifact). 1005 tests (FAST). |
-| 68 | Phase 6 M2: Level 1 "The Courtyard" (push-block puzzle, 2 guardians, destructible wall, artifact). 1005 tests (FAST). |
-| 67 | Phase 6 M1: Linear fog shader + "Echoes of the Ancients" scaffold. 1005 tests (FAST). |
 
-## Phase 6 — Showcase Game: "Echoes of the Ancients" (IN PROGRESS)
+## Phase 7 — Rendering Pipeline Modernisation (IN PROGRESS)
 
-**Goal:** A multi-level 3D showcase game proving FFE can ship real, playable games. ADR: `docs/architecture/adr-phase6-showcase.md`
+**Goal:** Bring FFE's visual output to competitive parity with Godot 4's forward renderer. ADR: `docs/architecture/adr-phase7-rendering-pipeline.md`
 
-### Progress
-- [x] M1 (Session 67): Linear fog shader + project scaffold + player controller
-- [x] M2 (Session 68): Level 1 -- The Courtyard (outdoor, puzzles, guardians, artifacts)
-- [x] M3 (Sessions 69-70): Level 2 -- The Temple (underground, dark lighting, crystal puzzle, timed bridges, boss guardian, real 3D models, music)
-- [x] M4 (Session 71): Level 3 -- The Summit (floating platforms, moving platforms, sunset lighting, victory sequence)
-- [x] M4b (Session 72): Polish pass -- main menu, pause menu, victory particles/rank, gamepad dead-zones
-- [ ] M5 (Session 73): Phase 6 assessment, README update, Phase 6 close + Phase 7 planning
-- [ ] Optional M6: Stretch goals (skeletal anim, minimap, time-of-day)
+### Milestones
 
-### Planned Future Phases (beyond Phase 6)
-- Phase 7: Vulkan renderer (STANDARD/MODERN tiers)
-- Phase 8: Terrain system + open-world support
-- Phase 9: Advanced editor (visual scripting, prefabs, LLM panel)
-- Phase 10: Cross-platform native builds (MSVC, Xcode, AppImage)
-- Phase 11: Asset pipeline + plugin system
-- Phase 12: Advanced rendering (PBR, post-processing, instancing)
+- [ ] M1 (Sessions 74-75): PBR Materials -- PBRMaterial component, Cook-Torrance BRDF shader, IBL, Lua bindings, tests
+- [ ] M2 (Sessions 76-77): Post-Processing -- HDR FBO chain, bloom, tone mapping, gamma correction
+- [ ] M3 (Sessions 78-79): GPU Instancing -- instance buffers, automatic batching, 1000-instance benchmark
+- [ ] M4 (Sessions 80-81): Skeletal Animation Completion -- crossfade blending, interpolation modes, root motion
+- [ ] M5 (Session 82): Anti-Aliasing -- MSAA + FXAA
+- [ ] M6 (Session 83): SSAO (STANDARD+ tier only)
+- [ ] M7 (Session 84): Sprite Batching 2.0 -- texture array batching
+- [ ] M8 (Session 85): Phase Close -- FULL build, profiling, documentation sweep
 
 ## Build Commands
 

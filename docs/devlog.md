@@ -3,6 +3,51 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 73: Phase 6 COMPLETE + Phase 7 Planning
+
+### Summary
+
+Session 73 closed Phase 6 and planned Phase 7. No C++ changes this session — documentation and planning only. The Phase 7 ADR (rendering pipeline modernisation) was approved by architect, covering 8 milestones: PBR materials, post-processing (bloom/tone mapping/gamma), GPU instancing, skeletal animation completion, anti-aliasing (MSAA+FXAA), SSAO, and sprite batching 2.0. README updated with showcase game details. ROADMAP updated with Phases 7-12. No build needed (no engine changes).
+
+### Planned
+
+- Phase 6 assessment and close-out
+- Phase 7 ADR: rendering pipeline modernisation
+- README update with showcase game section
+- ROADMAP update with future phases
+
+### Delivered
+
+- **Phase 6 COMPLETE** — "Echoes of the Ancients" 3-level 3D showcase game shipped (Sessions 66-73).
+- **Phase 7 ADR** — `docs/architecture/adr-phase7-rendering-pipeline.md` — comprehensive design for PBR, post-processing, instancing, skeletal animation, AA, SSAO, sprite batching 2.0. All features target LEGACY tier (GL 3.3) except SSAO (STANDARD+).
+- **README.md** — Updated with showcase game details, Phase 6 COMPLETE status, Phase 7 preview.
+- **docs/ROADMAP.md** — Phase 6 marked COMPLETE, Phases 7-12 roadmap added.
+
+### Files Changed
+
+- `docs/architecture/adr-phase7-rendering-pipeline.md` (CREATED — 596 lines)
+- `README.md` (MODIFIED — showcase game details, phase updates)
+- `docs/ROADMAP.md` (MODIFIED — Phase 6 COMPLETE, Phases 7-12 added)
+
+### Reviews
+
+- No expert panel this session (documentation/planning only, no engine C++ changes)
+- game-dev-tester: SKIPPED (no new API)
+- security-auditor: SKIPPED (no new attack surface — noted in ADR that IBL reuses existing reviewed skybox path)
+
+### Next Session (74)
+
+Phase 7 M1: PBR Materials — first engine C++ session since Session 67 (fog). Per the ADR:
+1. PBRMaterial component (POD struct, 68 bytes)
+2. MESH_PBR shader (Cook-Torrance BRDF, GLSL 330 core)
+3. IBL pipeline (irradiance cubemap, prefiltered specular, BRDF LUT generation)
+4. Mesh renderer updated to check PBRMaterial first, fall back to Material3D
+5. Lua bindings: ffe.setPBRMaterial, ffe.setPBRTexture
+6. Catch2 tests for PBRMaterial component and shader registration
+7. Full expert panel (first engine code in several sessions)
+
+---
+
 ## 2026-03-07 — Session 72: Phase 6 M4b — Main Menu, Pause Menu, Victory Polish, Gamepad
 
 ### Summary
