@@ -142,7 +142,8 @@
 #include <cstring>      // strnlen, strstr, memcpy, memset, strncmp
 #include <mutex>
 #include <sys/stat.h>   // stat(), S_ISDIR
-#include <stdlib.h>     // realpath(), free(), malloc()
+#include <stdlib.h>     // free(), malloc()
+#include "core/platform.h"
 #include <cinttypes>    // PRIu64
 
 namespace ffe::audio {
@@ -305,6 +306,11 @@ static bool isAudioPathSafe(const char* const path) {
     if (strstr(path, "..\\") != nullptr) { return false; }
     if (strstr(path, "/..") != nullptr)  { return false; }
     if (strstr(path, "\\..") != nullptr) { return false; }
+    // Reject Windows Alternate Data Streams (e.g. "audio/music.ogg:stream").
+    // Legitimate relative asset paths never contain ':'.
+    // Drive-letter absolute paths ("C:\...") are already rejected above by the
+    // path[1]==':' check, so any remaining ':' is always an ADS or device path.
+    if (strchr(path, ':') != nullptr) { return false; }
     return true;
 }
 
@@ -721,15 +727,15 @@ SoundHandle loadSound(const char* const path, const char* const assetRoot) {
     memcpy(fullPath + rootLen + 1u, path, pathLen);
     fullPath[rootLen + 1u + pathLen] = '\0';
 
-    // SEC-1 (continued): Canonicalise via realpath() to resolve symlinks and
+    // SEC-1 (continued): Canonicalise path to resolve symlinks and
     // any encoding tricks the string check missed.
-    // TOCTOU note: there is an inherent race between realpath() and fopen().
+    // TOCTOU note: there is an inherent race between canonicalizePath() and fopen().
     // This is accepted for FFE's local-asset threat model — a local attacker
     // with write access to the asset directory can place content there directly.
     // FFE is not a multi-user server.
     char canonPath[PATH_MAX + 1];
-    if (::realpath(fullPath, canonPath) == nullptr) {
-        FFE_LOG_ERROR("Audio", "loadSound: realpath() failed for \"%s\"", fullPath);
+    if (!ffe::canonicalizePath(fullPath, canonPath, sizeof(canonPath))) {
+        FFE_LOG_ERROR("Audio", "loadSound: canonicalizePath() failed for \"%s\"", fullPath);
         return SoundHandle{0};
     }
 
@@ -984,10 +990,10 @@ SoundHandle loadMusic(const char* const path, const char* const assetRoot) {
     memcpy(fullPath + rootLen + 1u, path, pathLen);
     fullPath[rootLen + 1u + pathLen] = '\0';
 
-    // Canonicalise via realpath().
+    // Canonicalise path.
     char canonPath[PATH_MAX + 1];
-    if (::realpath(fullPath, canonPath) == nullptr) {
-        FFE_LOG_ERROR("Audio", "loadMusic: realpath() failed for \"%s\"", fullPath);
+    if (!ffe::canonicalizePath(fullPath, canonPath, sizeof(canonPath))) {
+        FFE_LOG_ERROR("Audio", "loadMusic: canonicalizePath() failed for \"%s\"", fullPath);
         return SoundHandle{0};
     }
 

@@ -65,7 +65,8 @@
 #include <cstring>    // strnlen, strstr, memcpy, strcasecmp equivalent
 #include <cctype>     // tolower
 #include <sys/stat.h> // stat()
-#include <stdlib.h>   // realpath()
+#include <stdlib.h>   // size_t
+#include "core/platform.h"
 #include <cinttypes>  // PRIu64
 #include <new>        // std::nothrow
 
@@ -122,6 +123,11 @@ static bool isPathSafe(const char* const path) {
     if (strstr(path, "..\\") != nullptr) { return false; }
     if (strstr(path, "/..") != nullptr) { return false; }
     if (strstr(path, "\\..") != nullptr) { return false; }
+    // Reject Windows Alternate Data Streams (e.g. "models/mesh.glb:stream").
+    // Legitimate relative asset paths never contain ':'.
+    // Drive-letter absolute paths ("C:\...") are already rejected above by the
+    // path[1]==':' check, so any remaining ':' is always an ADS or device path.
+    if (strchr(path, ':') != nullptr) { return false; }
     return true;
 }
 
@@ -224,10 +230,10 @@ MeshHandle loadMesh(const char* const path) {
     memcpy(fullPath + rootLen + 1u, path, pathLen);
     fullPath[rootLen + 1u + pathLen] = '\0';
 
-    // --- SEC-M1 (continued): realpath() to resolve symlinks and encoded traversal ---
+    // --- SEC-M1 (continued): canonicalize path to resolve symlinks and encoded traversal ---
     char canonPath[PATH_MAX + 1];
-    if (::realpath(fullPath, canonPath) == nullptr) {
-        FFE_LOG_ERROR("MeshLoader", "loadMesh: realpath() failed for \"%s\"", fullPath);
+    if (!ffe::canonicalizePath(fullPath, canonPath, sizeof(canonPath))) {
+        FFE_LOG_ERROR("MeshLoader", "loadMesh: canonicalizePath() failed for \"%s\"", fullPath);
         return MeshHandle{0};
     }
 

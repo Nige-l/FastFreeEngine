@@ -33,6 +33,7 @@ extern "C" {
 #include <cstdlib>
 #include <filesystem> // create_directories
 #include <sys/stat.h> // stat
+#include "core/platform.h"
 
 // ---------------------------------------------------------------------------
 // Registry key for the World pointer
@@ -60,11 +61,15 @@ namespace {
 //   - non-null and non-empty
 //   - not an absolute path (no leading '/' or '\', no drive letter)
 //   - contains no '..' traversal components
+//   - not a UNC path (\\server\share or \\.\device)
+//   - contains no ':' (blocks Windows Alternate Data Streams)
 bool isPathSafe(const char* path) {
     if (path == nullptr || path[0] == '\0') {
         return false;
     }
-    // Absolute paths
+    // Absolute paths — also catches the first character of UNC paths (\\...)
+    // Explicit UNC path guard: \\server\share and \\.\device paths begin with
+    // '\\', which is caught by the path[0]=='\\' absolute-path check below.
     if (path[0] == '/' || path[0] == '\\') {
         return false;
     }
@@ -86,6 +91,11 @@ bool isPathSafe(const char* path) {
     if (len >= 2 && path[len - 2] == '.' && path[len - 1] == '.') {
         return false;
     }
+    // Reject Windows Alternate Data Streams (e.g. "scripts/game.lua:stream").
+    // Legitimate relative asset paths never contain ':'.
+    // Drive-letter absolute paths ("C:\...") are already rejected above by the
+    // path[1]==':' check, so any remaining ':' is always an ADS or device path.
+    if (std::strchr(path, ':') != nullptr) { return false; }
     return true;
 }
 
@@ -495,11 +505,10 @@ bool ScriptEngine::setSaveRoot(const char* absolutePath) {
         return false;
     }
 
-    // Resolve to canonical path via realpath
+    // Resolve to canonical path
     char resolved[SAVE_ROOT_BUF_SIZE];
-    const char* rp = realpath(absolutePath, resolved);
-    if (rp == nullptr) {
-        FFE_LOG_ERROR("ScriptEngine", "setSaveRoot: realpath failed for '%s'", absolutePath);
+    if (!ffe::canonicalizePath(absolutePath, resolved, sizeof(resolved))) {
+        FFE_LOG_ERROR("ScriptEngine", "setSaveRoot: canonicalizePath failed for '%s'", absolutePath);
         return false;
     }
 
@@ -590,9 +599,35 @@ bool ScriptEngine::doFile(const char* path, const char* assetRoot) {
     pos += fileLen;
     fullPath[pos] = '\0';
 
+    // Canonicalize to resolve any symlinks or encoded traversal sequences that
+    // survived the isPathSafe string check. Then verify the resolved path is
+    // still under the asset root — matching the pattern used in loadTexture,
+    // loadMesh, loadSound, etc.
+    char canonPath[PATH_MAX + 1];
+    if (!ffe::canonicalizePath(fullPath, canonPath, sizeof(canonPath))) {
+        FFE_LOG_ERROR("ScriptEngine", "doFile() canonicalizePath failed for: %s", fullPath);
+        return false;
+    }
+
+    // Prefix check: canonical path must begin with the asset root.
+    if (std::strncmp(canonPath, assetRoot, rootLen) != 0) {
+        FFE_LOG_ERROR("ScriptEngine",
+                      "doFile() canonical path \"%s\" escapes asset root \"%s\"",
+                      canonPath, assetRoot);
+        return false;
+    }
+    // Separator check: ensures the match is a directory boundary, not a prefix
+    // collision (e.g. root="/assets" matching "/assets_evil/foo.lua").
+    if (canonPath[rootLen] != '/' && canonPath[rootLen] != '\0') {
+        FFE_LOG_ERROR("ScriptEngine",
+                      "doFile() canonical path \"%s\" escapes asset root \"%s\"",
+                      canonPath, assetRoot);
+        return false;
+    }
+
     lua_State* L = static_cast<lua_State*>(m_luaState);
 
-    const int loadResult = luaL_loadfile(L, fullPath);
+    const int loadResult = luaL_loadfile(L, canonPath);
     if (loadResult != LUA_OK) {
         const char* err = lua_tostring(L, -1);
         FFE_LOG_ERROR("ScriptEngine", "Lua load error (%s): %s",
@@ -3178,20 +3213,20 @@ void ScriptEngine::registerEcsBindings() {
         }
 
         // S2 — resolved path validation.
-        // Validate saves dir is under save root. Use realpath on the directory
+        // Validate saves dir is under save root. Use canonicalizePath on the directory
         // (which exists now after create_directories).
         {
             char resolvedDir[PATH_MAX];
-            if (realpath(savesDir, resolvedDir) == nullptr) {
-                FFE_LOG_ERROR("ScriptEngine", "saveData: realpath failed for saves dir");
+            if (!ffe::canonicalizePath(savesDir, resolvedDir, sizeof(resolvedDir))) {
+                FFE_LOG_ERROR("ScriptEngine", "saveData: canonicalizePath failed for saves dir");
                 lua_pushnil(state);
                 lua_pushstring(state, "write failed");
                 return 2;
             }
 
             char resolvedRoot[PATH_MAX];
-            if (realpath(root, resolvedRoot) == nullptr) {
-                FFE_LOG_ERROR("ScriptEngine", "saveData: realpath failed for save root");
+            if (!ffe::canonicalizePath(root, resolvedRoot, sizeof(resolvedRoot))) {
+                FFE_LOG_ERROR("ScriptEngine", "saveData: canonicalizePath failed for save root");
                 lua_pushnil(state);
                 lua_pushstring(state, "write failed");
                 return 2;
@@ -3348,16 +3383,16 @@ void ScriptEngine::registerEcsBindings() {
         // S2 — resolved path validation.
         {
             char resolvedPath[PATH_MAX];
-            if (realpath(fullPath, resolvedPath) == nullptr) {
-                FFE_LOG_ERROR("ScriptEngine", "loadData: realpath failed");
+            if (!ffe::canonicalizePath(fullPath, resolvedPath, sizeof(resolvedPath))) {
+                FFE_LOG_ERROR("ScriptEngine", "loadData: canonicalizePath failed");
                 lua_pushnil(state);
                 lua_pushstring(state, "file not found");
                 return 2;
             }
 
             char resolvedRoot[PATH_MAX];
-            if (realpath(root, resolvedRoot) == nullptr) {
-                FFE_LOG_ERROR("ScriptEngine", "loadData: realpath failed for save root");
+            if (!ffe::canonicalizePath(root, resolvedRoot, sizeof(resolvedRoot))) {
+                FFE_LOG_ERROR("ScriptEngine", "loadData: canonicalizePath failed for save root");
                 lua_pushnil(state);
                 lua_pushstring(state, "file not found");
                 return 2;
@@ -3481,16 +3516,16 @@ void ScriptEngine::registerEcsBindings() {
             return 2;
         }
 
-        // Resolve with realpath and verify it is under asset root.
+        // Resolve and verify the path is under asset root.
         char resolvedPath[PATH_MAX];
-        if (realpath(absPath, resolvedPath) == nullptr) {
+        if (!ffe::canonicalizePath(absPath, resolvedPath, sizeof(resolvedPath))) {
             lua_pushnil(state);
             lua_pushstring(state, "file not found");
             return 2;
         }
 
         char resolvedRoot[PATH_MAX];
-        if (realpath(assetRoot, resolvedRoot) == nullptr) {
+        if (!ffe::canonicalizePath(assetRoot, resolvedRoot, sizeof(resolvedRoot))) {
             lua_pushnil(state);
             lua_pushstring(state, "asset root invalid");
             return 2;

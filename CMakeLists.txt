@@ -7,6 +7,13 @@ if(DEFINED ENV{VCPKG_ROOT} AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
         CACHE STRING "vcpkg toolchain file")
 endif()
 
+# vcpkg overlay ports — must be set before project() so vcpkg install picks them up.
+# The luajit overlay fixes cross-compilation for Windows/MinGW by rebuilding buildvm
+# with PE object support (the upstream vcpkg luajit host package only provides an
+# ELF-mode buildvm that cannot generate Windows PE objects).
+set(VCPKG_OVERLAY_PORTS "${CMAKE_CURRENT_SOURCE_DIR}/cmake/vcpkg-overlays/ports"
+    CACHE STRING "vcpkg overlay ports directory")
+
 project(FastFreeEngine
     VERSION 0.1.0
     LANGUAGES CXX C

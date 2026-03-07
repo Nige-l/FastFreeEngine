@@ -16,6 +16,44 @@
 #include <filesystem>
 #include <string>
 
+#ifdef _WIN32
+#  include <windows.h>
+#else
+#  include <unistd.h>
+#endif
+
+// ffe_mkdtemp: portable equivalent of POSIX mkdtemp().
+//
+// On POSIX: delegates to mkdtemp(), which atomically creates the directory
+// and replaces the trailing XXXXXX in-place.
+//
+// On Windows (MinGW / MSVC): uses GetTempPathA to locate the system temp
+// directory, appends a fixed prefix, then loops with GetTickCount64 +
+// a counter until CreateDirectoryA succeeds (or gives up after 32 tries).
+// The resulting path is written back into buf, which must be at least 512
+// bytes.  Returns buf on success, nullptr on failure.
+inline char* ffe_mkdtemp(char* buf) {
+#ifdef _WIN32
+    char tempBase[MAX_PATH];
+    if (GetTempPathA(static_cast<DWORD>(sizeof(tempBase)), tempBase) == 0) {
+        return nullptr;
+    }
+    for (int attempt = 0; attempt < 32; ++attempt) {
+        ULONGLONG tick = GetTickCount64();
+        char candidate[512];
+        snprintf(candidate, sizeof(candidate), "%sffe_save_test_%llx_%d",
+                 tempBase, static_cast<unsigned long long>(tick), attempt);
+        if (CreateDirectoryA(candidate, nullptr)) {
+            snprintf(buf, 512, "%s", candidate);
+            return buf;
+        }
+    }
+    return nullptr;
+#else
+    return mkdtemp(buf);
+#endif
+}
+
 // =============================================================================
 // Fixtures
 // =============================================================================
@@ -30,8 +68,12 @@ struct SaveLoadFixture {
         REQUIRE(engine.init());
 
         // Create a unique temporary directory for this test.
+#ifdef _WIN32
+        char tmpl[512] = {};
+#else
         char tmpl[] = "/tmp/ffe_save_test_XXXXXX";
-        const char* dir = mkdtemp(tmpl);
+#endif
+        const char* dir = ffe_mkdtemp(tmpl);
         REQUIRE(dir != nullptr);
         tmpDir = dir;
 

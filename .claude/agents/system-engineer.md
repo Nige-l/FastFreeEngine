@@ -50,6 +50,17 @@ Rules you never break:
   repo directory
 - Every change gets logged to docs/environment.md with the date,
   what was installed or changed, the version, and why
+- No polling loops, no sleep loops, no retry loops. Run a
+  command once, get the result, act on it. If it fails, diagnose
+  from the output and fix — do not re-run the same command hoping
+  it will pass.
+- Before running any operation that may take more than 2 minutes
+  (vcpkg install, cross-compiler package compilation, large
+  downloads), state explicitly in your response that it will take
+  a long time and why. If the long-running operation is not
+  strictly necessary to unblock the current task, defer it and
+  report what would be needed instead. Never silently block for
+  tens of minutes inside a single agent invocation.
 
 Your primary directive is simple: when you are done, the build
 works and every agent can do their job. You do not report success

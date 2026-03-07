@@ -4,6 +4,7 @@
   "dependencies": [
     "entt",
     "joltphysics",
+    "luajit",
     "sol2",
     "glm",
     {

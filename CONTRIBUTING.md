@@ -24,6 +24,29 @@ ctest --test-dir build-gcc --output-on-failure
 
 All code must compile cleanly on **both compilers** with zero warnings (`-Wall -Wextra`).
 
+**Building for Windows (cross-compilation from Linux using MinGW-w64):**
+
+```bash
+# Install the MinGW-w64 cross-compilation toolchain (one-time setup)
+sudo apt-get install mingw-w64
+
+# Configure — uses the bundled toolchain file and the x64-mingw-dynamic vcpkg triplet
+cmake -B build-win -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64-x86_64.cmake \
+  -DVCPKG_TARGET_TRIPLET=x64-mingw-dynamic \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DFFE_TIER=LEGACY
+
+# Build
+cmake --build build-win
+```
+
+Notes:
+- This produces a Windows x64 executable using GCC 13-win32 (`x86_64-w64-mingw32-g++`). The toolchain file is at `cmake/toolchains/mingw-w64-x86_64.cmake`.
+- **LuaJIT** requires a separate MinGW build pass — the system LuaJIT (`libluajit-5.1-dev`) is Linux-only. See `docs/environment.md` for the Windows toolchain details.
+- **mold** is not used for Windows cross-builds — the CMake configuration automatically disables it when targeting Windows.
+- **Native Windows builds** (MSVC, Visual Studio) are planned for a future session and are not yet supported.
+
 **Build toolchain notes:**
 - **Ninja** is the build backend (faster than Make)
 - **mold** is the linker (faster link times). The CMake configuration selects it automatically when available

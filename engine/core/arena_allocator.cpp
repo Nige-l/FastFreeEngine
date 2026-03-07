@@ -1,7 +1,21 @@
 #include "core/arena_allocator.h"
 #include "core/logging.h"
 
-#include <cstdlib>  // std::aligned_alloc / std::free
+#include <cstdlib>  // free / _aligned_malloc / _aligned_free
+
+// Aligned allocation portability:
+// std::aligned_alloc is C++17 but is not in the std:: namespace on MinGW (GCC/Windows CRT).
+// _aligned_malloc/_aligned_free are MSVC/MinGW Windows extensions available in <malloc.h>.
+// ::aligned_alloc (C11, no std:: prefix) is the POSIX/Linux approach.
+// We branch on _WIN32 to handle both targets cleanly.
+#ifdef _WIN32
+#  include <malloc.h>
+#  define FFE_ALIGNED_ALLOC(align, size) _aligned_malloc((size), (align))
+#  define FFE_ALIGNED_FREE(ptr)          _aligned_free(ptr)
+#else
+#  define FFE_ALIGNED_ALLOC(align, size) ::aligned_alloc((align), (size))
+#  define FFE_ALIGNED_FREE(ptr)          ::free(ptr)
+#endif
 
 namespace ffe {
 
@@ -12,7 +26,7 @@ ArenaAllocator::ArenaAllocator(const size_t capacityBytes)
 {
     // Align the buffer to a cache line boundary (64 bytes)
     m_buffer = static_cast<uint8_t*>(
-        std::aligned_alloc(64, capacityBytes)
+        FFE_ALIGNED_ALLOC(64, capacityBytes)
     );
 
     if (!m_buffer) {
@@ -23,7 +37,7 @@ ArenaAllocator::ArenaAllocator(const size_t capacityBytes)
 }
 
 ArenaAllocator::~ArenaAllocator() {
-    std::free(m_buffer);
+    FFE_ALIGNED_FREE(m_buffer);
 }
 
 } // namespace ffe

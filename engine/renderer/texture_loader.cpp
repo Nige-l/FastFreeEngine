@@ -61,7 +61,8 @@
 #include <climits>    // PATH_MAX
 #include <cstring>    // strnlen, strstr, memcpy
 #include <sys/stat.h> // stat(), S_ISDIR
-#include <stdlib.h>   // realpath()
+#include <stdlib.h>   // size_t
+#include "core/platform.h"
 #include <cinttypes>  // PRIu64
 
 namespace ffe::renderer {
@@ -115,6 +116,11 @@ static bool isPathSafe(const char* const path) {
     if (strstr(path, "..\\") != nullptr) { return false; }
     if (strstr(path, "/..") != nullptr) { return false; }
     if (strstr(path, "\\..") != nullptr) { return false; }
+    // Reject Windows Alternate Data Streams (e.g. "textures/sprite.png:stream").
+    // Legitimate relative asset paths never contain ':'.
+    // Drive-letter absolute paths ("C:\...") are already rejected above by the
+    // path[1]==':' check, so any remaining ':' is always an ADS or device path.
+    if (strchr(path, ':') != nullptr) { return false; }
     return true;
 }
 
@@ -169,14 +175,14 @@ static ffe::rhi::TextureHandle loadTextureImpl(const char* const path,
     memcpy(fullPath + rootLen + 1u, path, pathLen);
     fullPath[rootLen + 1u + pathLen] = '\0';
 
-    // SEC-1 (continued): Canonicalise via realpath() to resolve any remaining
+    // SEC-1 (continued): Canonicalise path to resolve any remaining
     // encoded traversal sequences or symlinks the string check may have missed.
-    // MEDIUM-1 (TOCTOU): There is an inherent race between realpath() and fopen().
+    // MEDIUM-1 (TOCTOU): There is an inherent race between canonicalizePath() and fopen().
     // This is accepted for FFE's local threat model — a local attacker with write
     // access to the asset directory can place content there directly. Not a server.
     char canonPath[PATH_MAX + 1];
-    if (::realpath(fullPath, canonPath) == nullptr) {
-        FFE_LOG_ERROR("texture_loader", "loadTexture: realpath() failed for \"%s\"", fullPath);
+    if (!ffe::canonicalizePath(fullPath, canonPath, sizeof(canonPath))) {
+        FFE_LOG_ERROR("texture_loader", "loadTexture: canonicalizePath() failed for \"%s\"", fullPath);
         return ffe::rhi::TextureHandle{0};
     }
 
