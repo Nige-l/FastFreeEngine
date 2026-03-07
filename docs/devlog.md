@@ -3,6 +3,72 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 87: Phase 8 M3 — Vulkan Textures + Uniform Buffers
+
+### Summary
+
+Session 87 delivered Phase 8 M3: Vulkan textures, descriptor sets, and uniform buffers. Texture system creates VkImage via VMA with staging upload and layout transitions (UNDEFINED -> TRANSFER_DST -> SHADER_READ_ONLY), plus VkImageView and VkSampler. Descriptor system manages pools, set layouts (UBO + combined image sampler bindings), allocation, and updates. Uniform buffer system provides MVPUniform struct (192 bytes: model + view + projection mat4s) with per-frame host-coherent buffers and persistent mapping via memcpy. Embedded SPIR-V textured quad shaders (GLSL 450) with MVP transform. Replaced demo triangle with textured quad rendering using 2x2 checkerboard texture, orthographic MVP, and indexed draw. PipelineConfig extended to support descriptor set layout for pipeline layout creation. 10 new CPU-only tests. All reviews PASS. Build: 1234 tests, Clang-18, zero warnings. game-dev-tester: SKIPPED (internal backend).
+
+### Planned
+
+- Phase 8 M3: Vulkan textures, uniform buffers, descriptor sets, textured quad rendering
+
+### Delivered
+
+- **Texture System** -- `vk_texture.h/.cpp` — VkImage via VMA, staging buffer upload, layout transitions, VkImageView, VkSampler
+- **Descriptor System** -- `vk_descriptor.h/.cpp` — descriptor pool, set layout (UBO + sampler bindings), set allocation, update functions
+- **Uniform Buffers** -- `vk_uniform.h/.cpp` — MVPUniform struct (192B), per-frame host-coherent buffers with persistent mapping, memcpy update
+- **Embedded SPIR-V** -- `shaders/textured_vert.h` + `textured_frag.h` — MVP-transformed textured quad shaders (GLSL 450)
+- **Textured Quad Rendering** -- rhi_vulkan.cpp replaced triangle with textured quad, 2x2 checkerboard texture, orthographic MVP, indexed draw
+- **Pipeline Update** -- PipelineConfig supports descriptor set layout for pipeline layout creation
+- **Tests** -- 10 new CPU-only tests (VkManagedTexture, MVPUniform, VkManagedUniform, descriptor constants, SPIR-V magic, vertex stride)
+- **.context.md** -- Updated multi-backend section with M3 progress
+
+### Files Created
+
+- `engine/renderer/vulkan/vk_texture.h`
+- `engine/renderer/vulkan/vk_texture.cpp`
+- `engine/renderer/vulkan/vk_descriptor.h`
+- `engine/renderer/vulkan/vk_descriptor.cpp`
+- `engine/renderer/vulkan/vk_uniform.h`
+- `engine/renderer/vulkan/vk_uniform.cpp`
+- `engine/renderer/vulkan/shaders/textured_vert.h`
+- `engine/renderer/vulkan/shaders/textured_frag.h`
+
+### Files Modified
+
+- `engine/renderer/vulkan/vk_pipeline.h` (descriptor set layout in PipelineConfig)
+- `engine/renderer/vulkan/vk_pipeline.cpp` (pipeline layout with descriptor set layout)
+- `engine/renderer/vulkan/vk_init.h` (texture, descriptor, uniform fields)
+- `engine/renderer/vulkan/rhi_vulkan.cpp` (textured quad rendering)
+- `engine/renderer/CMakeLists.txt` (new sources)
+- `engine/renderer/.context.md` (M3 update)
+- `tests/renderer/test_rhi_vulkan.cpp` (10 new tests)
+
+### Reviews
+
+| Reviewer | Verdict | Notes |
+|----------|---------|-------|
+| performance-critic | PASS | No issues |
+| api-designer | PASS | .context.md updated |
+| security-auditor | SKIPPED | No new attack surface |
+
+### Metrics
+
+| Metric | Value |
+|--------|-------|
+| Tests | 1234 |
+| Warnings | 0 |
+| Build tier | FAST (Clang-18) |
+| New tests | 10 |
+| game-dev-tester | SKIPPED (internal backend) |
+
+### Next
+
+- Phase 8 M4: Vulkan Mesh Rendering — RHI createBuffer/destroyBuffer, createShader/destroyShader, bindVertexBuffer/bindIndexBuffer/drawElements/drawArrays, setUniform* family, bindTexture, Vulkan Blinn-Phong SPIR-V shader, .glb mesh rendering through Vulkan pipeline.
+
+---
+
 ## 2026-03-07 — Session 86: Phase 8 M2 — Vulkan Shader Compilation + Vertex Buffers
 
 ### Summary
