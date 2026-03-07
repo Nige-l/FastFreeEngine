@@ -11,8 +11,15 @@ endif()
 # The luajit overlay fixes cross-compilation for Windows/MinGW by rebuilding buildvm
 # with PE object support (the upstream vcpkg luajit host package only provides an
 # ELF-mode buildvm that cannot generate Windows PE objects).
-set(VCPKG_OVERLAY_PORTS "${CMAKE_CURRENT_SOURCE_DIR}/cmake/vcpkg-overlays/ports"
-    CACHE STRING "vcpkg overlay ports directory")
+#
+# IMPORTANT: The overlay completely shadows the upstream vcpkg luajit port for ALL
+# platforms. It must ONLY be activated for MinGW cross-compilation — macOS and native
+# Linux must use the upstream port. VCPKG_TARGET_TRIPLET is set via -D on the command
+# line for cross-builds; if it contains "mingw", we need the overlay.
+if(DEFINED VCPKG_TARGET_TRIPLET AND VCPKG_TARGET_TRIPLET MATCHES "mingw")
+    set(VCPKG_OVERLAY_PORTS "${CMAKE_CURRENT_SOURCE_DIR}/cmake/vcpkg-overlays/ports"
+        CACHE STRING "vcpkg overlay ports directory")
+endif()
 
 project(FastFreeEngine
     VERSION 0.1.0
