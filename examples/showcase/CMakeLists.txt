@@ -1,24 +1,22 @@
 # Showcase game: "Echoes of the Ancients"
-# Pure Lua project — no C++ target. Uses ffe_runtime to run.
-# This CMakeLists copies Lua scripts to the build directory so the game
-# can be launched from the build tree:
-#   ./build/examples/showcase/game.lua  (via ffe_runtime)
+# Standalone executable — run directly: ./build/examples/showcase/ffe_showcase
 #
-# Usage:
-#   ./build/examples/runtime/ffe_runtime build/examples/showcase/game.lua
+# The C++ host creates the engine, sets asset/script roots, and loads game.lua.
+# Assets and Lua scripts are copied to the build directory next to the binary.
 
-# Collect all Lua files in the showcase tree.
+# --- Executable target ---
+add_executable(ffe_showcase main.cpp)
+target_link_libraries(ffe_showcase PRIVATE ffe_engine)
+
+# --- Collect Lua scripts and asset files ---
 file(GLOB_RECURSE SHOWCASE_LUA_FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/*.lua"
 )
-
-# Collect asset files (models, audio, fonts, textures).
 file(GLOB_RECURSE SHOWCASE_ASSET_FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/assets/*"
 )
 
-# Copy each Lua file to the corresponding location in the build dir,
-# preserving directory structure (lib/, levels/).
+# --- Copy at configure time (initial population) ---
 foreach(LUA_FILE ${SHOWCASE_LUA_FILES})
     file(RELATIVE_PATH REL_PATH "${CMAKE_CURRENT_SOURCE_DIR}" "${LUA_FILE}")
     configure_file(
@@ -28,7 +26,6 @@ foreach(LUA_FILE ${SHOWCASE_LUA_FILES})
     )
 endforeach()
 
-# Copy asset files to the build directory at cmake time.
 foreach(ASSET_FILE ${SHOWCASE_ASSET_FILES})
     file(RELATIVE_PATH REL_PATH "${CMAKE_CURRENT_SOURCE_DIR}" "${ASSET_FILE}")
     configure_file(
@@ -38,18 +35,11 @@ foreach(ASSET_FILE ${SHOWCASE_ASSET_FILES})
     )
 endforeach()
 
-# Custom target so "make showcase" or "ninja showcase" triggers the copy.
-add_custom_target(showcase ALL
-    COMMENT "Copying showcase Lua scripts and assets to build directory"
-    DEPENDS ${SHOWCASE_LUA_FILES} ${SHOWCASE_ASSET_FILES}
-)
-
-# Re-copy on changes (configure_file only runs at cmake time, so we add
-# a build-time copy rule for each file).
+# --- Re-copy on changes at build time ---
 foreach(LUA_FILE ${SHOWCASE_LUA_FILES})
     file(RELATIVE_PATH REL_PATH "${CMAKE_CURRENT_SOURCE_DIR}" "${LUA_FILE}")
     add_custom_command(
-        TARGET showcase POST_BUILD
+        TARGET ffe_showcase POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${LUA_FILE}"
             "${CMAKE_CURRENT_BINARY_DIR}/${REL_PATH}"
@@ -57,11 +47,10 @@ foreach(LUA_FILE ${SHOWCASE_LUA_FILES})
     )
 endforeach()
 
-# Re-copy asset files on changes.
 foreach(ASSET_FILE ${SHOWCASE_ASSET_FILES})
     file(RELATIVE_PATH REL_PATH "${CMAKE_CURRENT_SOURCE_DIR}" "${ASSET_FILE}")
     add_custom_command(
-        TARGET showcase POST_BUILD
+        TARGET ffe_showcase POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${ASSET_FILE}"
             "${CMAKE_CURRENT_BINARY_DIR}/${REL_PATH}"

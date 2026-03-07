@@ -1,7 +1,7 @@
 site_name: FastFreeEngine
 site_description: A performance-first, open-source C++ game engine that runs on old hardware
-site_url: https://fastfreeengine.github.io  # placeholder
-repo_url: https://github.com/user/FastFreeEngine  # placeholder — update when public repo exists
+site_url: https://nige-l.github.io/FastFreeEngine/
+repo_url: https://github.com/Nige-l/FastFreeEngine
 repo_name: FastFreeEngine
 
 theme:
