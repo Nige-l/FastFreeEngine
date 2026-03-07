@@ -6,9 +6,9 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 89 |
-| Total tests | 1234 (FULL build — Clang-18 + GCC-13, zero warnings) |
-| Total Lua bindings | ~190 |
+| Last session | 90 |
+| Total tests | 1252 (Clang-18, zero warnings) |
+| Total Lua bindings | ~194 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
 | Phase 2 (3D Foundation) | COMPLETE |
 | Phase 3 (Standalone Editor) | MVP COMPLETE (6 milestones, Sessions 51-56) |
@@ -17,7 +17,7 @@
 | Phase 6 (Showcase Game) | COMPLETE (Sessions 66-73) |
 | Phase 7 (Rendering Pipeline) | COMPLETE (Sessions 74-84) |
 | Phase 8 (Vulkan Backend) | COMPLETE (Sessions 85-89) |
-| Phase 9 (Terrain/Open World) | NEXT |
+| Phase 9 (Terrain/Open World) | IN PROGRESS (Session 90+) |
 | Windows build | DONE (MinGW-w64 cross-compilation) |
 | macOS build | DISABLED (upstream LuaJIT arm64-osx vcpkg issue) |
 | GitHub Actions CI | DONE (Linux Clang-18, Linux GCC-13) |
@@ -44,11 +44,11 @@
 
 | Session | Summary |
 |---------|---------|
+| 90 | Phase 9 M1: Heightmap Terrain Rendering — chunked heightmap terrain (raw float + PNG loading), configurable chunk resolution, bilinear height queries, terrain renderer (Blinn-Phong, shadows, fog), 4 Lua bindings, 18 new tests. 1252 tests (FAST). |
 | 89 | Phase 8 M5 (PHASE CLOSE): Vulkan depth buffer + build-time SPIR-V — depth attachment (VMA, format selection), pipeline depth state, CMake glslc pipeline, embed_spirv.cmake, 6 GLSL 450 shaders, Blinn-Phong lighting. 10 new tests. FULL build: 1234 tests. Phase 8 COMPLETE. |
 | 88 | Phase 8 M4: Vulkan Mesh Rendering — resource manager (handle pools), full RHI impl (buffers/textures/shaders/uniforms/draw), Blinn-Phong SPIR-V, SceneUBO+LightUBO. 17 new tests. 1234 tests (FAST). |
 | 87 | Phase 8 M3: Vulkan Textures + Uniform Buffers — VkImage/VMA, descriptors, MVPUniform, textured quad rendering. 10 new tests. 1234 tests (FAST). |
 | 86 | Phase 8 M2: Vulkan Shader Compilation + Vertex Buffers — VMA integration, SPIR-V shaders, graphics pipeline, staged buffer uploads, triangle rendering. 13 new tests. 1234 tests (FAST). |
-| 85 | Phase 8 M1: Vulkan Backend Bootstrap — compile-time FFE_BACKEND selection, volk loader, instance/device/swapchain init, RHI Vulkan impl (clear-color), tier validation. 6 new tests. 1234 tests (FAST). |
 
 ## Phase 8 — Vulkan Backend (COMPLETE, Sessions 85-89)
 
@@ -62,9 +62,16 @@
 - [x] M4 (Session 88): Vulkan Mesh Rendering -- vk_resource_manager (256 buffer/texture, 32 shader handle pools, 1-based handles), full RHI impl (createBuffer/updateBuffer/destroyBuffer, createTexture/destroyTexture/bindTexture, createShader/destroyShader/useShader, setUniformMat4/Vec3/Float/Int via FNV-1a hash, drawArrays/drawIndexed), SceneUBO (256B) + LightUBO (64B), Blinn-Phong SPIR-V headers (placeholder, glslc TODO), render pass restructured for multi-draw-call frames. 17 new CPU-only tests.
 - [x] M5 (Session 89): Vulkan Depth Buffer + Build-Time SPIR-V -- VkImage depth attachment (VMA, D32_SFLOAT/D32_SFLOAT_S8/D24_UNORM_S8 format selection), PipelineConfig depth state, CMake glslc/glslangValidator pipeline (embed_spirv.cmake, constexpr u32 arrays), 6 GLSL 450 shader source files (triangle/textured/blinn_phong vert+frag), full Blinn-Phong directional lighting. 10 new tests. FULL build: 1234 tests, zero warnings, Clang-18 + GCC-13. **PHASE 8 COMPLETE.**
 
-## Phase 9 — Terrain and Open World (NEXT)
+## Phase 9 — Terrain and Open World (IN PROGRESS, Session 90+)
 
-**Goal:** Large-scale outdoor environment support with terrain rendering, LOD, and streaming. See `docs/ROADMAP.md` for full deliverables.
+**Goal:** Large-scale outdoor environment support with terrain rendering, LOD, and streaming. ADR: `docs/architecture/adr-phase9-terrain.md`. See `docs/ROADMAP.md` for full deliverables.
+
+### Milestones
+
+- [x] M1 (Session 90): Heightmap Terrain Rendering -- TerrainHandle, TerrainConfig, raw float + PNG heightmap loading (stb_image), chunked mesh generation (configurable resolution up to 128x128 per chunk), normal computation via finite differences, bilinear height queries, path security, NaN rejection, terrain renderer (MESH_BLINN_PHONG, directional + point lights, shadows, fog), Terrain ECS component (8B), 4 Lua bindings, 18 new tests.
+- [ ] M2: Terrain Texturing -- splat map (RGBA = 4 texture layers), triplanar projection for cliff faces, terrain material system, TERRAIN shader, Lua bindings for texture layer assignment.
+- [ ] M3: Terrain LOD -- distance-based chunk detail levels, seamless stitching between LOD levels.
+- [ ] M4: World Streaming -- chunk loading/unloading based on camera position, async loading.
 
 ## Build Commands
 

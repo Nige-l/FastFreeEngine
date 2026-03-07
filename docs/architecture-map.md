@@ -12,7 +12,7 @@ engine/
   renderer/opengl/  — OpenGL 3.3 RHI backend, GL debug utilities                               [renderer-specialist]
   audio/            — miniaudio backend, WAV/OGG, sound/music playback, headless mode           [engine-dev]
   physics/          — 2D collision: spatial hash, AABB/Circle, layer/mask, callbacks            [engine-dev]
-  scripting/        — LuaJIT sandbox, ffe.* Lua API (~190 bindings), timer system               [engine-dev + api-designer]
+  scripting/        — LuaJIT sandbox, ffe.* Lua API (~194 bindings), timer system               [engine-dev + api-designer]
   networking/       — ENet transport, replication, server/client, prediction, lobby, lag compensation, network system  [engine-dev]
   editor/           — Standalone editor (ImGui dockspace, hierarchy, inspector, viewport, gizmos, build pipeline)  [engine-dev]
 tests/
@@ -61,6 +61,8 @@ text_renderer -> renderer    (TTF + bitmap font, uses RHI + sprite_batch)
 post_process --> renderer    (HDR FBO, bloom, tone mapping, gamma, FXAA integration)
 gpu_instancing > renderer    (batched instanced draw, uses RHI)
 ssao ---------> renderer     (screen-space AO, uses RHI + post_process)
+terrain ------> renderer     (chunked heightmap, uses RHI + mesh_renderer pipeline)
+terrain_renderer > renderer  (ECS terrain render system, uses MESH_BLINN_PHONG shader)
 texture_atlas -> renderer    (runtime shelf-packed sprite atlas, uses RHI)
 pbr_material --> renderer    (Cook-Torrance BRDF, metallic-roughness, IBL)
 ```
@@ -84,6 +86,7 @@ Cross-cutting: `core/platform.h` (path canonicalization) used by scripting + ren
 | GPU Instancing | `engine/renderer/gpu_instancing.h` |
 | SSAO | `engine/renderer/ssao.h`, `engine/renderer/ssao.cpp` |
 | Texture Atlas | `engine/renderer/texture_atlas.h`, `engine/renderer/texture_atlas.cpp` |
+| Terrain | `engine/renderer/terrain.h`, `engine/renderer/terrain.cpp`, `engine/renderer/terrain_internal.h`, `engine/renderer/terrain_renderer.h`, `engine/renderer/terrain_renderer.cpp` |
 | Shadows | `engine/renderer/shadow_map.h`, `engine/renderer/shadow_map.cpp` |
 | Shaders | `engine/renderer/shader_library.h`, `engine/renderer/shader_library.cpp` |
 | Text | `engine/renderer/text_renderer.h`, `engine/renderer/font.cpp` |
@@ -144,6 +147,8 @@ Cross-cutting: `core/platform.h` (path canonicalization) used by scripting + ren
 
 **SSAO** (3): `enableSSAO`, `disableSSAO`, `setSSAORadius`
 
+**Terrain** (4): `loadTerrain`, `getTerrainHeight`, `unloadTerrain`, `setTerrainTexture`
+
 **Fog** (2): `enableFog`, `disableFog`
 
 **Screenshot** (1): `screenshot`
@@ -164,6 +169,7 @@ Cross-cutting: `core/platform.h` (path canonicalization) used by scripting + ren
 | Mesh | 8B | renderer | `render_system.h` |
 | Material3D | 24B | renderer | `render_system.h` |
 | PBRMaterial | ~40B | renderer | `pbr_material.h` |
+| Terrain | 8B | renderer | `render_system.h` |
 | Skeleton | varies | renderer | `render_system.h` |
 | AnimationState | ~16B | renderer | `render_system.h` |
 | Collider2D | ~24B | physics | `collider2d.h` |

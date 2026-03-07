@@ -3,6 +3,45 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 90: Phase 9 M1 — Heightmap Terrain Rendering
+
+### Summary
+
+Session 90 delivered Phase 9 M1: heightmap terrain rendering. Chunked heightmap terrain system with TerrainHandle/TerrainConfig, supporting both raw float and PNG heightmap loading (via stb_image). Configurable chunk resolution up to 128x128 vertices per chunk. Normal computation via finite differences, bilinear height queries for gameplay (getTerrainHeight), path security (isPathSafe), and NaN rejection on all inputs. Terrain renderer integrates with existing MESH_BLINN_PHONG shader pipeline -- full lighting support (directional + point lights), shadow mapping, and fog. Lightweight 8-byte ECS Terrain component. Application integration: terrainRenderSystem called after meshRenderSystem, unloadAllTerrains in shutdown. 4 Lua bindings: ffe.loadTerrain, ffe.getTerrainHeight, ffe.unloadTerrain, ffe.setTerrainTexture. 18 new tests (10 terrain struct/loader + 8 Lua binding). All reviews PASS (performance PASS, API MINOR ISSUES fixed in remediation -- context.md signature mismatch corrected). 1252 tests, zero warnings, Clang-18. game-dev-tester: SKIPPED (loadTerrain/unloadTerrain follows established loadMesh/unloadMesh pattern).
+
+### ADR
+
+`docs/architecture/adr-phase9-terrain.md` -- chunked heightmap design, handle pattern, vertex format (position + normal + UV), performance budget, tier support (LEGACY default).
+
+### Files Created (8)
+
+- `docs/architecture/adr-phase9-terrain.md`
+- `engine/renderer/terrain.h`
+- `engine/renderer/terrain.cpp`
+- `engine/renderer/terrain_internal.h`
+- `engine/renderer/terrain_renderer.h`
+- `engine/renderer/terrain_renderer.cpp`
+- `tests/renderer/test_terrain.cpp`
+- `tests/scripting/test_terrain_bindings.cpp`
+
+### Files Modified (6)
+
+- `engine/renderer/render_system.h` (Terrain component)
+- `engine/renderer/CMakeLists.txt`
+- `engine/core/application.cpp`
+- `engine/scripting/script_engine.cpp` (4 bindings)
+- `engine/renderer/.context.md`
+- `tests/CMakeLists.txt`
+
+### Phase 9 Status
+
+- [x] M1: Heightmap Terrain Rendering (Session 90)
+- [ ] M2: Terrain Texturing (splat map, triplanar projection, TERRAIN shader)
+- [ ] M3: Terrain LOD (distance-based chunk detail)
+- [ ] M4: World Streaming (async chunk loading/unloading)
+
+---
+
 ## 2026-03-07 — Session 89: Phase 8 M5 — Vulkan Depth Buffer + Build-Time SPIR-V (PHASE CLOSE)
 
 ### Summary
