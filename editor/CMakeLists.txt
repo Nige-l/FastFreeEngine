@@ -8,6 +8,9 @@ add_executable(ffe_editor_app
     play_mode.cpp
     commands/command_history.cpp
     commands/entity_commands.cpp
+    build/build_config.cpp
+    build/exporter.cpp
+    panels/build_panel.cpp
     panels/file_dialog.cpp
     panels/viewport_panel.cpp
     rendering/editor_framebuffer.cpp
@@ -23,11 +26,14 @@ target_include_directories(ffe_editor_app PRIVATE
 
 find_package(glfw3 3.3 REQUIRED)
 
+find_package(nlohmann_json CONFIG REQUIRED)
+
 target_link_libraries(ffe_editor_app PRIVATE
     ffe_engine
     imgui::imgui
     glad
     glfw
+    nlohmann_json::nlohmann_json
 )
 
 target_compile_definitions(ffe_editor_app PRIVATE FFE_EDITOR_APP=1)

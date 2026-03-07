@@ -26,6 +26,7 @@ extern "C" {
 #include "physics/collider2d.h"
 #include "physics/physics3d.h"
 #include "physics/physics3d_system.h"
+#include "scene/scene_serialiser.h"
 
 #include <glm/gtc/quaternion.hpp>
 
@@ -3264,6 +3265,70 @@ void ScriptEngine::registerEcsBindings() {
         return 0;
     });
     lua_setfield(L, -2, "loadScene");
+
+    // ffe.loadSceneJSON(jsonPath) -> bool
+    // Loads a JSON scene file exported by the editor. Clears all existing
+    // entities first, then deserialises the JSON scene into the world.
+    // The path is relative and validated with the same safety checks as other
+    // file-loading bindings. Returns true on success, false on failure.
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        if (!lua_isstring(state, 1)) {
+            FFE_LOG_ERROR("ScriptEngine", "loadSceneJSON: expected string argument");
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        const char* jsonPath = lua_tostring(state, 1);
+
+        if (!isPathSafe(jsonPath)) {
+            FFE_LOG_ERROR("ScriptEngine", "loadSceneJSON: path rejected by safety check: %s",
+                          jsonPath != nullptr ? jsonPath : "(null)");
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+
+        // Retrieve the World pointer from the Lua registry.
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            FFE_LOG_ERROR("ScriptEngine", "loadSceneJSON: no World registered");
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        // Retrieve the ScriptEngine pointer for the asset root.
+        lua_pushlightuserdata(state, &s_engineRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            FFE_LOG_ERROR("ScriptEngine", "loadSceneJSON: no ScriptEngine registered");
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        auto* engine = static_cast<ffe::ScriptEngine*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        if (engine->scriptRoot() == nullptr) {
+            FFE_LOG_ERROR("ScriptEngine", "loadSceneJSON: script root not set");
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+
+        // Build the full path: <scriptRoot>/<jsonPath>
+        char fullPath[1024];
+        std::snprintf(fullPath, sizeof(fullPath), "%s/%s",
+                      engine->scriptRoot(), jsonPath);
+
+        // Clear existing entities before loading the new scene.
+        world->clearAllEntities();
+
+        const bool ok = ffe::scene::loadScene(*world, std::string(fullPath));
+        lua_pushboolean(state, ok ? 1 : 0);
+        return 1;
+    });
+    lua_setfield(L, -2, "loadSceneJSON");
 
     // ----------------------------------------------------------------
     // Save/Load bindings — persist Lua tables as JSON files.

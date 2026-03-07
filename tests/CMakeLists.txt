@@ -46,11 +46,13 @@ add_executable(ffe_tests_scripting
     scripting/test_audio3d_bindings.cpp
     scripting/test_physics3d_bindings.cpp
     scripting/test_physics3d_collision_bindings.cpp
+    scripting/test_scene_load_binding.cpp
 )
 
 target_link_libraries(ffe_tests_scripting
     PRIVATE
         ffe_scripting
+        ffe_scene
         Catch2::Catch2WithMain
 )
 
@@ -160,3 +162,29 @@ target_include_directories(ffe_tests_editor
 )
 
 catch_discover_tests(ffe_tests_editor)
+
+# --- Editor exporter tests ---
+# Separate executable for the build/export pipeline tests.
+# Links nlohmann-json for BuildConfig serialisation. Does not link ImGui.
+find_package(nlohmann_json CONFIG REQUIRED)
+
+add_executable(ffe_tests_exporter
+    test_main.cpp
+    editor/test_exporter.cpp
+    ${CMAKE_SOURCE_DIR}/editor/build/build_config.cpp
+    ${CMAKE_SOURCE_DIR}/editor/build/exporter.cpp
+)
+
+target_link_libraries(ffe_tests_exporter
+    PRIVATE
+        nlohmann_json::nlohmann_json
+        Catch2::Catch2WithMain
+)
+
+target_include_directories(ffe_tests_exporter
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/editor
+)
+
+catch_discover_tests(ffe_tests_exporter)
