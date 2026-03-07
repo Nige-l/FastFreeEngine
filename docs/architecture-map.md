@@ -52,6 +52,7 @@ audio     -----> core        (uses ECS context for config)
 physics   -----> core        (uses ECS World for collision components)
 editor    -----> core, renderer  (reads HudTextBuffer from ECS context)
 mesh_renderer --> renderer   (3D render pass, uses RHI + shader_library)
+anim_system --> renderer     (bone matrix computation, uses skeleton.h)
 shadow_map ----> renderer    (depth FBO, uses mesh_renderer pipeline)
 sprite_batch --> renderer    (2D batched draw, uses RHI)
 text_renderer -> renderer    (TTF + bitmap font, uses RHI + sprite_batch)
@@ -70,6 +71,7 @@ Cross-cutting: `core/platform.h` (path canonicalization) used by scripting + ren
 | RHI | `engine/renderer/rhi.h`, `engine/renderer/rhi_types.h`, `engine/renderer/opengl/rhi_opengl.h` |
 | Sprite/2D | `engine/renderer/render_system.h`, `engine/renderer/sprite_batch.h`, `engine/renderer/render_queue.h` |
 | 3D Mesh | `engine/renderer/mesh_loader.h`, `engine/renderer/mesh_renderer.h` |
+| Skeletal Anim | `engine/renderer/skeleton.h`, `engine/renderer/animation_system.h`, `engine/renderer/animation_system.cpp` |
 | Shadows | `engine/renderer/shadow_map.h`, `engine/renderer/shadow_map.cpp` |
 | Shaders | `engine/renderer/shader_library.h`, `engine/renderer/shader_library.cpp` |
 | Text | `engine/renderer/text_renderer.h`, `engine/renderer/font.cpp` |
@@ -118,6 +120,8 @@ Cross-cutting: `core/platform.h` (path canonicalization) used by scripting + ren
 
 **Shadows** (4): `enableShadows`, `disableShadows`, `setShadowBias`, `setShadowArea`
 
+**3D Animation** (6): `playAnimation3D`, `stopAnimation3D`, `setAnimationSpeed3D`, `getAnimationProgress3D`, `isAnimation3DPlaying`, `getAnimationCount3D`
+
 **Screenshot** (1): `screenshot`
 
 **Networking** (30): `startServer`, `stopServer`, `isServer`, `connectToServer`, `disconnect`, `isConnected`, `getClientId`, `sendMessage`, `onNetworkMessage`, `onClientConnected`, `onClientDisconnected`, `onConnected`, `onDisconnected`, `setNetworkTickRate`, `setLocalPlayer`, `sendInput`, `onServerInput`, `getPredictionError`, `getNetworkTick`, `createLobby`, `destroyLobby`, `joinLobby`, `leaveLobby`, `setReady`, `isInLobby`, `getLobbyPlayers`, `startLobbyGame`, `onLobbyUpdate`, `onGameStart`, `performHitCheck`, `setLagCompensationWindow`, `onHitConfirm`
@@ -135,6 +139,8 @@ Cross-cutting: `core/platform.h` (path canonicalization) used by scripting + ren
 | Transform3D | 44B | renderer | `render_system.h` |
 | Mesh | 8B | renderer | `render_system.h` |
 | Material3D | 24B | renderer | `render_system.h` |
+| Skeleton | varies | renderer | `render_system.h` |
+| AnimationState | ~16B | renderer | `render_system.h` |
 | Collider2D | ~24B | physics | `collider2d.h` |
 | CollisionEventList | ~varies | physics | `collider2d.h` |
 | CollisionCallbackRef | ~16B | physics | `collider2d.h` |
@@ -160,5 +166,7 @@ Cross-cutting: `core/platform.h` (path canonicalization) used by scripting + ren
 | `SPRITE` (2) | Sprite | Batched 2D sprites with color tint |
 | `MESH_BLINN_PHONG` (3) | 3D Blinn-Phong | 3D mesh rendering with directional light, shadows |
 | `SHADOW_DEPTH` (4) | Shadow depth | Depth-only pass for directional shadow mapping |
+| `MESH_SKINNED` (5) | Skinned mesh | 3D mesh with bone matrix skinning (64 max bones) |
+| `SHADOW_DEPTH_SKINNED` (6) | Skinned shadow | Depth-only pass for skinned meshes |
 
 All shaders are GLSL 330 core. Source is inline in `engine/renderer/shader_library.cpp`.

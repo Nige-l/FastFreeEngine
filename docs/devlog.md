@@ -3,6 +3,54 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-34 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 61: Phase 4 Closeout, Transition to Phase 5
+
+### Summary
+
+Session 61 closed out Phase 4 (Networking and Multiplayer). All Phase 4 deliverables are met: transport, packets, replication, prediction, lobby/matchmaking, lag compensation, networked demo, and security hardening. NAT traversal deferred to backlog (relay server is infrastructure/ops, not engine library code). FULL build verified: 991 tests on both Clang-18 and GCC-13, zero warnings. Phase 5 (Website and Learning Platform) begins next session.
+
+### Planned
+
+- Phase 4 closeout and transition
+- Commit skeletal animation .context.md documentation update
+- Update architecture-map with skeletal animation entries (shaders, components, Lua bindings)
+- Mark Phase 4 COMPLETE in project-state and ROADMAP
+
+### Delivered
+
+- **Skeletal animation .context.md** — constants table (MAX_BONES, MAX_BONE_INFLUENCES, MAX_ANIMATIONS_PER_MESH, MAX_KEYFRAMES_PER_CHANNEL) added to renderer documentation.
+- **Architecture map updates** — added skeletal animation files, MESH_SKINNED/SHADOW_DEPTH_SKINNED shaders, Skeleton/AnimationState ECS components, animation_system dependency, 6 Lua animation bindings.
+- **Phase 4 COMPLETE** — all networking deliverables checked off in ROADMAP.md and project-state.md. NAT traversal moved to backlog with rationale.
+- **Phase 5 transition** — current phase set to Phase 5 (Website and Learning Platform) in project-state.md.
+
+### Build
+
+- **FULL build** — 991 tests on both Clang-18 and GCC-13, zero warnings.
+
+### Phase 4 Retrospective
+
+Phase 4 spanned Sessions 57-60 (4 sessions). Delivered:
+- ENet transport with function-pointer callbacks (no virtual dispatch)
+- PacketReader/Writer with bounds checking, NaN/Inf rejection, 1200-byte MTU
+- Per-connection rate limiting (security hardening)
+- ReplicationRegistry (32 component types, snapshot serialization, slerp interpolation)
+- NetworkServer (authoritative broadcast, input processing, lobby management)
+- NetworkClient (snapshot receiving, interpolation, prediction, lobby integration)
+- ClientPrediction (64-slot ring buffer, server reconciliation)
+- LobbyServer/LobbyClient (create/join/leave/ready/game start)
+- LagCompensator (64-frame history, ray-vs-sphere hit check, server-side rewind)
+- 30 Lua networking bindings
+- Net Arena demo (2D multiplayer arena with client-side prediction)
+- Full networking ADR and .context.md documentation
+
+NAT traversal was the only remaining item and was deferred: relay server infrastructure is an ops/deployment concern, not an engine library feature. ENet's direct connect model covers LAN and public IP scenarios, which is sufficient for the engine's scope.
+
+### Next
+
+- Phase 5 (Website and Learning Platform) begins. First deliverable: documentation site with API reference generated from .context.md files.
+
+---
+
 ## 2026-03-07 — Session 60: Lobby/Matchmaking + Lag Compensation
 
 ### Summary

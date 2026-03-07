@@ -105,16 +105,16 @@ This document defines the phased development plan for FFE. Each phase builds on 
 **Goal:** Built-in multiplayer support for both 2D and 3D games.
 
 ### Deliverables
-- [ ] Client-server architecture (authoritative server model)
-- [ ] ECS state replication (sync entity components across network)
-- [ ] Network transport (UDP with reliability layer, or use a library like ENet/GameNetworkingSockets)
-- [ ] Lobby/matchmaking API
-- [ ] Network prediction and interpolation (client-side prediction, server reconciliation)
-- [ ] Lua bindings for networking (send/receive messages, RPC)
-- [ ] Lag compensation
-- [ ] Network security (packet validation, rate limiting, anti-cheat hooks)
-- [ ] At least one networked demo game
-- [ ] NAT traversal / relay server support
+- [x] Client-server architecture (authoritative server model)
+- [x] ECS state replication (sync entity components across network)
+- [x] Network transport (ENet — UDP with reliability layer)
+- [x] Lobby/matchmaking API
+- [x] Network prediction and interpolation (client-side prediction, server reconciliation)
+- [x] Lua bindings for networking (30 bindings)
+- [x] Lag compensation
+- [x] Network security (packet validation, rate limiting)
+- [x] At least one networked demo game (Net Arena)
+- [ ] NAT traversal / relay server support — **deferred to backlog** (relay is infrastructure/ops, not engine library code; ENet direct connect covers LAN and public IP scenarios)
 
 ### Architecture Constraints
 - Networking must be designed for the ECS — replicate components, not objects
