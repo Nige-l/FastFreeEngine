@@ -3,6 +3,98 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 75: Showcase Bug Fixes + game-dev-tester Process Reform
+
+### Summary
+
+Session 75 fixed 7 user-reported bugs in the "Echoes of the Ancients" showcase demo and reformed the game-dev-tester agent process. Added 3 new Lua bindings (getMouseDeltaX, getMouseDeltaY, setCursorCaptured) for FPS mouse controls. Director review completed: game-dev-tester upgraded from "conditional only" to "mandatory for demo changes." game-dev-tester validated the showcase (8/10, found 2 additional issues, both fixed). FAST build: 1052 tests, zero warnings.
+
+### Planned
+
+- Fix 7 user-reported showcase demo bugs
+- Director review of game-dev-tester process
+
+### Delivered
+
+- **Model rotation fix** -- Models now rotate to face movement direction correctly.
+- **Ground visibility fix** -- Ground plane visible in all levels.
+- **Health drain grace period** -- AI enemies no longer damage player instantly; added grace period after spawn.
+- **Music loading fix** -- Corrected music file paths for all levels.
+- **UI scaling fix** -- HUD elements scale correctly at different resolutions.
+- **FPS mouse controls** -- Added `ffe.getMouseDeltaX()`, `ffe.getMouseDeltaY()`, `ffe.setCursorCaptured(bool)` Lua bindings for proper FPS camera control.
+- **Attack input fix** -- Melee attack input now registers reliably.
+- **Process reform** -- Director review upgraded game-dev-tester from conditional to mandatory for all demo/showcase changes. Updated CLAUDE.md, PM agent file, game-dev-tester agent file, director agent file.
+- **game-dev-tester validation** -- Scored showcase 8/10, found 2 additional issues (both fixed in-session).
+- **6 new tests** -- Mouse delta and cursor capture binding tests.
+
+### Files Changed
+
+- `engine/scripting/script_engine.cpp` (MODIFIED -- 3 new Lua bindings)
+- `engine/core/application.h/cpp` (MODIFIED -- mouse delta + cursor capture support)
+- `examples/showcase/` (MODIFIED -- 7 bug fixes across game, player, camera, HUD, levels)
+- `tests/scripting/test_mouse_bindings.cpp` (CREATED -- 6 tests)
+- `.claude/CLAUDE.md` (MODIFIED -- game-dev-tester process reform)
+- `.claude/agents/project-manager.md` (MODIFIED)
+- `.claude/agents/game-dev-tester.md` (MODIFIED)
+- `.claude/agents/director.md` (MODIFIED)
+
+### Reviews
+
+- performance-critic: PASS
+- api-designer: PASS
+- security-auditor: SKIPPED (no new attack surface)
+- game-dev-tester: PASS (8/10, 2 issues found and fixed)
+- director: COMPLETED (process reform approved)
+
+### Next Session (76)
+
+Phase 7 M2: Post-Processing Pipeline -- HDR FBO chain, bloom, tone mapping, gamma correction.
+
+---
+
+## 2026-03-07 — Session 74: Phase 7 M1 — PBR Materials + Fog System
+
+### Summary
+
+Session 74 delivered Phase 7 Milestone 1: PBR materials with Cook-Torrance BRDF, metallic-roughness workflow, and Image-Based Lighting (IBL) via skybox cubemap. Also delivered the fog system (linear fog with Lua bindings). 41 new tests (17 PBR material + 24 PBR bindings). FAST build: 1046 tests, zero warnings.
+
+### Planned
+
+- PBR Materials (Cook-Torrance BRDF, metallic-roughness workflow)
+- IBL pipeline (irradiance cubemap from existing skybox)
+- Lua bindings for PBR material properties
+- Fog system with Lua bindings
+
+### Delivered
+
+- **PBR Materials** -- PBRMaterial component (POD struct), Cook-Torrance BRDF shader (GGX normal distribution, Smith geometry, Fresnel-Schlick), metallic-roughness workflow with albedo, metallic, roughness, AO, and emissive maps.
+- **Image-Based Lighting** -- IBL pipeline using existing skybox cubemap for ambient lighting. Irradiance convolution and prefiltered specular maps.
+- **Fog system** -- Linear depth fog integrated into both Blinn-Phong and PBR shaders. `ffe.setFog(r, g, b, near, far)` and `ffe.disableFog()` Lua bindings.
+- **Lua bindings** -- `ffe.setPBRMaterial`, `ffe.setPBRTexture` and related PBR property bindings.
+- **41 new tests** -- 17 PBR material component tests, 24 PBR Lua binding tests.
+
+### Files Changed
+
+- `engine/renderer/` (MODIFIED -- PBR shader, material component, mesh renderer updates)
+- `engine/scripting/script_engine.cpp` (MODIFIED -- PBR Lua bindings)
+- `engine/renderer/.context.md` (MODIFIED -- PBR documentation)
+- `engine/scripting/.context.md` (MODIFIED -- PBR binding documentation)
+- `tests/renderer/test_pbr_material.cpp` (CREATED -- 17 tests)
+- `tests/scripting/test_pbr_bindings.cpp` (CREATED -- 24 tests)
+
+### Reviews
+
+- performance-critic: PASS
+- api-designer: PASS
+- security-auditor: SKIPPED (no new attack surface -- IBL reuses reviewed skybox path)
+- game-dev-tester: SKIPPED (no new API paradigm)
+
+### Next Session (75)
+
+Showcase bug fixes (user-reported issues) and process improvements.
+
+---
+
 ## 2026-03-07 — Session 73: Phase 6 COMPLETE + Phase 7 Planning
 
 ### Summary

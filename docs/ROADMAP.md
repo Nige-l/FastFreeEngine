@@ -265,6 +265,7 @@ This document defines the phased development plan for FFE. Each phase builds on 
 - [ ] Prefab system (reusable entity templates with overrides)
 - [ ] LLM integration panel (connect AI assistant, generate code, explain systems)
 - [ ] Editor preferences and project wizard
+- [ ] Installer / easy setup wizard (install FFE, connect AI model, start making games without build complexity)
 - [ ] Animation editor (timeline, keyframes, state machine visualization)
 
 ---

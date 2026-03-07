@@ -6,9 +6,9 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 73 |
-| Total tests | 1005 (FAST build: Clang-18, zero warnings) |
-| Total Lua bindings | ~169 |
+| Last session | 75 |
+| Total tests | 1052 (FAST build: Clang-18, zero warnings) |
+| Total Lua bindings | ~172 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
 | Phase 2 (3D Foundation) | COMPLETE |
 | Phase 3 (Standalone Editor) | MVP COMPLETE (6 milestones, Sessions 51-56) |
@@ -36,16 +36,17 @@
 - MSVC native build support -- deferred (MinGW cross-compile works)
 - set3DCameraFPS lacks NaN/Inf guards (MINOR -- backlog)
 - NAT traversal / relay server -- deferred to backlog
+- Installer / easy setup wizard -- user should install, connect AI model, start making games without build complexity (user request, Session 75)
 
 ## Recent Sessions (last 5)
 
 | Session | Summary |
 |---------|---------|
+| 75 | Showcase demo 7 bugs fixed, 3 new Lua bindings (getMouseDeltaX/Y, setCursorCaptured), game-dev-tester process reformed (now mandatory for demo changes), director review. 1052 tests (FAST). |
+| 74 | Phase 7 M1: PBR Materials (Cook-Torrance BRDF, metallic-roughness, IBL via skybox cubemap), fog system, 41 new tests. 1046 tests (FAST). |
 | 73 | Phase 6 COMPLETE. Phase 7 ADR approved (PBR, post-processing, instancing, skeletal anim, AA, SSAO). README + ROADMAP updated. No C++ changes. |
 | 72 | Phase 6 M4b: Polish pass -- main menu, pause menu, victory particles/rank, gamepad dead-zones, dynamic HUD labels. 1005 tests (FAST). |
 | 71 | Phase 6 M4: Level 3 "The Summit" (floating platforms, moving platforms, sunset lighting, 4 guardians + boss, victory sequence with stats). 1005 tests (FAST). |
-| 70 | Phase 6 M3 (part 2): Real CC0 3D models (7 .glb), Suno music integration, Level 2 gameplay, GitHub Pages fix, macOS CI disabled. 1005 tests (FAST). |
-| 69 | Phase 6 M3 (part 1): Level 2 "The Temple" (underground, dark lighting, crystal puzzle, boss guardian, artifact). 1005 tests (FAST). |
 
 ## Phase 7 — Rendering Pipeline Modernisation (IN PROGRESS)
 
@@ -53,7 +54,7 @@
 
 ### Milestones
 
-- [ ] M1 (Sessions 74-75): PBR Materials -- PBRMaterial component, Cook-Torrance BRDF shader, IBL, Lua bindings, tests
+- [x] M1 (Sessions 74-75): PBR Materials -- PBRMaterial component, Cook-Torrance BRDF shader, IBL, Lua bindings, tests. Session 75: showcase bug fixes + process reform.
 - [ ] M2 (Sessions 76-77): Post-Processing -- HDR FBO chain, bloom, tone mapping, gamma correction
 - [ ] M3 (Sessions 78-79): GPU Instancing -- instance buffers, automatic batching, 1000-instance benchmark
 - [ ] M4 (Sessions 80-81): Skeletal Animation Completion -- crossfade blending, interpolation modes, root motion
