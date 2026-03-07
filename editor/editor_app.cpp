@@ -93,6 +93,11 @@ void EditorApp::run() {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
+        // Tick the engine when in play mode (fixed 60 fps timestep)
+        if (m_app && m_playMode.state() == ffe::editor::PlayState::PLAYING) {
+            m_app->tickOnce(1.0f / 60.0f);
+        }
+
         // Render editor UI
         renderMenuBar();
         renderPanels();
@@ -173,7 +178,7 @@ void EditorApp::renderMenuBar() {
 
 void EditorApp::renderPanels() {
     if (m_showViewport && m_app) {
-        m_viewport.render(*m_app);
+        m_viewport.render(*m_app, m_playMode);
     }
 
     // File dialog

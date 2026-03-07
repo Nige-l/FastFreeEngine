@@ -16,6 +16,10 @@ namespace ffe {
 class Application;
 }
 
+namespace ffe::editor {
+class PlayMode;
+}
+
 namespace ffe::editor_app {
 
 class ViewportPanel {
@@ -27,8 +31,9 @@ public:
     void shutdown();
 
     /// Render the scene into the FBO and display it in an ImGui window.
-    /// @param app  The engine Application whose renderOnce() drives the scene.
-    void render(Application& app);
+    /// @param app       The engine Application whose renderOnce() drives the scene.
+    /// @param playMode  Play-in-editor state (drives toolbar buttons).
+    void render(Application& app, ffe::editor::PlayMode& playMode);
 
 private:
     ffe::editor::EditorFramebuffer m_fbo;

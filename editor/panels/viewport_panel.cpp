@@ -6,6 +6,7 @@
 
 #include "panels/viewport_panel.h"
 #include "core/application.h"
+#include "play_mode.h"
 
 #include <glad/glad.h>
 #include <imgui.h>
@@ -26,10 +27,71 @@ void ViewportPanel::shutdown() {
     m_lastHeight = 0;
 }
 
-void ViewportPanel::render(Application& app) {
+void ViewportPanel::render(Application& app, ffe::editor::PlayMode& playMode) {
     ImGui::SetNextWindowSize(ImVec2(800.0f, 600.0f), ImGuiCond_FirstUseEver);
 
     if (ImGui::Begin("Scene Viewport")) {
+        // --- Play-in-editor toolbar ---
+        const auto currentState = playMode.state();
+        const bool isEditing = (currentState == ffe::editor::PlayState::EDITING);
+        const bool isPlaying = (currentState == ffe::editor::PlayState::PLAYING);
+        const bool isPaused  = (currentState == ffe::editor::PlayState::PAUSED);
+
+        // Play button — disabled when already playing or paused
+        if (isEditing) {
+            if (ImGui::Button("Play")) {
+                playMode.play(app.world());
+            }
+        } else {
+            ImGui::BeginDisabled();
+            ImGui::Button("Play");
+            ImGui::EndDisabled();
+        }
+
+        ImGui::SameLine();
+
+        // Pause / Resume button — toggles depending on state
+        if (isPlaying) {
+            if (ImGui::Button("Pause")) {
+                playMode.pause();
+            }
+        } else if (isPaused) {
+            if (ImGui::Button("Resume")) {
+                playMode.resume();
+            }
+        } else {
+            ImGui::BeginDisabled();
+            ImGui::Button("Pause");
+            ImGui::EndDisabled();
+        }
+
+        ImGui::SameLine();
+
+        // Stop button — enabled when playing or paused
+        if (isPlaying || isPaused) {
+            if (ImGui::Button("Stop")) {
+                playMode.stop(app.world());
+            }
+        } else {
+            ImGui::BeginDisabled();
+            ImGui::Button("Stop");
+            ImGui::EndDisabled();
+        }
+
+        ImGui::SameLine();
+
+        // State indicator
+        if (isEditing) {
+            ImGui::Text("EDITING");
+        } else if (isPlaying) {
+            ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1.0f), "PLAYING");
+        } else {
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "PAUSED");
+        }
+
+        ImGui::Separator();
+
+        // --- Viewport image ---
         const ImVec2 avail = ImGui::GetContentRegionAvail();
 
         // Clamp to at least 1x1 to avoid creating a zero-size FBO.

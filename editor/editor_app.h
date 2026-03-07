@@ -3,6 +3,7 @@
 #include "core/types.h"
 #include "panels/file_dialog.h"
 #include "panels/viewport_panel.h"
+#include "play_mode.h"
 
 #include <memory>
 #include <string>
@@ -37,6 +38,9 @@ private:
 
     GLFWwindow* m_window = nullptr;
     std::unique_ptr<Application> m_app;
+
+    // Play-in-editor
+    ffe::editor::PlayMode m_playMode;
 
     // Panels
     ViewportPanel m_viewport;

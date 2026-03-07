@@ -5,6 +5,7 @@
 add_executable(ffe_editor_app
     main.cpp
     editor_app.cpp
+    play_mode.cpp
     commands/command_history.cpp
     commands/entity_commands.cpp
     panels/file_dialog.cpp

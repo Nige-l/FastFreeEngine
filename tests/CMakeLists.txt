@@ -135,14 +135,17 @@ add_executable(ffe_tests_editor
     editor/test_command_history.cpp
     editor/test_entity_commands.cpp
     editor/test_component_commands.cpp
+    editor/test_play_mode.cpp
     ${CMAKE_SOURCE_DIR}/editor/commands/command_history.cpp
     ${CMAKE_SOURCE_DIR}/editor/commands/entity_commands.cpp
+    ${CMAKE_SOURCE_DIR}/editor/play_mode.cpp
 )
 
 target_link_libraries(ffe_tests_editor
     PRIVATE
         ffe_core
         ffe_renderer
+        ffe_scene
         Catch2::Catch2WithMain
 )
 
