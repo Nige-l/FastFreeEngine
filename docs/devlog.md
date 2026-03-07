@@ -32,6 +32,12 @@ Session 50 was a bug-fix and maintenance session. Fixed text flickering in the f
 
 - FAST build: 738 tests on Clang-18, zero warnings, zero failures
 
+### Session 50b: Additional macOS CI Fix
+
+- **macOS arm64 compiler detection** -- added xcrun-based compiler detection in `cmake/toolchains/macos-arm64.cmake` so CMake finds the correct Apple Clang when Xcode command-line tools are installed.
+- **CI workflow updates** -- added `xcode-select` verification step, `brew install ninja` for macOS job, and compiler verification steps in `.github/workflows/ci.yml`.
+- **Environment docs** -- updated `docs/environment.md` with macOS toolchain documentation.
+
 ---
 
 ## 2026-03-07 — Session 49: 3D Physics Gameplay Layer (Collision Callbacks + Raycasting) — PHASE 2 COMPLETE
