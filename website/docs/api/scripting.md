@@ -97,6 +97,7 @@ The engine installs an `ffe` global table in the Lua state with bindings to engi
 | `ffe.loadScene(scriptPath)` | nothing | Loads and executes a Lua script file for scene transitions. `scriptPath` is validated with the same path safety checks as `doFile` (no `../`, no absolute paths). The script root must be set via `ScriptEngine::setScriptRoot()` from C++ before this can be used. Each loaded script gets a fresh 1M instruction budget. Re-entrancy is guarded: max depth of 4 nested `loadScene` calls. Failures are logged, not thrown. |
 | `ffe.loadSceneJSON(jsonPath)` | boolean | Loads a JSON scene file exported by the editor's build pipeline. Clears all existing entities first (`World::clearAllEntities()`), then deserialises the JSON scene into the World via `ffe::scene::loadScene()`. `jsonPath` is relative to the script root (set via `ScriptEngine::setScriptRoot()` from C++). Path is validated with the same safety checks as other file-loading bindings (no `../`, no absolute paths). Returns `true` on success, `false` on failure (missing file, parse error, no World registered, no script root set). This is the binding the exported runtime's generated `main.lua` calls to load the entry scene. |
 | `ffe.drawText(text, x, y [, scale, r, g, b, a])` | nothing | Queues HUD text for screen-space rendering. `x`, `y` are screen pixels (origin top-left). `scale` defaults to 1.0 (8px glyphs); scale=2 gives 16px, etc. Color defaults to white (1,1,1,1). Color clamped to [0,1], scale clamped to [0.1,20]. NaN/Inf silently rejected. Text is rendered after world sprites, before the editor overlay. Uses a built-in 8x8 bitmap font (ASCII 32-126). Max 4096 glyphs per frame. Text persists across zero-tick render frames (the glyph buffer is only cleared when a fixed-timestep tick runs), so text drawn in `update()` remains visible even when the engine renders extra frames between ticks. |
+| `ffe.drawRect(x, y, width, height, r, g, b, a)` | nothing | Draws a filled rectangle on screen. All parameters are floats. `x`, `y` is the bottom-left corner position in screen coordinates (pixels). `width` and `height` define the rectangle size in pixels. `r`, `g`, `b`, `a` are color components in the range [0,1]. Rendered in the same pass as HUD text (after world sprites, before editor overlay). Useful for HUD backgrounds, health bars, and debug overlays. |
 | `ffe.getScreenWidth()` | number | Returns the screen width in pixels (e.g. 1280). Returns 0 if no World is registered. Useful for centering text. |
 | `ffe.getScreenHeight()` | number | Returns the screen height in pixels (e.g. 720). Returns 0 if no World is registered. |
 
@@ -109,6 +110,10 @@ end
 -- Draw HUD text (call every frame from update):
 ffe.drawText("SCORE: " .. tostring(score), 20, 20, 3, 1, 1, 1, 1)
 ffe.drawText("GAME OVER", 430, 320, 5, 1, 0.3, 0.3, 1)
+
+-- Draw a semi-transparent black panel behind HUD text:
+ffe.drawRect(8, 8, 200, 40, 0, 0, 0, 0.6)
+ffe.drawText("HP: 100", 16, 14, 2, 1, 1, 1, 1)
 ```
 
 ### Script Lifecycle Callbacks (optional global functions)

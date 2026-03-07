@@ -3,6 +3,46 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-34 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 63: Phase 5 Tutorials — 2D Game, 3D Scene, Multiplayer Basics
+
+### Summary
+
+Session 63 delivered the three core tutorials for the FFE website: "Your First 2D Game" (Collect the Stars, 9 steps), "Your First 3D Game" (lit 3D scene with meshes, shadows, skybox, 10 steps), and "Multiplayer Basics" (Net Arena with client-server, prediction, 9 steps). Also added ffe.drawRect documentation to the scripting .context.md. Review fixes removed an os.time() sandbox violation from the multiplayer tutorial and corrected 4 broken links. All tutorials verified against actual Lua API signatures. FAST build: 991 engine tests on Clang-18, zero warnings. Website builds cleanly (mkdocs --strict).
+
+### Planned
+
+- Tutorial content for 3 placeholder pages (2D, 3D, multiplayer)
+- Verify all code samples against actual engine API
+
+### Delivered
+
+- **"Your First 2D Game"** (`website/docs/tutorials/first-2d-game.md`) — 9-step Collect the Stars tutorial covering sprites, collision, audio, score HUD, scene reset.
+- **"Your First 3D Game"** (`website/docs/tutorials/first-3d-game.md`) — 10-step 3D scene tutorial covering mesh loading, Blinn-Phong lighting, shadows, skybox, FPS and orbit camera controls.
+- **"Multiplayer Basics"** (`website/docs/tutorials/multiplayer-basics.md`) — 9-step networked game tutorial covering client-server architecture, input replication, prediction, lobby management.
+- **ffe.drawRect documentation** — Added to `engine/scripting/.context.md`.
+
+### Review Fixes
+
+- Removed os.time() call from multiplayer tutorial (sandbox violation — Lua sandbox does not expose os library).
+- Fixed 4 broken internal links across tutorials.
+
+### Build
+
+- **FAST build** — 991 engine tests on Clang-18, zero warnings.
+- **Website** — `mkdocs build --strict` completes cleanly.
+
+### game-dev-tester: SKIPPED
+
+No engine API changes this session — website tutorial content only.
+
+### Next Session Should Start With
+
+- "How It Works" deep dives (ECS internals, renderer architecture, networking)
+- GitHub Pages deployment pipeline
+- Consider interactive/embedded code examples
+
+---
+
 ## 2026-03-07 — Session 62: Phase 5 Kickoff — Website Scaffolding + Getting Started Guide
 
 ### Summary
