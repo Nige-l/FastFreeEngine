@@ -3,6 +3,55 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-34 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 51: Phase 3 Kickoff — Standalone Editor Milestone 1
+
+### Summary
+
+Session 51 kicked off Phase 3 (Standalone Editor). Delivered Milestone 1: a fully functional editor scaffold with ImGui, scene serialisation, inspector panel, scene hierarchy, and an undo/redo command system. FULL build passed: 766 tests on both Clang-18 and GCC-13, zero warnings.
+
+### New Subsystems
+
+- **Editor application** (`editor/`) — separate binary from game runtime. ImGui dockspace layout with menu bar, panels for scene hierarchy, inspector, and viewport (placeholder). Links against engine and ImGui.
+- **Scene serialisation** (`engine/scene/`) — `SceneSerialiser` with JSON save/load. Security hardening: entity count limits, NaN/Inf rejection, path traversal rejection, file size limits.
+- **Editor-hosted mode** — `Application` gained `initSubsystems()`, `shutdownSubsystems()`, `tickOnce()`, `renderOnce()`, `setWindow()` for editor control of the engine lifecycle.
+
+### Editor Features
+
+- **Scene hierarchy panel** — lists all entities by Name component (or "Entity N" fallback), click-to-select, right-click context menu for create/delete
+- **Inspector panel** — editable Transform/Transform3D/Name fields, display-only Sprite/Material3D. Wired to command system for undo.
+- **Command system** — `CommandHistory` with 256-depth bounded deque, `ICommand` interface with execute/undo. Entity create/destroy commands snapshot all components for full undo fidelity.
+- **Viewport panel** — placeholder ready for FBO rendering in Milestone 2
+
+### ECS Additions
+
+- `Name`, `Parent`, `Children` components added to `render_system.h` for scene graph support
+
+### Architecture
+
+- ADR: `docs/architecture/adr-editor-architecture.md` — documents editor-hosted mode, panel architecture, command pattern, serialisation security model
+
+### Tests
+
+- 28 new tests across `tests/editor/` and `tests/scene/`
+- **766 tests** total, passing on both Clang-18 and GCC-13, zero warnings
+
+### Documentation
+
+- 3 `.context.md` files: `editor/.context.md`, `engine/scene/.context.md`, updated `engine/core/.context.md`
+
+### Reviews
+
+- performance-critic: MINOR ISSUES (approved) — no blocking concerns
+- security-auditor: MINOR ISSUES (approved) — serialisation security model solid
+- api-designer: clean
+- game-dev-tester: SKIP — editor-hosted mode API is internal to editor, not a new game developer-facing paradigm. Will invoke when play-in-editor is implemented.
+
+### Build
+
+- FULL build: 766 tests on Clang-18 + GCC-13, zero warnings, zero failures
+
+---
+
 ## 2026-03-07 — Session 50: Text Flicker Fix + macOS CI Fix
 
 ### Summary
