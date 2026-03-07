@@ -76,15 +76,34 @@ static_assert(sizeof(Skeleton) >= renderer::MAX_BONES * sizeof(glm::mat4) + size
 // --- AnimationState ECS component — per-entity animation playback state ---
 // Lightweight component (no pointers, no heap) that controls which animation
 // clip is playing, at what time, and at what speed.
+// Supports crossfade blending between two clips (blendFromClip -> clipIndex).
 struct AnimationState {
-    u32  clipIndex  = 0;      // index into MeshAnimations::clips[]
-    f32  time       = 0.0f;   // current playback time in seconds
-    f32  speed      = 1.0f;   // playback speed multiplier (1.0 = normal)
-    bool looping    = true;
-    bool playing    = false;
-    u8   _pad[2]    = {};     // explicit padding
+    u32  clipIndex      = 0;      // index into MeshAnimations::clips[] (target clip)
+    f32  time           = 0.0f;   // current playback time in seconds (target clip)
+    f32  speed          = 1.0f;   // playback speed multiplier (1.0 = normal)
+    bool looping        = true;
+    bool playing        = false;
+    bool blending       = false;  // is a crossfade blend in progress?
+    u8   _pad0          = 0;      // explicit padding
+    // --- Crossfade blend fields ---
+    i32  blendFromClip  = -1;     // clip index we're blending FROM (-1 = none)
+    f32  blendFromTime  = 0.0f;   // playback time in the "from" clip
+    f32  blendDuration  = 0.0f;   // total blend duration in seconds
+    f32  blendElapsed   = 0.0f;   // time elapsed in the current blend
 };
-static_assert(sizeof(AnimationState) == 16, "AnimationState must be 16 bytes");
+static_assert(sizeof(AnimationState) == 32, "AnimationState must be 32 bytes");
+
+// --- RootMotionDelta component — per-entity root bone motion extraction ---
+// When enabled, the animation system extracts root bone (index 0) XZ translation
+// and stores it as a delta for gameplay code to apply to the entity's Transform3D.
+// The root bone's XZ translation is zeroed so the animation plays in-place.
+struct RootMotionDelta {
+    glm::vec3 translationDelta{0.0f};         // 12 bytes — delta since last frame
+    glm::vec3 previousRootTranslation{0.0f};  // 12 bytes — previous frame root pos
+    bool      enabled = false;                 //  1 byte
+    u8        _pad[3] = {};                    //  3 bytes — explicit padding
+};
+static_assert(sizeof(RootMotionDelta) == 28, "RootMotionDelta must be 28 bytes");
 
 // --- Name component — human-readable entity label for the editor ---
 // Fixed-size char array (no heap allocation). Default name is "Entity".

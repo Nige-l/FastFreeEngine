@@ -4,6 +4,12 @@
 // search + interpolation, walks the bone hierarchy to compute world-space
 // transforms, and writes final bone matrices into Skeleton::boneMatrices[].
 //
+// Features:
+//   - Single-clip playback (advance time, sample channels, walk hierarchy)
+//   - Crossfade blending (lerp/slerp between two clips during transitions)
+//   - Interpolation modes (STEP, LINEAR; CUBIC_SPLINE stubs to LINEAR)
+//   - Root motion extraction (XZ delta for gameplay, in-place animation)
+//
 // No heap allocations. All temporary matrices use stack-allocated fixed arrays.
 // Performance: O(bones * log(keyframes)) per animated entity per tick.
 
@@ -62,7 +68,11 @@ static f32 computeLerpFactor(const f32 timeLow, const f32 timeHigh, const f32 cu
     return glm::clamp(t, 0.0f, 1.0f);
 }
 
-// Sample translation at a given time (linear interpolation).
+// ---------------------------------------------------------------------------
+// Interpolation-mode-aware sampling helpers
+// ---------------------------------------------------------------------------
+
+// Sample translation at a given time, respecting interpolation mode.
 static glm::vec3 sampleTranslation(const AnimationChannel& ch, const f32 time) {
     if (ch.translationCount == 0) {
         return glm::vec3(0.0f);
@@ -72,11 +82,17 @@ static glm::vec3 sampleTranslation(const AnimationChannel& ch, const f32 time) {
     }
     const u32 idx = findKeyframeIndex(ch.translationTimes, ch.translationCount, time);
     const u32 nextIdx = idx + 1 < ch.translationCount ? idx + 1 : idx;
+
+    if (ch.mode == InterpolationMode::STEP) {
+        return ch.translationValues[idx];
+    }
+
+    // LINEAR (and CUBIC_SPLINE fallback)
     const f32 t = computeLerpFactor(ch.translationTimes[idx], ch.translationTimes[nextIdx], time);
     return glm::mix(ch.translationValues[idx], ch.translationValues[nextIdx], t);
 }
 
-// Sample rotation at a given time (slerp on quaternions).
+// Sample rotation at a given time (slerp on quaternions), respecting interpolation mode.
 static glm::quat sampleRotation(const AnimationChannel& ch, const f32 time) {
     if (ch.rotationCount == 0) {
         return glm::quat(1.0f, 0.0f, 0.0f, 0.0f); // identity
@@ -86,11 +102,17 @@ static glm::quat sampleRotation(const AnimationChannel& ch, const f32 time) {
     }
     const u32 idx = findKeyframeIndex(ch.rotationTimes, ch.rotationCount, time);
     const u32 nextIdx = idx + 1 < ch.rotationCount ? idx + 1 : idx;
+
+    if (ch.mode == InterpolationMode::STEP) {
+        return ch.rotationValues[idx];
+    }
+
+    // LINEAR (and CUBIC_SPLINE fallback — slerp)
     const f32 t = computeLerpFactor(ch.rotationTimes[idx], ch.rotationTimes[nextIdx], time);
     return glm::slerp(ch.rotationValues[idx], ch.rotationValues[nextIdx], t);
 }
 
-// Sample scale at a given time (linear interpolation).
+// Sample scale at a given time, respecting interpolation mode.
 static glm::vec3 sampleScale(const AnimationChannel& ch, const f32 time) {
     if (ch.scaleCount == 0) {
         return glm::vec3(1.0f);
@@ -100,8 +122,112 @@ static glm::vec3 sampleScale(const AnimationChannel& ch, const f32 time) {
     }
     const u32 idx = findKeyframeIndex(ch.scaleTimes, ch.scaleCount, time);
     const u32 nextIdx = idx + 1 < ch.scaleCount ? idx + 1 : idx;
+
+    if (ch.mode == InterpolationMode::STEP) {
+        return ch.scaleValues[idx];
+    }
+
+    // LINEAR (and CUBIC_SPLINE fallback)
     const f32 t = computeLerpFactor(ch.scaleTimes[idx], ch.scaleTimes[nextIdx], time);
     return glm::mix(ch.scaleValues[idx], ch.scaleValues[nextIdx], t);
+}
+
+// ---------------------------------------------------------------------------
+// Helper: sample all channels of a clip and produce local bone transforms
+// ---------------------------------------------------------------------------
+
+static void sampleClipLocalTransforms(
+    const AnimationClipData& clip,
+    const SkeletonData& skelData,
+    const f32 time,
+    glm::mat4* outLocal) // must have room for MAX_BONES entries
+{
+    for (u32 b = 0; b < skelData.boneCount; ++b) {
+        outLocal[b] = glm::mat4(1.0f); // identity default
+    }
+
+    for (u32 b = 0; b < skelData.boneCount; ++b) {
+        const AnimationChannel& ch = clip.channels[b];
+
+        // Check if this bone has any animation data
+        if (ch.translationCount == 0 && ch.rotationCount == 0 && ch.scaleCount == 0) {
+            continue; // Leave as identity
+        }
+
+        const glm::vec3 translation = sampleTranslation(ch, time);
+        const glm::quat rotation    = sampleRotation(ch, time);
+        const glm::vec3 scale       = sampleScale(ch, time);
+
+        // Compose local transform: T * R * S
+        glm::mat4 local = glm::translate(glm::mat4(1.0f), translation);
+        local = local * glm::mat4_cast(rotation);
+        local = glm::scale(local, scale);
+        outLocal[b] = local;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Helper: decompose a mat4 into T/R/S (for blending)
+// Assumes no shear — only TRS compose (which is what we produce).
+// ---------------------------------------------------------------------------
+
+struct TRS {
+    glm::vec3 translation{0.0f};
+    glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
+    glm::vec3 scale{1.0f};
+};
+
+static TRS decomposeTRS(const glm::mat4& m) {
+    TRS result;
+    result.translation = glm::vec3(m[3]);
+
+    // Extract scale from column lengths
+    result.scale.x = glm::length(glm::vec3(m[0]));
+    result.scale.y = glm::length(glm::vec3(m[1]));
+    result.scale.z = glm::length(glm::vec3(m[2]));
+
+    // Build rotation matrix from normalised columns
+    glm::mat3 rotMat;
+    if (result.scale.x > 0.0f) rotMat[0] = glm::vec3(m[0]) / result.scale.x;
+    else rotMat[0] = glm::vec3(1.0f, 0.0f, 0.0f);
+    if (result.scale.y > 0.0f) rotMat[1] = glm::vec3(m[1]) / result.scale.y;
+    else rotMat[1] = glm::vec3(0.0f, 1.0f, 0.0f);
+    if (result.scale.z > 0.0f) rotMat[2] = glm::vec3(m[2]) / result.scale.z;
+    else rotMat[2] = glm::vec3(0.0f, 0.0f, 1.0f);
+
+    result.rotation = glm::quat_cast(rotMat);
+    return result;
+}
+
+static glm::mat4 composeTRS(const TRS& trs) {
+    glm::mat4 m = glm::translate(glm::mat4(1.0f), trs.translation);
+    m = m * glm::mat4_cast(trs.rotation);
+    m = glm::scale(m, trs.scale);
+    return m;
+}
+
+// ---------------------------------------------------------------------------
+// Helper: blend two sets of local transforms using TRS decomposition
+// ---------------------------------------------------------------------------
+
+static void blendLocalTransforms(
+    const glm::mat4* fromLocal,
+    const glm::mat4* toLocal,
+    const u32 boneCount,
+    const f32 alpha,
+    glm::mat4* outLocal) // must have room for MAX_BONES entries
+{
+    for (u32 b = 0; b < boneCount; ++b) {
+        const TRS fromTRS = decomposeTRS(fromLocal[b]);
+        const TRS toTRS   = decomposeTRS(toLocal[b]);
+
+        TRS blended;
+        blended.translation = glm::mix(fromTRS.translation, toTRS.translation, alpha);
+        blended.rotation    = glm::slerp(fromTRS.rotation, toTRS.rotation, alpha);
+        blended.scale       = glm::mix(fromTRS.scale, toTRS.scale, alpha);
+
+        outLocal[b] = composeTRS(blended);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -137,7 +263,7 @@ void animationUpdateSystem3D(World& world, const float dt) {
             continue;
         }
 
-        // Advance time
+        // Advance time for the target clip
         animState.time += dt * animState.speed;
 
         // Handle looping / clamping
@@ -150,34 +276,79 @@ void animationUpdateSystem3D(World& world, const float dt) {
             }
         }
 
+        // Advance crossfade blend time if blending
+        if (animState.blending) {
+            animState.blendElapsed += dt;
+            // Also advance the "from" clip time
+            animState.blendFromTime += dt * animState.speed;
+
+            // Wrap from-clip time if it has a valid clip
+            if (animState.blendFromClip >= 0 &&
+                static_cast<u32>(animState.blendFromClip) < meshAnims->clipCount) {
+                const f32 fromDur = meshAnims->clips[animState.blendFromClip].duration;
+                if (fromDur > 0.0f && animState.blendFromTime >= fromDur) {
+                    animState.blendFromTime = std::fmod(animState.blendFromTime, fromDur);
+                }
+            }
+
+            // Check if blend is complete
+            if (animState.blendElapsed >= animState.blendDuration) {
+                animState.blending      = false;
+                animState.blendFromClip = -1;
+                animState.blendElapsed  = 0.0f;
+                animState.blendDuration = 0.0f;
+                animState.blendFromTime = 0.0f;
+            }
+        }
+
         // Ensure bone count matches
         skeleton.boneCount = skelData->boneCount;
 
         // --- Sample keyframes and compute local bone transforms ---
-        // Stack-allocated array for local-space transforms
+        // Stack-allocated arrays for local-space transforms (no heap)
         glm::mat4 localTransforms[MAX_BONES];
-        for (u32 b = 0; b < skelData->boneCount; ++b) {
-            localTransforms[b] = glm::mat4(1.0f); // identity default
+        sampleClipLocalTransforms(clip, *skelData, animState.time, localTransforms);
+
+        // --- Crossfade blending: blend with "from" clip if active ---
+        if (animState.blending &&
+            animState.blendFromClip >= 0 &&
+            static_cast<u32>(animState.blendFromClip) < meshAnims->clipCount &&
+            animState.blendDuration > 0.0f) {
+
+            const AnimationClipData& fromClip = meshAnims->clips[animState.blendFromClip];
+            glm::mat4 fromLocal[MAX_BONES];
+            sampleClipLocalTransforms(fromClip, *skelData, animState.blendFromTime, fromLocal);
+
+            const f32 blendAlpha = glm::clamp(
+                animState.blendElapsed / animState.blendDuration, 0.0f, 1.0f);
+
+            // Blend: result = lerp(fromBone, toBone, blendAlpha)
+            glm::mat4 blendedLocal[MAX_BONES];
+            blendLocalTransforms(fromLocal, localTransforms, skelData->boneCount,
+                                 blendAlpha, blendedLocal);
+
+            // Copy blended result back into localTransforms
+            for (u32 b = 0; b < skelData->boneCount; ++b) {
+                localTransforms[b] = blendedLocal[b];
+            }
         }
 
-        // Sample channels — each channel targets a specific bone
-        for (u32 b = 0; b < skelData->boneCount; ++b) {
-            const AnimationChannel& ch = clip.channels[b];
+        // --- Root motion extraction (before hierarchy walk) ---
+        auto* rootMotion = world.registry().try_get<RootMotionDelta>(entity);
+        if (rootMotion != nullptr && rootMotion->enabled && skelData->boneCount > 0) {
+            // Extract root bone (index 0) translation
+            const glm::vec3 currentRootTranslation = glm::vec3(localTransforms[0][3]);
 
-            // Check if this bone has any animation data
-            if (ch.translationCount == 0 && ch.rotationCount == 0 && ch.scaleCount == 0) {
-                continue; // Leave as identity
-            }
+            // Compute delta
+            rootMotion->translationDelta =
+                currentRootTranslation - rootMotion->previousRootTranslation;
 
-            const glm::vec3 translation = sampleTranslation(ch, animState.time);
-            const glm::quat rotation    = sampleRotation(ch, animState.time);
-            const glm::vec3 scale       = sampleScale(ch, animState.time);
+            // Store for next frame
+            rootMotion->previousRootTranslation = currentRootTranslation;
 
-            // Compose local transform: T * R * S
-            glm::mat4 local = glm::translate(glm::mat4(1.0f), translation);
-            local = local * glm::mat4_cast(rotation);
-            local = glm::scale(local, scale);
-            localTransforms[b] = local;
+            // Zero root bone XZ translation (keep Y for gravity)
+            localTransforms[0][3].x = 0.0f;
+            localTransforms[0][3].z = 0.0f;
         }
 
         // --- Walk bone hierarchy (parent-first order) to compute world-space ---

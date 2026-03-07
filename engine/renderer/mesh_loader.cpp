@@ -538,6 +538,23 @@ MeshHandle loadMesh(const char* const path) {
                 const cgltf_animation_sampler* sampler = channel.sampler;
                 if (sampler->input == nullptr || sampler->output == nullptr) continue;
 
+                // Parse interpolation mode from glTF sampler
+                switch (sampler->interpolation) {
+                    case cgltf_interpolation_type_step:
+                        outCh.mode = InterpolationMode::STEP;
+                        break;
+                    case cgltf_interpolation_type_cubic_spline:
+                        outCh.mode = InterpolationMode::CUBIC_SPLINE;
+                        FFE_LOG_WARN("MeshLoader",
+                                     "loadMesh: CUBIC_SPLINE interpolation not fully supported, "
+                                     "falling back to LINEAR for bone %u in \"%s\"",
+                                     static_cast<u32>(boneIdx), canonPath);
+                        break;
+                    default: // cgltf_interpolation_type_linear
+                        outCh.mode = InterpolationMode::LINEAR;
+                        break;
+                }
+
                 const u32 keyframeCount = static_cast<u32>(
                     sampler->input->count < MAX_KEYFRAMES_PER_CHANNEL
                         ? sampler->input->count : MAX_KEYFRAMES_PER_CHANNEL);

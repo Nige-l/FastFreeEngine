@@ -1,7 +1,8 @@
 // test_animation3d_bindings.cpp — Catch2 unit tests for the 3D skeletal
 // animation Lua bindings:
 //   ffe.playAnimation3D, ffe.stopAnimation3D, ffe.setAnimationSpeed3D,
-//   ffe.getAnimationProgress3D, ffe.isAnimation3DPlaying, ffe.getAnimationCount3D
+//   ffe.getAnimationProgress3D, ffe.isAnimation3DPlaying, ffe.getAnimationCount3D,
+//   ffe.crossfadeAnimation3D, ffe.setRootMotion3D, ffe.getRootMotionDelta3D
 //
 // Tests verify binding registration, argument validation, and correct behavior.
 // These run in headless mode — no GL context, no actual meshes loaded.
@@ -203,4 +204,175 @@ TEST_CASE("getAnimationCount3D returns 0 for invalid entity",
     REQUIRE(fix.engine.doString(
         "local c = ffe.getAnimationCount3D(999999)\n"
         "assert(c == 0)"));
+}
+
+// =============================================================================
+// ffe.crossfadeAnimation3D — binding registration and behavior
+// =============================================================================
+
+TEST_CASE("crossfadeAnimation3D binding exists and is callable",
+          "[scripting][animation3d]") {
+    Anim3DBindingFixture fix;
+    // Should not crash with invalid entity — just logs a warning.
+    REQUIRE(fix.engine.doString("ffe.crossfadeAnimation3D(999999, 0, 0.5)"));
+}
+
+TEST_CASE("crossfadeAnimation3D rejects non-number arguments",
+          "[scripting][animation3d]") {
+    Anim3DBindingFixture fix;
+    // Non-number entityId — logs error, returns.
+    REQUIRE(fix.engine.doString("ffe.crossfadeAnimation3D('bad', 0, 0.5)"));
+}
+
+TEST_CASE("crossfadeAnimation3D warns on entity without AnimationState",
+          "[scripting][animation3d]") {
+    Anim3DBindingFixture fix;
+    const ffe::EntityId eid = fix.world.createEntity();
+    const std::string lua = "ffe.crossfadeAnimation3D(" + std::to_string(eid) + ", 0, 0.5)";
+    REQUIRE(fix.engine.doString(lua.c_str()));
+}
+
+TEST_CASE("crossfadeAnimation3D sets blend fields on AnimationState",
+          "[scripting][animation3d]") {
+    Anim3DBindingFixture fix;
+    const ffe::EntityId eid = fix.world.createEntity();
+
+    // Manually set up AnimationState as if clip 0 is playing
+    auto& animState = fix.world.addComponent<ffe::AnimationState>(eid);
+    animState.clipIndex = 0;
+    animState.time      = 1.5f;
+    animState.playing   = true;
+
+    // Crossfade to clip 1 over 0.3 seconds
+    const std::string lua = "ffe.crossfadeAnimation3D(" + std::to_string(eid) + ", 1, 0.3)";
+    REQUIRE(fix.engine.doString(lua.c_str()));
+
+    const auto& got = fix.world.getComponent<ffe::AnimationState>(eid);
+    REQUIRE(got.blending == true);
+    REQUIRE(got.blendFromClip == 0);
+    REQUIRE(got.blendFromTime == Approx(1.5f));
+    REQUIRE(got.blendDuration == Approx(0.3f));
+    REQUIRE(got.blendElapsed == Approx(0.0f));
+    REQUIRE(got.clipIndex == 1);
+    REQUIRE(got.time == Approx(0.0f));
+}
+
+TEST_CASE("crossfadeAnimation3D rejects duration <= 0",
+          "[scripting][animation3d]") {
+    Anim3DBindingFixture fix;
+    const ffe::EntityId eid = fix.world.createEntity();
+    fix.world.addComponent<ffe::AnimationState>(eid);
+
+    // Duration of 0 should be rejected — blending should NOT be set
+    const std::string lua = "ffe.crossfadeAnimation3D(" + std::to_string(eid) + ", 0, 0.0)";
+    REQUIRE(fix.engine.doString(lua.c_str()));
+
+    const auto& got = fix.world.getComponent<ffe::AnimationState>(eid);
+    REQUIRE(got.blending == false);
+}
+
+// =============================================================================
+// ffe.setRootMotion3D — binding registration and behavior
+// =============================================================================
+
+TEST_CASE("setRootMotion3D binding exists and is callable",
+          "[scripting][animation3d]") {
+    Anim3DBindingFixture fix;
+    // Should not crash with invalid entity.
+    REQUIRE(fix.engine.doString("ffe.setRootMotion3D(999999, true)"));
+}
+
+TEST_CASE("setRootMotion3D enables RootMotionDelta component",
+          "[scripting][animation3d]") {
+    Anim3DBindingFixture fix;
+    const ffe::EntityId eid = fix.world.createEntity();
+
+    const std::string lua = "ffe.setRootMotion3D(" + std::to_string(eid) + ", true)";
+    REQUIRE(fix.engine.doString(lua.c_str()));
+
+    const auto* rm = fix.world.registry().try_get<ffe::RootMotionDelta>(
+        static_cast<entt::entity>(eid));
+    REQUIRE(rm != nullptr);
+    REQUIRE(rm->enabled == true);
+}
+
+TEST_CASE("setRootMotion3D disables RootMotionDelta component",
+          "[scripting][animation3d]") {
+    Anim3DBindingFixture fix;
+    const ffe::EntityId eid = fix.world.createEntity();
+
+    // Enable first
+    auto& rm = fix.world.registry().emplace<ffe::RootMotionDelta>(
+        static_cast<entt::entity>(eid));
+    rm.enabled = true;
+
+    // Disable via binding
+    const std::string lua = "ffe.setRootMotion3D(" + std::to_string(eid) + ", false)";
+    REQUIRE(fix.engine.doString(lua.c_str()));
+
+    const auto* got = fix.world.registry().try_get<ffe::RootMotionDelta>(
+        static_cast<entt::entity>(eid));
+    REQUIRE(got != nullptr);
+    REQUIRE(got->enabled == false);
+}
+
+// =============================================================================
+// ffe.getRootMotionDelta3D — binding registration and behavior
+// =============================================================================
+
+TEST_CASE("getRootMotionDelta3D returns 3 values (0,0,0 default)",
+          "[scripting][animation3d]") {
+    Anim3DBindingFixture fix;
+    const ffe::EntityId eid = fix.world.createEntity();
+
+    const std::string lua =
+        "local dx, dy, dz = ffe.getRootMotionDelta3D(" + std::to_string(eid) + ")\n"
+        "assert(dx == 0, 'expected dx=0, got ' .. tostring(dx))\n"
+        "assert(dy == 0, 'expected dy=0, got ' .. tostring(dy))\n"
+        "assert(dz == 0, 'expected dz=0, got ' .. tostring(dz))";
+    REQUIRE(fix.engine.doString(lua.c_str()));
+}
+
+TEST_CASE("getRootMotionDelta3D returns 0,0,0 for disabled component",
+          "[scripting][animation3d]") {
+    Anim3DBindingFixture fix;
+    const ffe::EntityId eid = fix.world.createEntity();
+
+    auto& rm = fix.world.registry().emplace<ffe::RootMotionDelta>(
+        static_cast<entt::entity>(eid));
+    rm.enabled = false;
+    rm.translationDelta = {5.0f, 6.0f, 7.0f};
+
+    const std::string lua =
+        "local dx, dy, dz = ffe.getRootMotionDelta3D(" + std::to_string(eid) + ")\n"
+        "assert(dx == 0, 'expected 0 when disabled')\n"
+        "assert(dy == 0)\n"
+        "assert(dz == 0)";
+    REQUIRE(fix.engine.doString(lua.c_str()));
+}
+
+TEST_CASE("getRootMotionDelta3D returns actual delta when enabled",
+          "[scripting][animation3d]") {
+    Anim3DBindingFixture fix;
+    const ffe::EntityId eid = fix.world.createEntity();
+
+    auto& rm = fix.world.registry().emplace<ffe::RootMotionDelta>(
+        static_cast<entt::entity>(eid));
+    rm.enabled = true;
+    rm.translationDelta = {1.5f, -0.5f, 3.0f};
+
+    const std::string lua =
+        "local dx, dy, dz = ffe.getRootMotionDelta3D(" + std::to_string(eid) + ")\n"
+        "assert(math.abs(dx - 1.5) < 0.001, 'dx mismatch: ' .. tostring(dx))\n"
+        "assert(math.abs(dy - (-0.5)) < 0.001, 'dy mismatch: ' .. tostring(dy))\n"
+        "assert(math.abs(dz - 3.0) < 0.001, 'dz mismatch: ' .. tostring(dz))";
+    REQUIRE(fix.engine.doString(lua.c_str()));
+}
+
+TEST_CASE("getRootMotionDelta3D returns 0,0,0 for invalid entity",
+          "[scripting][animation3d]") {
+    Anim3DBindingFixture fix;
+    REQUIRE(fix.engine.doString(
+        "local dx, dy, dz = ffe.getRootMotionDelta3D(999999)\n"
+        "assert(dx == 0 and dy == 0 and dz == 0)"));
 }

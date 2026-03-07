@@ -27,6 +27,15 @@ inline constexpr u32 MAX_BONE_INFLUENCES = 4;        // per vertex
 inline constexpr u32 MAX_ANIMATIONS_PER_MESH = 16;
 inline constexpr u32 MAX_KEYFRAMES_PER_CHANNEL = 256;
 
+// --- Interpolation mode (per animation channel) ---
+// Controls how keyframe values are interpolated between keyframes.
+// Matches glTF 2.0 animation sampler interpolation modes.
+enum class InterpolationMode : u8 {
+    STEP         = 0,  // No interpolation — hold the previous keyframe value
+    LINEAR       = 1,  // Linear interpolation (lerp for vec3, slerp for quaternions)
+    CUBIC_SPLINE = 2   // Cubic Hermite spline (stub: falls back to LINEAR with log warning)
+};
+
 // --- Bone data (per mesh asset, read-only after load) ---
 
 struct BoneInfo {
@@ -57,6 +66,8 @@ struct AnimationChannel {
     f32       scaleTimes[MAX_KEYFRAMES_PER_CHANNEL]        = {};
     glm::vec3 scaleValues[MAX_KEYFRAMES_PER_CHANNEL]       = {};
     u32       scaleCount = 0;
+
+    InterpolationMode mode = InterpolationMode::LINEAR; // interpolation mode for this channel
 };
 
 // --- Animation clip data (per clip per mesh asset) ---

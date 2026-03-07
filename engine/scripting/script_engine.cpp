@@ -5851,6 +5851,177 @@ void ScriptEngine::registerEcsBindings() {
     lua_pushcfunction(L, ffe_getAnimationCount);
     lua_setfield(L, -2, "getAnimationCount3D");
 
+    // ffe.crossfadeAnimation3D(entityId: integer, clipIndex: integer, duration: number) -> nothing
+    // Initiates a crossfade blend from the current animation to clipIndex over duration seconds.
+    // Validates entity has AnimationState, clipIndex is valid, duration > 0.
+    auto ffe_crossfadeAnimation3D = [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TNUMBER) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.crossfadeAnimation3D: argument 1 (entityId) must be a number");
+            return 0;
+        }
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = lua_tointeger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) { return 0; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) {
+            FFE_LOG_WARN("ScriptEngine", "ffe.crossfadeAnimation3D: invalid entity ID");
+            return 0;
+        }
+
+        // Entity must have AnimationState
+        auto* animState = world->registry().try_get<ffe::AnimationState>(static_cast<entt::entity>(entityId));
+        if (animState == nullptr) {
+            FFE_LOG_WARN("ScriptEngine", "ffe.crossfadeAnimation3D: entity has no AnimationState");
+            return 0;
+        }
+
+        // clipIndex argument
+        if (lua_type(state, 2) != LUA_TNUMBER) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.crossfadeAnimation3D: argument 2 (clipIndex) must be a number");
+            return 0;
+        }
+        const lua_Integer rawClip = lua_tointeger(state, 2);
+        if (rawClip < 0) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.crossfadeAnimation3D: clipIndex must be >= 0");
+            return 0;
+        }
+        const ffe::u32 clipIndex = static_cast<ffe::u32>(rawClip);
+
+        // Validate clipIndex against mesh animation count
+        const auto* meshComp = world->registry().try_get<ffe::Mesh>(static_cast<entt::entity>(entityId));
+        if (meshComp != nullptr) {
+            const ffe::renderer::MeshAnimations* anims = ffe::renderer::getMeshAnimations(meshComp->meshHandle);
+            if (anims != nullptr && clipIndex >= anims->clipCount) {
+                FFE_LOG_ERROR("ScriptEngine", "ffe.crossfadeAnimation3D: clipIndex %u out of range (max %u)",
+                              clipIndex, anims->clipCount);
+                return 0;
+            }
+        }
+
+        // duration argument
+        if (lua_type(state, 3) != LUA_TNUMBER) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.crossfadeAnimation3D: argument 3 (duration) must be a number");
+            return 0;
+        }
+        const double duration = lua_tonumber(state, 3);
+        if (duration <= 0.0) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.crossfadeAnimation3D: duration must be > 0");
+            return 0;
+        }
+
+        // Set up crossfade blend
+        animState->blending      = true;
+        animState->blendFromClip = static_cast<ffe::i32>(animState->clipIndex);
+        animState->blendFromTime = animState->time;
+        animState->blendDuration = static_cast<ffe::f32>(duration);
+        animState->blendElapsed  = 0.0f;
+        animState->clipIndex     = clipIndex;
+        animState->time          = 0.0f;
+
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_crossfadeAnimation3D);
+    lua_setfield(L, -2, "crossfadeAnimation3D");
+
+    // ffe.setRootMotion3D(entityId: integer, enabled: boolean) -> nothing
+    // If enabled=true, emplaces a RootMotionDelta component with enabled=true.
+    // If false, sets enabled=false or removes the component.
+    auto ffe_setRootMotion3D = [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TNUMBER) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.setRootMotion3D: argument 1 (entityId) must be a number");
+            return 0;
+        }
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = lua_tointeger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) { return 0; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) {
+            FFE_LOG_WARN("ScriptEngine", "ffe.setRootMotion3D: invalid entity ID");
+            return 0;
+        }
+
+        const bool enabled = lua_toboolean(state, 2) != 0;
+        if (enabled) {
+            auto& rm = world->registry().get_or_emplace<ffe::RootMotionDelta>(
+                static_cast<entt::entity>(entityId));
+            rm.enabled = true;
+        } else {
+            auto* rm = world->registry().try_get<ffe::RootMotionDelta>(
+                static_cast<entt::entity>(entityId));
+            if (rm != nullptr) {
+                rm->enabled = false;
+            }
+        }
+
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_setRootMotion3D);
+    lua_setfield(L, -2, "setRootMotion3D");
+
+    // ffe.getRootMotionDelta3D(entityId: integer) -> dx, dy, dz
+    // Returns 3 numbers from the RootMotionDelta component.
+    // Returns 0,0,0 if component doesn't exist or isn't enabled.
+    auto ffe_getRootMotionDelta3D = [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TNUMBER) {
+            lua_pushnumber(state, 0.0);
+            lua_pushnumber(state, 0.0);
+            lua_pushnumber(state, 0.0);
+            return 3;
+        }
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            lua_pushnumber(state, 0.0);
+            lua_pushnumber(state, 0.0);
+            lua_pushnumber(state, 0.0);
+            return 3;
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = lua_tointeger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) {
+            lua_pushnumber(state, 0.0);
+            lua_pushnumber(state, 0.0);
+            lua_pushnumber(state, 0.0);
+            return 3;
+        }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) {
+            lua_pushnumber(state, 0.0);
+            lua_pushnumber(state, 0.0);
+            lua_pushnumber(state, 0.0);
+            return 3;
+        }
+
+        const auto* rm = world->registry().try_get<ffe::RootMotionDelta>(
+            static_cast<entt::entity>(entityId));
+        if (rm == nullptr || !rm->enabled) {
+            lua_pushnumber(state, 0.0);
+            lua_pushnumber(state, 0.0);
+            lua_pushnumber(state, 0.0);
+            return 3;
+        }
+
+        lua_pushnumber(state, static_cast<double>(rm->translationDelta.x));
+        lua_pushnumber(state, static_cast<double>(rm->translationDelta.y));
+        lua_pushnumber(state, static_cast<double>(rm->translationDelta.z));
+        return 3;
+    };
+    lua_pushcfunction(L, ffe_getRootMotionDelta3D);
+    lua_setfield(L, -2, "getRootMotionDelta3D");
+
     // ----------------------------------------------------------------
     // 3D physics bindings (Session 48)
     // ----------------------------------------------------------------
