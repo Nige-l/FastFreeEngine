@@ -6,12 +6,13 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 56 |
-| Total tests | 842 (Clang-18 passing, zero warnings) |
+| Last session | 57 |
+| Total tests | 872 (Clang-18 passing, zero warnings) |
 | Total Lua bindings | ~116 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
 | Phase 2 (3D Foundation) | COMPLETE |
 | Phase 3 (Standalone Editor) | MVP COMPLETE (6 milestones, Sessions 51-56) |
+| Phase 4 (Networking) | IN PROGRESS (Session 57: transport + packet foundation) |
 | Windows build | DONE (MinGW-w64 cross-compilation) |
 | macOS build | DONE (arm64 + x86_64) |
 | GitHub Actions CI | DONE (Linux Clang-18, Linux GCC-13, macOS arm64) |
@@ -44,6 +45,7 @@
 | Timers | Stable | ffe.after/every/cancelTimer, 256 max, fixed-size array |
 | Camera | Stable | CameraShake, ClearColor, set3DCameraFPS/Orbit |
 | Screenshot | Stable | glReadPixels, PNG via stb_image_write, ffe.screenshot |
+| Networking | Foundation | ENet transport (ServerTransport/ClientTransport), PacketReader/Writer (bounds-checked), rate limiting, connection state |
 
 ## Demo Games
 
@@ -62,11 +64,11 @@
 
 | Session | Summary |
 |---------|---------|
+| 57 | Phase 4 kickoff — ENet transport, packet system, rate limiting, networking ADR. 872 tests. |
 | 56 | Build pipeline — game export, runtime binary, ffe.loadSceneJSON. 842 tests. Milestone 6 delivered. **Phase 3 MVP COMPLETE.** |
 | 55 | Scene hierarchy tree (parent/child), drag-and-drop (asset browser to inspector), scene graph, ReparentCommand. 828 tests. Milestone 5 delivered. |
 | 54 | Viewport gizmos, keyboard shortcuts, component add/remove from inspector. 810 tests. Milestone 4 delivered. |
 | 53 | Play-in-editor (snapshot/restore), inspector undo integration, asset browser panel. 793 tests. Milestone 3 delivered. |
-| 52 | FBO viewport, component-modify commands, file dialogs (Open/Save/Save As). 780 tests. Milestone 2 delivered. |
 
 ## Phase 2 — 3D Foundation: COMPLETE
 
@@ -112,24 +114,26 @@ All deliverables met:
 - [ ] Project creation wizard
 - [ ] LLM integration panel (connect AI assistant, generate code, explain systems)
 
-## Current Phase: Phase 4 — Networking and Multiplayer (NOT STARTED)
+## Current Phase: Phase 4 — Networking and Multiplayer (IN PROGRESS)
 
 **Goal:** Built-in multiplayer support for both 2D and 3D games.
 
 ### Deliverables
+- [x] Network transport (ENet wrapper — ServerTransport/ClientTransport, function-pointer callbacks)
+- [x] Packet system (PacketReader/Writer, bounds-checked, NaN/Inf rejection, 1200-byte MTU limit)
+- [x] Network security: packet validation, per-connection rate limiting
+- [x] Networking ADR (`docs/architecture/adr-networking.md`)
+- [x] .context.md for networking subsystem
 - [ ] Client-server architecture (authoritative server model)
-- [ ] Network transport (UDP with reliability layer — ENet or GameNetworkingSockets)
-- [ ] ECS state replication (sync entity components across network)
+- [ ] ECS state replication (snapshot/delta encoding, component registry)
 - [ ] Network prediction and interpolation (client-side prediction, server reconciliation)
 - [ ] Lobby/matchmaking API
 - [ ] Lua bindings for networking (send/receive messages, RPC)
 - [ ] Lag compensation
-- [ ] Network security (packet validation, rate limiting, anti-cheat hooks)
 - [ ] NAT traversal / relay server support
 - [ ] At least one networked demo game
-- [ ] .context.md files for all new subsystems
 
-### Next Session (57) — Phase 4 kickoff (see dispatch plan below)
+### Next Session (58) — ECS replication, server/client game logic, Lua bindings
 
 ## Build Commands
 

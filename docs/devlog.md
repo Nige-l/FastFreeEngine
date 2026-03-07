@@ -3,6 +3,57 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-34 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 57: Phase 4 Kickoff — ENet Transport, Packet System, Rate Limiting
+
+### Summary
+
+Session 57 kicked off Phase 4 (Networking and Multiplayer) with the networking foundation: a bounds-checked packet serialisation system, an ENet-based transport layer with per-connection rate limiting, and an architecture decision record covering transport, security, and replication design. FAST build passed: 872 tests on Clang-18, zero warnings.
+
+### New Features
+
+- **Networking ADR** (`docs/architecture/adr-networking.md`) — documents transport selection (ENet), client-server authority model, packet format, replication strategy (snapshot + delta), and security requirements. Security shift-left review PASSED.
+- **Packet System** (`engine/networking/packet.h/.cpp`) — `PacketReader` and `PacketWriter` with bounds-checked reads/writes for all primitive types (u8/u16/u32/u64, i8/i16/i32/i64, float, double, string, raw bytes). NaN/Inf rejection on float/double writes. 1200-byte MTU-safe packet size limit. No heap allocations in hot path — fixed-size inline buffer.
+- **Transport Layer** (`engine/networking/transport.h/.cpp`) — ENet wrapper providing `ServerTransport` (listen, accept, broadcast) and `ClientTransport` (connect, send). Function-pointer callbacks for connect/disconnect/receive events. Per-connection rate limiting with configurable packets-per-second and bytes-per-second limits.
+- **Connection State** (`engine/networking/connection.h`) — `ConnectionId` type, `ConnectionState` enum (Disconnected/Connecting/Connected/Disconnecting), `RateLimitConfig` struct.
+- **New vcpkg dependency:** `enet` — added to `vcpkg.json`.
+
+### Tests
+
+- 30 new tests across `tests/networking/test_packet.cpp` and `tests/networking/test_transport.cpp`
+- Packet tests: serialisation round-trips for all types, bounds checking, NaN/Inf rejection, string serialisation, buffer overflow prevention
+- Transport tests: server/client start/stop, loopback connect/disconnect, rate limiting enforcement
+- **872 total tests** (up from 842), zero warnings
+
+### Reviews
+
+- **performance-critic:** PASS — no heap allocations in packet hot path, fixed-size buffers, function-pointer callbacks (no virtual)
+- **security-auditor:** PASS — 5 minor hardening items noted (backlog), no CRITICAL or HIGH findings. Shift-left review of ADR also PASSED.
+- **api-designer:** Created `engine/networking/.context.md` with usage patterns, API reference, and anti-patterns
+- **game-dev-tester:** Deferred — Lua bindings not yet added
+
+### Architecture Notes
+
+- ENet chosen over raw UDP for its built-in reliability, ordering, and channel multiplexing
+- Server-authoritative model: server owns game state, clients send inputs only
+- Packet format uses fixed-size inline buffers (1200 bytes) to stay under typical MTU
+- Rate limiting is per-connection with separate packets/sec and bytes/sec caps
+- Replication will use snapshot + delta encoding (next session)
+
+### Files Changed
+
+- `engine/networking/packet.h`, `engine/networking/packet.cpp` — new
+- `engine/networking/transport.h`, `engine/networking/transport.cpp` — new
+- `engine/networking/connection.h` — new
+- `engine/networking/CMakeLists.txt` — new
+- `engine/networking/.context.md` — new
+- `engine/CMakeLists.txt` — added networking subdirectory
+- `tests/networking/test_packet.cpp`, `tests/networking/test_transport.cpp` — new
+- `tests/CMakeLists.txt` — added networking tests
+- `vcpkg.json` — added enet dependency
+- `docs/architecture/adr-networking.md` — new
+
+---
+
 ## 2026-03-07 — Session 56: Editor Milestone 6 — Build Pipeline (Phase 3 MVP COMPLETE)
 
 ### Summary
