@@ -12,6 +12,14 @@ namespace ffe::rhi {
 RhiResult init(const RhiConfig& config);
 void shutdown();
 
+// --- Query ---
+/// Returns true if the RHI was initialised in headless mode (no GPU context).
+bool isHeadless();
+/// Returns the viewport width (pixels) set at init time. Returns 0 if not yet initialised.
+i32 getViewportWidth();
+/// Returns the viewport height (pixels) set at init time. Returns 0 if not yet initialised.
+i32 getViewportHeight();
+
 // --- Buffer operations ---
 BufferHandle createBuffer(const BufferDesc& desc);
 RhiResult updateBuffer(BufferHandle handle, const void* data, u32 sizeBytes, u32 offset = 0);

@@ -14,6 +14,8 @@ extern "C" {
 #include "renderer/render_system.h"
 #include "renderer/mesh_loader.h"
 #include "renderer/mesh_renderer.h"
+#include "renderer/screenshot.h"
+#include "renderer/rhi.h"
 #include "renderer/texture_loader.h"
 #include "renderer/camera.h"
 #include "audio/audio.h"
@@ -4127,6 +4129,87 @@ void ScriptEngine::registerEcsBindings() {
     lua_setfield(L, -2, "setAmbientColor");
 
     // Set the 'ffe' table as a global.
+    // ----------------------------------------------------------------
+    // Screenshot binding
+    // ----------------------------------------------------------------
+
+    // ffe.screenshot(filename: string) -> boolean
+    // Capture the current framebuffer to a PNG file.
+    //
+    // filename: destination filename, e.g. "shot.png". Saved to screenshots/
+    //           under the current working directory. The screenshots/ directory
+    //           is created if it does not exist.
+    //
+    // Returns true on success, false on failure (headless mode, bad path,
+    // write error). Call this after all draw calls in the same frame, before
+    // the frame ends. Never call this per-frame in production — it allocates
+    // heap memory and calls glReadPixels (cold path only).
+    //
+    // Uses named-variable lambda to avoid lua_pushcfunction macro expansion
+    // issues (Session 38 pattern — inline lambdas break with some compilers).
+    auto ffe_screenshot = [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TSTRING) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.screenshot: argument 1 must be a string (filename)");
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+
+        const char* filename = lua_tostring(state, 1);
+        if (filename == nullptr || filename[0] == '\0') {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.screenshot: filename is null or empty");
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+
+        // Path safety: filename must pass the same isPathSafe check as other
+        // file-writing operations (no traversal, no absolute paths, no ADS).
+        if (!isPathSafe(filename)) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.screenshot: unsafe filename rejected: \"%s\"", filename);
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+
+        // Build the screenshots/ output directory and full output path.
+        // Use std::filesystem to create the directory; then snprintf the full path.
+        {
+            std::error_code ec;
+            std::filesystem::create_directories("screenshots", ec);
+            if (ec) {
+                FFE_LOG_ERROR("ScriptEngine",
+                              "ffe.screenshot: failed to create screenshots/ directory: %s",
+                              ec.message().c_str());
+                lua_pushboolean(state, 0);
+                return 1;
+            }
+        }
+
+        char fullPath[PATH_MAX];
+        const int pathLen = std::snprintf(fullPath, sizeof(fullPath), "screenshots/%s", filename);
+        if (pathLen < 0 || static_cast<std::size_t>(pathLen) >= sizeof(fullPath)) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.screenshot: output path too long");
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+
+        // Get current framebuffer dimensions from the RHI.
+        const int w = ffe::rhi::getViewportWidth();
+        const int h = ffe::rhi::getViewportHeight();
+
+        if (w <= 0 || h <= 0) {
+            FFE_LOG_ERROR("ScriptEngine",
+                          "ffe.screenshot: invalid viewport dimensions %dx%d — "
+                          "RHI not initialised?", w, h);
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+
+        const bool ok = ffe::renderer::captureFramebuffer(fullPath, w, h);
+        lua_pushboolean(state, ok ? 1 : 0);
+        return 1;
+    };
+    lua_pushcfunction(L, ffe_screenshot);
+    lua_setfield(L, -2, "screenshot");
+
     lua_setglobal(L, "ffe");
 }
 

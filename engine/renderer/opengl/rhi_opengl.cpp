@@ -31,6 +31,8 @@ namespace ffe::rhi {
 // --- Internal state ---
 static bool s_headless = false;
 static bool s_initialized = false;
+static i32  s_viewportWidth  = 0;
+static i32  s_viewportHeight = 0;
 
 // Cached view-projection matrix
 static glm::mat4 s_viewProjection{1.0f};
@@ -235,6 +237,8 @@ static u32 findFreeSlot(T (&pool)[N], u32& nextSlot) {
 
 RhiResult init(const RhiConfig& config) {
     s_headless = config.headless;
+    s_viewportWidth  = config.viewportWidth;
+    s_viewportHeight = config.viewportHeight;
 
     if (s_headless) {
         FFE_LOG_INFO("Renderer", "Headless mode — no GPU operations");
@@ -330,6 +334,8 @@ void shutdown() {
     s_headlessTextureNext = 1;
     s_headlessShaderNext = 1;
     s_currentShader = {};
+    s_viewportWidth  = 0;
+    s_viewportHeight = 0;
     s_initialized = false;
 
     FFE_LOG_INFO("Renderer", "RHI shutdown complete");
@@ -860,6 +866,20 @@ GLuint getGlBufferId(const BufferHandle handle) {
     if (handle.id == 0 || handle.id >= MAX_BUFFERS) return 0;
     if (!s_buffers[handle.id].alive) return 0;
     return s_buffers[handle.id].glId;
+}
+
+// --- Query functions ---
+
+bool isHeadless() {
+    return s_headless;
+}
+
+i32 getViewportWidth() {
+    return s_viewportWidth;
+}
+
+i32 getViewportHeight() {
+    return s_viewportHeight;
 }
 
 } // namespace ffe::rhi

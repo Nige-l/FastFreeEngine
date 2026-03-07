@@ -14,6 +14,7 @@ set(RENDERER_SOURCES
     font.cpp
     mesh_loader.cpp
     mesh_renderer.cpp
+    screenshot.cpp
 )
 
 # Backend selection based on tier

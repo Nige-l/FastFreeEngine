@@ -12,6 +12,7 @@ add_executable(ffe_tests
     physics/test_narrow_phase.cpp
     renderer/test_ttf_font.cpp
     renderer/test_mesh_loader.cpp
+    renderer/test_screenshot.cpp
 )
 
 target_link_libraries(ffe_tests

@@ -441,3 +441,58 @@ Not present in any engine source file directly. miniaudio uses `dlopen` internal
 One change is required before the Windows EXEs will run correctly on a Windows machine:
 
 1. **`realpath()` in 5 files (11 call sites):** Replace all `realpath()` / `::realpath()` calls with a thin `ffe_realpath()` wrapper that calls `_fullpath()` on Windows. The wrapper belongs in a new `engine/core/platform.h` header (or similar). This is the only remaining code change needed. All other POSIX calls are either MinGW-compatible or already platform-guarded.
+
+### 2026-03-07: GitHub Actions CI workflow — fix Linux jobs to use vcpkg
+
+**What changed:**
+
+File: `.github/workflows/ci.yml`
+
+**linux-clang job (lines 21-44):**
+
+1. Lines 21-24 — `apt-get install` block: removed `libglfw3-dev libluajit-5.1-dev`; added
+   `libgl1-mesa-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev`.
+   These are the X11/GL development headers that vcpkg needs to compile GLFW from source.
+   The apt `libglfw3-dev` and `libluajit-5.1-dev` packages conflict with and/or shadow the
+   vcpkg-managed versions; removing them prevents version skew and missing transitive headers.
+
+2. Lines 26-27 — New step "Set up vcpkg": exports `VCPKG_INSTALLATION_ROOT` (the pre-installed
+   vcpkg path on `ubuntu-24.04` GitHub-hosted runners) as `VCPKG_ROOT` in `$GITHUB_ENV`.
+   Without this step `${{ env.VCPKG_ROOT }}` is empty and the toolchain file path is wrong.
+
+3. Lines 34-35 — Cache step: added `restore-keys: vcpkg-linux-x64-` for partial cache hits
+   when `vcpkg.json` changes. Without a restore-key, any change to `vcpkg.json` causes a
+   full cold rebuild from source; with the restore-key, a partial cache is used as a base and
+   only changed packages are rebuilt.
+
+4. Lines 39-43 — Configure step: added
+   `-DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake`.
+   This is the root cause of "Configuring incomplete, errors occurred!" — without the vcpkg
+   toolchain file, CMake's `find_package` calls for all vcpkg-managed libraries (entt, glfw3,
+   luajit, sol2, glm, imgui, stb, nlohmann-json, tracy, catch2) produce "not found" errors and
+   CMake exits with a configuration error.
+
+**linux-gcc job (lines 60-84):** Identical changes applied — same apt block, same new "Set up
+vcpkg" step, same `restore-keys`, same `-DCMAKE_TOOLCHAIN_FILE` argument.
+
+**macos-arm64 job (lines 113-115):** Added `restore-keys: vcpkg-macos-arm64-` to the cache
+step. The configure step already had `-DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake`
+and was not changed.
+
+**Why:**
+- All three Linux CI jobs were failing at CMake configure time with "Configuring incomplete,
+  errors occurred!" because none of them passed a vcpkg toolchain file to CMake, so every
+  `find_package` for a vcpkg dependency silently failed to find the package and CMake aborted.
+- The apt packages `libglfw3-dev` and `libluajit-5.1-dev` are now managed by vcpkg (added to
+  `vcpkg.json` in the 2026-03-07 Windows cross-build session). Installing them via apt alongside
+  vcpkg creates header/library conflicts and leaves other vcpkg dependencies (entt, sol2, etc.)
+  still unresolvable by CMake.
+- `VCPKG_INSTALLATION_ROOT` is the canonical environment variable set by GitHub's ubuntu-24.04
+  runner image to point at the pre-installed vcpkg. Exporting it as `VCPKG_ROOT` matches the
+  variable name used in the cmake configure step.
+- `restore-keys` is a performance improvement; it does not affect correctness.
+
+**Verification:**
+- File diff confirms all changes are scoped to the three targeted sections.
+- No engine source files were modified.
+- macOS configure step verified to already carry the toolchain file argument — no change needed.
