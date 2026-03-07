@@ -6,9 +6,9 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 94 |
-| Total tests | 1282 (Clang-18, zero warnings) |
-| Total Lua bindings | ~198 |
+| Last session | 95 |
+| Total tests | 1333 (Clang-18, zero warnings) |
+| Total Lua bindings | ~206 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
 | Phase 2 (3D Foundation) | COMPLETE |
 | Phase 3 (Standalone Editor) | MVP COMPLETE (6 milestones, Sessions 51-56) |
@@ -44,11 +44,11 @@
 
 | Session | Summary |
 |---------|---------|
+| 95 | Water Rendering + Engine Fixes — water system (reflection FBO, waves, fresnel, 8 bindings), clip plane fix (post-processing black screen), terrain entity creation, unindexed mesh support (fox.glb), process reform. 1333 tests (+51). |
 | 94 | Docs & Process — README/website update (Phase 8-9, terrain, Vulkan, post-processing), screenshot pipeline (Xvfb + Mesa llvmpipe, 8 demos captured), process reform (game-dev-tester→demo author, api-designer owns docs), architecture-map binding fixes. 1282 tests (no new tests — docs only). |
 | 93 | Showcase Visual Overhaul — heightmap terrain (Levels 1 & 3), HDR bloom + ACES tone mapping, SSAO, FXAA, per-level atmospheric lighting and fog, terrain-aware gameplay, Python heightmap generator. 1282 tests (no new tests — showcase-only). |
 | 92 | Phase 9 M3: Terrain LOD + Frustum Culling — 3-level LOD per chunk (full/half/quarter), distance-based selection, reusable frustum culling (Griess-Hartmann, p-vertex AABB), 1 Lua binding, 13 new tests. 1282 tests (FAST). |
 | 91 | Phase 9 M2: Terrain Texturing — RGBA splat map blending (4 texture layers), triplanar projection for steep surfaces, TERRAIN shader (GLSL 330, Blinn-Phong+shadow+fog), TerrainMaterial struct, 3 Lua bindings, 16 new tests. 1269 tests (FAST). |
-| 90 | Phase 9 M1: Heightmap Terrain Rendering — chunked heightmap terrain (raw float + PNG loading), configurable chunk resolution, bilinear height queries, terrain renderer (Blinn-Phong, shadows, fog), 4 Lua bindings, 18 new tests. 1252 tests (FAST). |
 
 ## Phase 8 — Vulkan Backend (COMPLETE, Sessions 85-89)
 

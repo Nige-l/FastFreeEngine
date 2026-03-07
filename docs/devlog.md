@@ -3,6 +3,55 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 95: Water Rendering + Engine Fixes
+
+### Summary
+
+Session 95 delivered a water rendering system with reflection, animated waves, and fresnel blending, plus three critical engine fixes. The water system uses a reflection FBO (renders the scene flipped at the water plane via clip planes), vertex-displaced sine waves, and Schlick fresnel approximation in a dedicated WATER shader (GLSL 330). Eight Lua bindings expose full control over water appearance. Fixed a post-processing black screen caused by gl_ClipDistance being unset in non-water render passes (added a guard: when clipPlane is near-zero, output 1.0). Fixed terrain entities not rendering by making the loadTerrain Lua binding create a proper ECS entity with Terrain + Transform3D components. Added unindexed mesh support in mesh_loader — non-indexed glTF meshes now get a trivial index buffer generated, fixing fox.glb loading. 51 new tests (30 water struct, 10 water bindings, 11 other fixes). Process reform carried forward from Session 94.
+
+### Delivered
+
+- **Water Rendering System** -- WaterConfig, WaterHandle, reflection FBO, animated sine waves (vertex displacement), Schlick fresnel, depth-based opacity, WATER shader (GLSL 330 core)
+- **8 Lua Bindings** -- createWater, setWaterLevel, setWaterColor, setWaterDeepColor, setWaterOpacity, setWaterWaveSpeed, setWaterWaveScale, removeWater
+- **Clip Plane Fix** -- gl_ClipDistance guard in all 3D shaders (dot(clipPlane,clipPlane) < 0.001 → output 1.0), fixes post-processing black screen
+- **Terrain Entity Fix** -- loadTerrain Lua binding now creates ECS entity with Terrain + Transform3D components
+- **Unindexed Mesh Support** -- mesh_loader generates trivial index buffer for non-indexed glTF meshes (fox.glb now loads)
+- **Water ADR** -- docs/architecture/adr-water-rendering.md
+
+### Files Created (5)
+
+- `engine/renderer/water.h`
+- `engine/renderer/water.cpp`
+- `docs/architecture/adr-water-rendering.md`
+- `tests/renderer/test_water.cpp`
+- `tests/scripting/test_water_bindings.cpp`
+
+### Files Modified (10)
+
+- `engine/renderer/shader_library.h` (WATER shader enum)
+- `engine/renderer/shader_library.cpp` (WATER shader source, clip plane guard in 3D shaders)
+- `engine/renderer/mesh_loader.h` (unindexed mesh support)
+- `engine/renderer/mesh_loader.cpp` (trivial index buffer generation)
+- `engine/renderer/CMakeLists.txt` (water.cpp added)
+- `engine/scripting/script_engine.cpp` (8 water bindings, terrain entity fix)
+- `engine/core/application.cpp` (water system init/update/cleanup)
+- `tests/CMakeLists.txt` (new test files)
+- `tests/renderer/test_gpu_instancing.cpp` (minor fix)
+- `tests/renderer/test_terrain.cpp` (minor fix)
+
+### Reviews
+
+- performance-critic: PASS
+- security-auditor: PASS (no new attack surface)
+- api-designer: PASS (8 bindings follow existing patterns)
+
+### Build
+
+- FAST build (Clang-18): 1333 tests, zero warnings
+- 51 new tests (+51 from 1282)
+
+---
+
 ## 2026-03-07 — Session 94: Docs & Process — README, Website, Screenshot Pipeline
 
 ### Summary
