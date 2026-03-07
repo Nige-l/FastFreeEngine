@@ -5,7 +5,11 @@
 add_executable(ffe_editor_app
     main.cpp
     editor_app.cpp
+    commands/command_history.cpp
+    commands/entity_commands.cpp
+    panels/file_dialog.cpp
     panels/viewport_panel.cpp
+    rendering/editor_framebuffer.cpp
 )
 
 target_include_directories(ffe_editor_app PRIVATE

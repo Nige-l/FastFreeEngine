@@ -1,6 +1,6 @@
 #include "editor_app.h"
-#include "panels/viewport_panel.h"
 #include "core/application.h"
+#include "scene/scene_serialiser.h"
 
 #include <glad/glad.h>
 #define GLFW_INCLUDE_NONE
@@ -78,6 +78,9 @@ bool EditorApp::init() {
         return false;
     }
 
+    // 6. Initialize the viewport panel FBO (default 800x600, resizes with panel)
+    m_viewport.init(800, 600);
+
     return true;
 }
 
@@ -112,6 +115,9 @@ void EditorApp::run() {
 }
 
 void EditorApp::shutdown() {
+    // 0. Destroy viewport FBO (needs GL context alive)
+    m_viewport.shutdown();
+
     // 1. Shutdown ImGui backends (must happen while the GL context + window are alive)
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
@@ -134,13 +140,20 @@ void EditorApp::renderMenuBar() {
                 // TODO: clear scene
             }
             if (ImGui::MenuItem("Open Scene...")) {
-                // TODO: open file dialog
+                m_pendingDialogMode = ffe::editor::FileDialogMode::OPEN;
+                m_fileDialog.open(ffe::editor::FileDialogMode::OPEN, ".");
             }
             if (ImGui::MenuItem("Save Scene")) {
-                // TODO: save current scene
+                if (!m_currentScenePath.empty() && m_app) {
+                    ffe::scene::saveScene(m_app->world(), m_currentScenePath);
+                } else {
+                    m_pendingDialogMode = ffe::editor::FileDialogMode::SAVE;
+                    m_fileDialog.open(ffe::editor::FileDialogMode::SAVE, ".");
+                }
             }
             if (ImGui::MenuItem("Save Scene As...")) {
-                // TODO: save-as file dialog
+                m_pendingDialogMode = ffe::editor::FileDialogMode::SAVE;
+                m_fileDialog.open(ffe::editor::FileDialogMode::SAVE, ".");
             }
             ImGui::Separator();
             if (ImGui::MenuItem("Exit")) {
@@ -159,8 +172,25 @@ void EditorApp::renderMenuBar() {
 }
 
 void EditorApp::renderPanels() {
-    if (m_showViewport) {
-        viewport_panel::render();
+    if (m_showViewport && m_app) {
+        m_viewport.render(*m_app);
+    }
+
+    // File dialog
+    if (m_fileDialog.isOpen() && m_fileDialog.render()) {
+        const auto& path = m_fileDialog.selectedPath();
+        if (m_app && !path.empty()) {
+            if (m_pendingDialogMode == ffe::editor::FileDialogMode::OPEN) {
+                m_app->world().clearAllEntities();
+                if (ffe::scene::loadScene(m_app->world(), path)) {
+                    m_currentScenePath = path;
+                }
+            } else {
+                if (ffe::scene::saveScene(m_app->world(), path)) {
+                    m_currentScenePath = path;
+                }
+            }
+        }
     }
 }
 

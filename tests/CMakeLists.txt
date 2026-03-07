@@ -134,6 +134,7 @@ add_executable(ffe_tests_editor
     test_main.cpp
     editor/test_command_history.cpp
     editor/test_entity_commands.cpp
+    editor/test_component_commands.cpp
     ${CMAKE_SOURCE_DIR}/editor/commands/command_history.cpp
     ${CMAKE_SOURCE_DIR}/editor/commands/entity_commands.cpp
 )
