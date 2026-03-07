@@ -6,9 +6,9 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 77 |
-| Total tests | 1052 (FAST build: Clang-18, zero warnings) |
-| Total Lua bindings | ~172 |
+| Last session | 78 |
+| Total tests | 1094 (FAST build: Clang-18, zero warnings) |
+| Total Lua bindings | ~178 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
 | Phase 2 (3D Foundation) | COMPLETE |
 | Phase 3 (Standalone Editor) | MVP COMPLETE (6 milestones, Sessions 51-56) |
@@ -42,11 +42,11 @@
 
 | Session | Summary |
 |---------|---------|
+| 78 | Phase 7 M2: Post-processing pipeline — HDR FBO, bloom (half-res ping-pong), tone mapping (Reinhard/ACES), gamma correction. 6 Lua bindings, 42 new tests. 1094 tests (FAST). |
 | 77 | Showcase debug: inverted WASD (forward vector +sin/+cos fixed to -sin/-cos), ground Y-scale doubled + brighter colors, player scale 0.5->1.8, HUD text shortened for overflow. game-dev-tester SHIP 9/10. 1052 tests (FAST). |
 | 76 | Engine fix: framebuffer resize callback (stale screen dimensions), showcase halfExtents 2x mismatch fix, BattleMusic, director process reform. game-dev-tester SHIP 8/10. 1052 tests (FAST). |
 | 75 | Showcase demo 7 bugs fixed, 3 new Lua bindings (getMouseDeltaX/Y, setCursorCaptured), game-dev-tester process reformed (now mandatory for demo changes), director review. 1052 tests (FAST). |
 | 74 | Phase 7 M1: PBR Materials (Cook-Torrance BRDF, metallic-roughness, IBL via skybox cubemap), fog system, 41 new tests. 1046 tests (FAST). |
-| 73 | Phase 6 COMPLETE. Phase 7 ADR approved (PBR, post-processing, instancing, skeletal anim, AA, SSAO). README + ROADMAP updated. No C++ changes. |
 
 ## Phase 7 — Rendering Pipeline Modernisation (IN PROGRESS)
 
@@ -55,7 +55,7 @@
 ### Milestones
 
 - [x] M1 (Sessions 74-76): PBR Materials -- PBRMaterial component, Cook-Torrance BRDF shader, IBL, Lua bindings, tests. Sessions 75-76: showcase bug fixes, engine framebuffer resize fix, process reform.
-- [ ] M2 (Sessions 77-78): Post-Processing -- HDR FBO chain, bloom, tone mapping, gamma correction
+- [x] M2 (Sessions 77-78): Post-Processing -- HDR FBO (GL_RGBA16F), bloom (half-res ping-pong Gaussian), tone mapping (Reinhard/ACES), gamma correction. 6 Lua bindings, 42 tests.
 - [ ] M3 (Sessions 79-80): GPU Instancing -- instance buffers, automatic batching, 1000-instance benchmark
 - [ ] M4 (Sessions 81-82): Skeletal Animation Completion -- crossfade blending, interpolation modes, root motion
 - [ ] M5 (Session 83): Anti-Aliasing -- MSAA + FXAA

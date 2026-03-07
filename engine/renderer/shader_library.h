@@ -16,6 +16,9 @@ enum class BuiltinShader : u8 {
     SHADOW_DEPTH_SKINNED = 7,  // Depth-only + bone skinning (skeletal animation shadow pass)
     MESH_PBR             = 8,  // PBR metallic-roughness (Cook-Torrance BRDF)
     MESH_PBR_SKINNED     = 9,  // PBR + bone skinning (skeletal animation)
+    POST_THRESHOLD       = 10, // Bloom bright-pixel extract (luminance > threshold)
+    POST_BLUR            = 11, // Separable Gaussian blur (horizontal/vertical via uniform)
+    POST_FINAL           = 12, // Final composite: bloom + tone map + gamma
     COUNT
 };
 

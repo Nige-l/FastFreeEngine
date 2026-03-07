@@ -1,4 +1,5 @@
 #include "renderer/shader_library.h"
+#include "renderer/post_process.h"
 #include "renderer/rhi.h"
 #include "core/logging.h"
 
@@ -761,6 +762,147 @@ void main() {
 // Fragment shader for PBR skinned is identical to the static PBR version.
 // Both share the same fragment shader string pointer (MESH_PBR_FRAG_SOURCE).
 
+// --- Post-processing: fullscreen triangle vertex shader ---
+// Generates a fullscreen triangle from gl_VertexID (0, 1, 2).
+// No VBO needed — just bind an empty VAO and glDrawArrays(GL_TRIANGLES, 0, 3).
+
+static const char* const FULLSCREEN_VERT_SOURCE = R"glsl(
+#version 330 core
+
+out vec2 vUV;
+
+void main() {
+    // Fullscreen triangle covering [-1,+1] clip space.
+    // Vertex 0: (-1,-1), Vertex 1: (3,-1), Vertex 2: (-1, 3)
+    float x = -1.0 + float((gl_VertexID & 1) << 2);
+    float y = -1.0 + float((gl_VertexID & 2) << 1);
+    gl_Position = vec4(x, y, 0.0, 1.0);
+    vUV = vec2(x + 1.0, y + 1.0) * 0.5;
+}
+)glsl";
+
+// --- Post-processing: bloom threshold extract shader ---
+
+static const char* const POST_THRESHOLD_FRAG_SOURCE = R"glsl(
+#version 330 core
+
+in vec2 vUV;
+
+uniform sampler2D u_scene;
+uniform float     u_threshold;
+
+out vec4 fragColor;
+
+void main() {
+    vec3 color = texture(u_scene, vUV).rgb;
+    // Luminance (ITU BT.709)
+    float lum = dot(color, vec3(0.2126, 0.7152, 0.0722));
+    if (lum > u_threshold) {
+        fragColor = vec4(color, 1.0);
+    } else {
+        fragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    }
+}
+)glsl";
+
+// --- Post-processing: separable Gaussian blur shader ---
+// u_horizontal = 1 for horizontal pass, 0 for vertical.
+// 13-tap kernel (6 + 1 + 6) for quality bloom at half resolution.
+
+static const char* const POST_BLUR_FRAG_SOURCE = R"glsl(
+#version 330 core
+
+in vec2 vUV;
+
+uniform sampler2D u_image;
+uniform int       u_horizontal;
+
+out vec4 fragColor;
+
+// 13-tap Gaussian weights (sigma ~= 4.0, normalised to sum to 1.0).
+const float weights[7] = float[](
+    0.1964825501511404,
+    0.17466632171698539,
+    0.12098536225957168,
+    0.06559061721935779,
+    0.02773012956114892,
+    0.009167927656011385,
+    0.002361965422592713
+);
+
+void main() {
+    vec2 texelSize = 1.0 / vec2(textureSize(u_image, 0));
+    vec3 result = texture(u_image, vUV).rgb * weights[0];
+
+    if (u_horizontal != 0) {
+        for (int i = 1; i < 7; ++i) {
+            result += texture(u_image, vUV + vec2(texelSize.x * float(i), 0.0)).rgb * weights[i];
+            result += texture(u_image, vUV - vec2(texelSize.x * float(i), 0.0)).rgb * weights[i];
+        }
+    } else {
+        for (int i = 1; i < 7; ++i) {
+            result += texture(u_image, vUV + vec2(0.0, texelSize.y * float(i))).rgb * weights[i];
+            result += texture(u_image, vUV - vec2(0.0, texelSize.y * float(i))).rgb * weights[i];
+        }
+    }
+
+    fragColor = vec4(result, 1.0);
+}
+)glsl";
+
+// --- Post-processing: final composite shader ---
+// Combines scene + bloom, applies tone mapping, and gamma correction.
+
+static const char* const POST_FINAL_FRAG_SOURCE = R"glsl(
+#version 330 core
+
+in vec2 vUV;
+
+uniform sampler2D u_scene;
+uniform sampler2D u_bloom;
+uniform int       u_bloomEnabled;
+uniform float     u_bloomIntensity;
+uniform int       u_toneMapper;    // 0 = none, 1 = Reinhard, 2 = ACES
+uniform int       u_gammaEnabled;
+uniform float     u_gamma;
+
+out vec4 fragColor;
+
+// Reinhard tone mapping
+vec3 tonemapReinhard(vec3 c) {
+    return c / (c + vec3(1.0));
+}
+
+// ACES filmic (Stephen Hill fitted approximation)
+vec3 tonemapACES(vec3 c) {
+    return (c * (2.51 * c + 0.03)) / (c * (2.43 * c + 0.59) + 0.14);
+}
+
+void main() {
+    vec3 color = texture(u_scene, vUV).rgb;
+
+    // Add bloom
+    if (u_bloomEnabled != 0) {
+        vec3 bloom = texture(u_bloom, vUV).rgb;
+        color += bloom * u_bloomIntensity;
+    }
+
+    // Tone mapping
+    if (u_toneMapper == 1) {
+        color = tonemapReinhard(color);
+    } else if (u_toneMapper == 2) {
+        color = tonemapACES(color);
+    }
+
+    // Gamma correction
+    if (u_gammaEnabled != 0) {
+        color = pow(max(color, vec3(0.0)), vec3(1.0 / u_gamma));
+    }
+
+    fragColor = vec4(color, 1.0);
+}
+)glsl";
+
 // ==================== Library Implementation ====================
 
 struct ShaderPair {
@@ -780,6 +922,9 @@ static const ShaderPair PAIRS[] = {
     { SHADOW_DEPTH_SKINNED_VERT_SOURCE, SHADOW_DEPTH_FRAG_SOURCE,       "shadow_depth_skinned"  },
     { MESH_BLINN_PHONG_VERT_SOURCE,    MESH_PBR_FRAG_SOURCE,            "mesh_pbr"              },
     { MESH_PBR_SKINNED_VERT_SOURCE,    MESH_PBR_FRAG_SOURCE,            "mesh_pbr_skinned"      },
+    { FULLSCREEN_VERT_SOURCE,          POST_THRESHOLD_FRAG_SOURCE,      "post_threshold"        },
+    { FULLSCREEN_VERT_SOURCE,          POST_BLUR_FRAG_SOURCE,           "post_blur"             },
+    { FULLSCREEN_VERT_SOURCE,          POST_FINAL_FRAG_SOURCE,          "post_final"            },
 };
 static_assert(sizeof(PAIRS) / sizeof(PAIRS[0]) == static_cast<u32>(BuiltinShader::COUNT));
 
@@ -796,6 +941,12 @@ bool initShaderLibrary(ShaderLibrary& library) {
             return false;
         }
     }
+
+    // Register post-process shader handles so the post-process pipeline can use them.
+    setPostProcessShaders(
+        library.handles[static_cast<u32>(BuiltinShader::POST_THRESHOLD)],
+        library.handles[static_cast<u32>(BuiltinShader::POST_BLUR)],
+        library.handles[static_cast<u32>(BuiltinShader::POST_FINAL)]);
 
     FFE_LOG_INFO("Shader", "Loaded %u built-in shaders", static_cast<u32>(BuiltinShader::COUNT));
     return true;

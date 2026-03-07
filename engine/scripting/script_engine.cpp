@@ -21,6 +21,7 @@ extern "C" {
 #include "renderer/texture_loader.h"
 #include "renderer/camera.h"
 #include "renderer/pbr_material.h"
+#include "renderer/post_process.h"
 
 #include "audio/audio.h"
 #include "renderer/text_renderer.h"
@@ -5301,6 +5302,150 @@ void ScriptEngine::registerEcsBindings() {
     };
     lua_pushcfunction(L, ffe_disableFog);
     lua_setfield(L, -2, "disableFog");
+
+    // ----------------------------------------------------------------
+    // Post-processing bindings
+    // ----------------------------------------------------------------
+
+    // ffe.enableBloom(threshold: number, intensity: number) -> nothing
+    // Enable bloom with the given threshold and intensity.
+    // threshold is the luminance cutoff for bright-pass extraction.
+    // intensity is the additive blend strength. Both must be finite and > 0.
+    auto ffe_enableBloom = [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const float threshold = static_cast<float>(luaL_optnumber(state, 1, 1.0));
+        const float intensity = static_cast<float>(luaL_optnumber(state, 2, 0.5));
+
+        if (!std::isfinite(threshold) || !std::isfinite(intensity)) {
+            FFE_LOG_WARN("ScriptEngine", "ffe.enableBloom: non-finite value rejected");
+            return 0;
+        }
+
+        auto* cfg = world->registry().ctx().find<ffe::renderer::PostProcessConfig>();
+        if (cfg == nullptr) {
+            world->registry().ctx().emplace<ffe::renderer::PostProcessConfig>();
+            cfg = world->registry().ctx().find<ffe::renderer::PostProcessConfig>();
+        }
+
+        cfg->bloomEnabled   = true;
+        cfg->bloomThreshold = std::max(threshold, 0.0f);
+        cfg->bloomIntensity = std::max(intensity, 0.0f);
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_enableBloom);
+    lua_setfield(L, -2, "enableBloom");
+
+    // ffe.disableBloom() -> nothing
+    // Set bloomEnabled to false on the PostProcessConfig. No-op if no config exists.
+    auto ffe_disableBloom = [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        auto* cfg = world->registry().ctx().find<ffe::renderer::PostProcessConfig>();
+        if (cfg == nullptr) { return 0; }
+        cfg->bloomEnabled = false;
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_disableBloom);
+    lua_setfield(L, -2, "disableBloom");
+
+    // ffe.setToneMapping(mode: int) -> nothing
+    // Set the tone mapping mode: 0 = none, 1 = Reinhard, 2 = ACES.
+    // When mode > 0, gammaEnabled is also set to true (tone mapping without
+    // gamma correction produces washed-out results).
+    auto ffe_setToneMapping = [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const int mode = static_cast<int>(luaL_optinteger(state, 1, 0));
+        if (mode < 0 || mode > 2) {
+            FFE_LOG_WARN("ScriptEngine",
+                         "ffe.setToneMapping: mode must be 0, 1, or 2 (got %d)", mode);
+            return 0;
+        }
+
+        auto* cfg = world->registry().ctx().find<ffe::renderer::PostProcessConfig>();
+        if (cfg == nullptr) {
+            world->registry().ctx().emplace<ffe::renderer::PostProcessConfig>();
+            cfg = world->registry().ctx().find<ffe::renderer::PostProcessConfig>();
+        }
+
+        cfg->toneMapper = mode;
+        if (mode > 0) {
+            cfg->gammaEnabled = true;
+        }
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_setToneMapping);
+    lua_setfield(L, -2, "setToneMapping");
+
+    // ffe.setGammaCorrection(enabled: boolean) -> nothing
+    // Toggle gamma correction on or off. No-op if no PostProcessConfig exists.
+    auto ffe_setGammaCorrection = [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        auto* cfg = world->registry().ctx().find<ffe::renderer::PostProcessConfig>();
+        if (cfg == nullptr) { return 0; }
+
+        const bool enabled = lua_toboolean(state, 1) != 0;
+        cfg->gammaEnabled = enabled;
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_setGammaCorrection);
+    lua_setfield(L, -2, "setGammaCorrection");
+
+    // ffe.enablePostProcessing() -> nothing
+    // Ensure a PostProcessConfig exists in the ECS context. If one already
+    // exists, this is a no-op. Creates with default values if not present.
+    auto ffe_enablePostProcessing = [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        auto* cfg = world->registry().ctx().find<ffe::renderer::PostProcessConfig>();
+        if (cfg == nullptr) {
+            world->registry().ctx().emplace<ffe::renderer::PostProcessConfig>();
+        }
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_enablePostProcessing);
+    lua_setfield(L, -2, "enablePostProcessing");
+
+    // ffe.disablePostProcessing() -> nothing
+    // Remove PostProcessConfig from ECS context entirely. The renderer will
+    // skip the post-processing pass when no config exists.
+    auto ffe_disablePostProcessing = [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        auto* cfg = world->registry().ctx().find<ffe::renderer::PostProcessConfig>();
+        if (cfg != nullptr) {
+            world->registry().ctx().erase<ffe::renderer::PostProcessConfig>();
+        }
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_disablePostProcessing);
+    lua_setfield(L, -2, "disablePostProcessing");
 
     // ----------------------------------------------------------------
     // Screenshot binding

@@ -225,9 +225,13 @@ void meshRenderSystem(World& world, const Camera& camera3d,
         const rhi::ShaderHandle shadowShader = getShader(*shaderLib, BuiltinShader::SHADOW_DEPTH);
         const rhi::ShaderHandle shadowSkinnedShader = getShader(*shaderLib, BuiltinShader::SHADOW_DEPTH_SKINNED);
         if (rhi::isValid(shadowShader)) {
-            // Save the current viewport dimensions to restore after the shadow pass.
+            // Save the current viewport and FBO to restore after the shadow pass.
+            // When post-processing is active, the scene renders to the HDR FBO
+            // (not FBO 0), so we must query and restore the actual bound FBO.
             const i32 savedVpW = rhi::getViewportWidth();
             const i32 savedVpH = rhi::getViewportHeight();
+            GLint savedFbo = 0;
+            glGetIntegerv(GL_FRAMEBUFFER_BINDING, &savedFbo);
 
             // Bind shadow FBO and set viewport to shadow map resolution.
             glBindFramebuffer(GL_FRAMEBUFFER, shadowMap.fbo);
@@ -292,8 +296,9 @@ void meshRenderSystem(World& world, const Camera& camera3d,
             }
             glBindVertexArray(0);
 
-            // Restore: unbind shadow FBO, restore viewport, reset cull face.
-            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            // Restore: rebind previous FBO (may be HDR FBO if post-processing active),
+            // restore viewport, reset cull face.
+            glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(savedFbo));
             glViewport(0, 0, static_cast<GLsizei>(savedVpW), static_cast<GLsizei>(savedVpH));
             glCullFace(GL_BACK);
         }

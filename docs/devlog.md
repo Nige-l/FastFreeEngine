@@ -3,6 +3,59 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 78: Phase 7 M2 — Post-Processing Pipeline (HDR, Bloom, Tone Mapping, Gamma Correction)
+
+### Summary
+
+Session 78 implemented a full post-processing pipeline: HDR scene FBO (GL_RGBA16F), bloom (threshold extract + 13-tap separable Gaussian blur at half-resolution ping-pong), tone mapping (Reinhard + ACES filmic), and gamma correction. PostProcessConfig is an ECS singleton — opt-in only (pipeline only active when component is present). 3 new shaders (POST_THRESHOLD, POST_BLUR, POST_FINAL), fullscreen triangle via gl_VertexID (no VBO), shadow pass saves/restores active FBO, framebuffer resize updates post-process FBOs. 6 new Lua bindings, 42 new tests (26 renderer + 15 scripting + 1 misc). Added GL_TEXTURE1-7 to GLAD header. Performance-critic: PASS. api-designer: PASS. FAST build: 1094 tests, zero warnings.
+
+### Planned
+
+- Phase 7 M2: Post-processing pipeline — HDR, bloom, tone mapping, gamma correction
+
+### Delivered
+
+- **HDR Scene FBO** -- GL_RGBA16F color attachment, depth renderbuffer, scene renders to HDR buffer when post-processing enabled
+- **Bloom** -- Threshold extract (brightness > 1.0), half-resolution ping-pong FBOs, 13-tap separable Gaussian blur (horizontal + vertical passes)
+- **Tone Mapping** -- Reinhard and ACES filmic operators, selectable via Lua
+- **Gamma Correction** -- Configurable gamma value (default 2.2), applied in final composite pass
+- **PostProcessConfig ECS Singleton** -- Opt-in design: post-processing only activates when component is present, zero overhead otherwise
+- **Fullscreen Triangle** -- Rendered via gl_VertexID (no VBO allocation), covers clip space
+- **3 New Shaders** -- POST_THRESHOLD, POST_BLUR, POST_FINAL registered in shader library
+- **FBO Integration** -- Shadow pass now saves/restores active FBO; framebuffer resize callback updates post-process FBOs
+- **GLAD Extensions** -- Added GL_TEXTURE1-7 constants to glad.h/glad.c
+- **6 Lua Bindings** -- enableBloom, disableBloom, setToneMapping, setGammaCorrection, enablePostProcessing, disablePostProcessing
+- **42 New Tests** -- 26 renderer unit tests, 15 scripting binding tests, 1 misc
+
+### Files Changed
+
+- `engine/renderer/post_process.h` (NEW -- PostProcessConfig component, PostProcessPipeline class)
+- `engine/renderer/post_process.cpp` (NEW -- pipeline implementation: FBO setup, bloom, tone mapping, composite)
+- `engine/renderer/mesh_renderer.cpp` (MODIFIED -- post-process integration in render loop)
+- `engine/renderer/shader_library.h` (MODIFIED -- POST_THRESHOLD, POST_BLUR, POST_FINAL shader IDs)
+- `engine/renderer/shader_library.cpp` (MODIFIED -- shader source for 3 new shaders)
+- `engine/renderer/CMakeLists.txt` (MODIFIED -- added post_process.cpp)
+- `engine/renderer/.context.md` (MODIFIED -- post-processing API documentation)
+- `engine/core/application.cpp` (MODIFIED -- framebuffer resize updates post-process FBOs)
+- `engine/scripting/script_engine.cpp` (MODIFIED -- 6 new Lua bindings)
+- `engine/scripting/.context.md` (MODIFIED -- post-processing binding docs)
+- `third_party/glad/include/glad/glad.h` (MODIFIED -- GL_TEXTURE1-7)
+- `third_party/glad/src/glad.c` (MODIFIED -- GL_TEXTURE1-7)
+- `tests/renderer/test_post_process.cpp` (NEW -- 26 renderer tests)
+- `tests/scripting/test_postprocess_bindings.cpp` (NEW -- 15 scripting tests)
+- `tests/CMakeLists.txt` (MODIFIED -- new test files)
+
+### Reviews
+
+- performance-critic: PASS
+- api-designer: PASS
+
+### Next Session (79)
+
+Phase 7 M3: GPU Instancing -- instance buffers, automatic batching, 1000-instance benchmark.
+
+---
+
 ## 2026-03-07 — Session 77: Showcase Debug — Inverted Controls, Ground Visibility, Player Scale, HUD Overflow
 
 ### Summary

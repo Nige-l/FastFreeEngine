@@ -6,6 +6,7 @@
 #include "renderer/mesh_loader.h"
 #include "renderer/mesh_renderer.h"
 #include "renderer/shadow_map.h"
+#include "renderer/post_process.h"
 #include "renderer/text_renderer.h"
 #include "renderer/texture_loader.h"
 #include "physics/collider2d.h"
@@ -285,6 +286,11 @@ Result Application::initSubsystemsInternal() {
         return Result::fail("Shader library initialization failed");
     }
 
+    // 5b2. Initialize post-processing pipeline (after shaders, before sprite batch).
+    // Uses the window dimensions for FBO creation. Post-processing is optional —
+    // only active when a PostProcessConfig is placed in the ECS context.
+    renderer::initPostProcessing(m_config.windowWidth, m_config.windowHeight);
+
     // 5c. Initialize sprite batch
     renderer::initSpriteBatch(m_spriteBatch,
         renderer::getShader(m_shaderLibrary, renderer::BuiltinShader::SPRITE));
@@ -549,6 +555,9 @@ void Application::onFramebufferResize(const i32 width, const i32 height) {
     // Update text renderer coordinate space so HUD text is positioned correctly
     m_textRenderer.screenWidth  = fw;
     m_textRenderer.screenHeight = fh;
+
+    // Resize post-processing FBOs to match the new framebuffer size
+    renderer::resizePostProcessing(width, height);
 }
 
 void Application::shutdown() {
@@ -597,6 +606,9 @@ void Application::shutdown() {
 
     // 5c. Shutdown sprite batch
     renderer::shutdownSpriteBatch(m_spriteBatch);
+
+    // 5b2. Shutdown post-processing pipeline (before shader library — shaders still valid)
+    renderer::shutdownPostProcessing();
 
     // 5b. Shutdown shader library
     renderer::shutdownShaderLibrary(m_shaderLibrary);
@@ -687,7 +699,21 @@ void Application::render(const float alpha) {
 
     // Begin frame — use ClearColor from ECS context (settable from Lua)
     const auto& cc = m_world.registry().ctx().get<ClearColor>();
-    rhi::beginFrame({cc.r, cc.g, cc.b, 1.0f});
+
+    // Check if post-processing is active. If so, redirect all rendering to the HDR FBO.
+    const auto* postCfg = m_world.registry().ctx().find<renderer::PostProcessConfig>();
+    const bool usePostProcess = renderer::isPostProcessingInitialised() && (postCfg != nullptr);
+
+    if (usePostProcess) {
+        // Redirect scene rendering to the HDR FBO.
+        // beginSceneCapture clears the HDR FBO, so we still need beginFrame
+        // to reset pipeline state (depth mask etc.) but NOT clear the default FB
+        // since we will overwrite it entirely during executePostProcessing.
+        rhi::beginFrame({cc.r, cc.g, cc.b, 1.0f});
+        renderer::beginSceneCapture();
+    } else {
+        rhi::beginFrame({cc.r, cc.g, cc.b, 1.0f});
+    }
 
     // --- 3D pass: render all mesh entities before 2D sprites ---
     // meshRenderSystem sets its own pipeline state (depth LESS, cull BACK, no blend),
@@ -769,6 +795,13 @@ void Application::render(const float alpha) {
         // Flush queued HUD text in screen space.
         // flushText sets its own screen-space VP matrix internally.
         renderer::flushText(m_textRenderer, m_spriteBatch, staging);
+    }
+
+    // --- Post-processing pass ---
+    // Execute the post-process chain (bloom, tone map, gamma) and output to FBO 0.
+    // Must happen after all scene rendering and before the editor overlay / endFrame.
+    if (usePostProcess) {
+        renderer::executePostProcessing(*postCfg);
     }
 
 #ifdef FFE_EDITOR

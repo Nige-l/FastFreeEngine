@@ -17,6 +17,7 @@ set(RENDERER_SOURCES
     animation_system.cpp
     shadow_map.cpp
     screenshot.cpp
+    post_process.cpp
 )
 
 # Backend selection based on tier
