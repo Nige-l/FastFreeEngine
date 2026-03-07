@@ -3,6 +3,55 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 79: Phase 7 M3 — GPU Instancing
+
+### Summary
+
+Session 79 implemented GPU instancing: entities sharing a MeshHandle (2+ non-skinned) are automatically batched via `glDrawElementsInstanced`. InstanceData struct (64 bytes = mat4 model matrix), MAX_INSTANCES_PER_BATCH=1024, shared instance VBO (64KB GL_STREAM_DRAW). 3 instanced shader variants (Blinn-Phong, PBR, shadow depth) using mat4 from vertex attributes 8-11. Shadow pass also instanced. Lua binding: `ffe.getInstanceCount(meshHandle)`. Added GL instancing functions to GLAD (`glDrawElementsInstanced`, `glVertexAttribDivisor`). Performance-critic: PASS. api-designer: PASS. game-dev-tester: SKIPPED (instancing is transparent/automatic, no new API paradigm). FAST build: 1115 tests, zero warnings.
+
+### Planned
+
+- Phase 7 M3: GPU Instancing — instance buffers, automatic batching
+
+### Delivered
+
+- **Automatic Mesh Batching** -- Entities sharing a MeshHandle (2+ non-skinned) grouped automatically by the mesh renderer, one `glDrawElementsInstanced` call per group
+- **InstanceData Struct** -- 64 bytes (mat4 model matrix), MAX_INSTANCES_PER_BATCH=1024
+- **Shared Instance VBO** -- 64KB GL_STREAM_DRAW buffer, updated per frame via `glBufferSubData`
+- **3 Instanced Shader Variants** -- MESH_BLINN_PHONG_INSTANCED, MESH_PBR_INSTANCED, SHADOW_DEPTH_INSTANCED; mat4 from vertex attributes 8-11 via `glVertexAttribDivisor`
+- **Instanced Shadow Pass** -- Shadow depth rendering also batches instanced meshes
+- **GLAD Extensions** -- Added `glDrawElementsInstanced`, `glVertexAttribDivisor` typedefs and loader
+- **1 Lua Binding** -- `ffe.getInstanceCount(meshHandle)` returns entity count sharing a mesh
+- **21 New Tests** -- GPU instancing unit tests + scripting binding test
+
+### Files Changed
+
+- `engine/renderer/gpu_instancing.h` (NEW -- InstanceData, MAX_INSTANCES_PER_BATCH, instance buffer management)
+- `engine/renderer/mesh_renderer.cpp` (MODIFIED -- instanced draw path, mesh grouping, shadow instancing)
+- `engine/renderer/mesh_renderer.h` (MODIFIED -- instance buffer handles, grouping state)
+- `engine/renderer/shader_library.h` (MODIFIED -- 3 new instanced shader enum values)
+- `engine/renderer/shader_library.cpp` (MODIFIED -- instanced shader source code)
+- `engine/renderer/.context.md` (MODIFIED -- GPU instancing API documentation)
+- `engine/core/application.cpp` (MODIFIED -- instance buffer init/cleanup)
+- `engine/scripting/script_engine.cpp` (MODIFIED -- ffe.getInstanceCount binding)
+- `engine/scripting/.context.md` (MODIFIED -- instancing binding docs)
+- `third_party/glad/include/glad/glad.h` (MODIFIED -- glDrawElementsInstanced, glVertexAttribDivisor)
+- `third_party/glad/src/glad.c` (MODIFIED -- GL instancing function loader)
+- `tests/renderer/test_gpu_instancing.cpp` (NEW -- 21 tests)
+- `tests/CMakeLists.txt` (MODIFIED -- new test file)
+
+### Reviews
+
+- performance-critic: PASS
+- api-designer: PASS
+- game-dev-tester: SKIPPED (instancing is transparent/automatic, no new API paradigm)
+
+### Next Session (80)
+
+Phase 7 M4: Anti-Aliasing — MSAA (multisample FBOs, glBlitFramebuffer resolve) + FXAA post-process pass.
+
+---
+
 ## 2026-03-07 — Session 78: Phase 7 M2 — Post-Processing Pipeline (HDR, Bloom, Tone Mapping, Gamma Correction)
 
 ### Summary
