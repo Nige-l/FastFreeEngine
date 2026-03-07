@@ -14,6 +14,7 @@
 #include "renderer/mesh_renderer.h"
 #include "renderer/mesh_loader.h"
 #include "renderer/render_system.h"
+#include "renderer/skeleton.h"
 #include "renderer/rhi.h"
 #include "renderer/rhi_types.h"
 #include "renderer/shader_library.h"
@@ -220,6 +221,7 @@ void meshRenderSystem(World& world, const Camera& camera3d,
     // Only executed when shadows are enabled and a valid shadow FBO exists.
     if (shadowCfg.enabled && shadowMap.fbo != 0) {
         const rhi::ShaderHandle shadowShader = getShader(*shaderLib, BuiltinShader::SHADOW_DEPTH);
+        const rhi::ShaderHandle shadowSkinnedShader = getShader(*shaderLib, BuiltinShader::SHADOW_DEPTH_SKINNED);
         if (rhi::isValid(shadowShader)) {
             // Save the current viewport dimensions to restore after the shadow pass.
             const i32 savedVpW = rhi::getViewportWidth();
@@ -242,12 +244,8 @@ void meshRenderSystem(World& world, const Camera& camera3d,
             glEnable(GL_CULL_FACE);
             glCullFace(GL_FRONT);
 
-            rhi::bindShader(shadowShader);
-
-            // Upload pre-computed light-space VP matrix.
-            rhi::setUniformMat4(shadowShader, "u_lightSpaceMatrix", lightSpaceMat);
-
             // Per-entity: build model matrix and draw.
+            // Use skinned shadow shader for entities with Skeleton component.
             for (const auto [entity, transform3d, meshComp] : view.each()) {
                 const MeshHandle handle = meshComp.meshHandle;
                 if (!isValid(handle)) {
@@ -259,13 +257,30 @@ void meshRenderSystem(World& world, const Camera& camera3d,
                     continue;
                 }
 
+                // Check for skeleton component to select the right shadow shader
+                const bool hasSkeleton = rec->hasSkeleton &&
+                    world.registry().all_of<ffe::Skeleton>(entity);
+                const rhi::ShaderHandle activeShader = (hasSkeleton && rhi::isValid(shadowSkinnedShader))
+                    ? shadowSkinnedShader : shadowShader;
+
+                rhi::bindShader(activeShader);
+                rhi::setUniformMat4(activeShader, "u_lightSpaceMatrix", lightSpaceMat);
+
                 // Build model matrix: translate * rotate * scale
                 glm::mat4 model = glm::mat4(1.0f);
                 model = glm::translate(model, transform3d.position);
                 model = model * glm::mat4_cast(transform3d.rotation);
                 model = glm::scale(model, transform3d.scale);
 
-                rhi::setUniformMat4(shadowShader, "u_model", model);
+                rhi::setUniformMat4(activeShader, "u_model", model);
+
+                // Upload bone matrices for skinned entities
+                if (hasSkeleton) {
+                    const auto& skeleton = world.registry().get<ffe::Skeleton>(entity);
+                    rhi::setUniformMat4Array(activeShader, "u_boneMatrices[0]",
+                                             skeleton.boneMatrices,
+                                             skeleton.boneCount > 0 ? skeleton.boneCount : 1);
+                }
 
                 glBindVertexArray(rec->vaoId);
                 glDrawElements(GL_TRIANGLES,
@@ -295,7 +310,10 @@ void meshRenderSystem(World& world, const Camera& camera3d,
     const glm::mat4 vpMatrix = computeViewProjectionMatrix(camera3d);
     rhi::setViewProjection(vpMatrix);
 
-    // --- Bind mesh shader ---
+    // --- Get skinned mesh shader ---
+    const rhi::ShaderHandle skinnedShader = getShader(*shaderLib, BuiltinShader::MESH_SKINNED);
+
+    // --- Bind mesh shader (static — will switch per-entity if skinned) ---
     rhi::bindShader(meshShader);
 
     // --- Upload scene-global uniforms (same for all mesh entities) ---
@@ -307,6 +325,18 @@ void meshRenderSystem(World& world, const Camera& camera3d,
     // u_viewProjection is uploaded by setViewProjection + bindShader above (cached in RHI).
     // Explicitly upload here too for clarity — the RHI caches it in the shader program.
     rhi::setUniformMat4(meshShader, "u_viewProjection", vpMatrix);
+
+    // Upload scene-global uniforms to skinned shader too (if available).
+    if (rhi::isValid(skinnedShader)) {
+        rhi::bindShader(skinnedShader);
+        rhi::setUniformVec3(skinnedShader, "u_lightDir",     lighting->lightDir);
+        rhi::setUniformVec3(skinnedShader, "u_lightColor",   lighting->lightColor);
+        rhi::setUniformVec3(skinnedShader, "u_ambientColor", lighting->ambientColor);
+        rhi::setUniformVec3(skinnedShader, "u_viewPos",      camera3d.position);
+        rhi::setUniformMat4(skinnedShader, "u_viewProjection", vpMatrix);
+        // Re-bind static shader as default — will switch per-entity as needed
+        rhi::bindShader(meshShader);
+    }
 
     // --- Upload point light uniforms ---
     // Count active point lights and upload their data to the shader.
@@ -326,37 +356,66 @@ void meshRenderSystem(World& world, const Camera& camera3d,
             }
         }
 
-        rhi::setUniformInt(meshShader, "u_pointLightCount", static_cast<i32>(activeCount));
+        // Upload point light count and arrays to both static and skinned shaders.
+        // Both use the same fragment shader (MESH_BLINN_PHONG_FRAG_SOURCE) which
+        // references these uniforms.
+        const rhi::ShaderHandle pointLightShaders[] = { meshShader, skinnedShader };
+        const u32 plShaderCount = rhi::isValid(skinnedShader) ? 2u : 1u;
 
-        // Upload arrays via individual indexed uniforms (GL 3.3 compatible).
-        // Only upload active lights to minimise uniform calls.
-        char uniformName[64];
-        for (u32 i = 0; i < activeCount; ++i) {
-            const auto idx = static_cast<unsigned int>(i);
-            std::snprintf(uniformName, sizeof(uniformName), "u_pointLightPos[%u]", idx);
-            rhi::setUniformVec3(meshShader, uniformName, positions[i]);
+        for (u32 si = 0; si < plShaderCount; ++si) {
+            const rhi::ShaderHandle sh = pointLightShaders[si];
+            rhi::bindShader(sh);
+            rhi::setUniformInt(sh, "u_pointLightCount", static_cast<i32>(activeCount));
 
-            std::snprintf(uniformName, sizeof(uniformName), "u_pointLightColor[%u]", idx);
-            rhi::setUniformVec3(meshShader, uniformName, colors[i]);
+            // Upload arrays via individual indexed uniforms (GL 3.3 compatible).
+            // Only upload active lights to minimise uniform calls.
+            char uniformName[64];
+            for (u32 i = 0; i < activeCount; ++i) {
+                const auto idx = static_cast<unsigned int>(i);
+                std::snprintf(uniformName, sizeof(uniformName), "u_pointLightPos[%u]", idx);
+                rhi::setUniformVec3(sh, uniformName, positions[i]);
 
-            std::snprintf(uniformName, sizeof(uniformName), "u_pointLightRadius[%u]", idx);
-            rhi::setUniformFloat(meshShader, uniformName, radii[i]);
+                std::snprintf(uniformName, sizeof(uniformName), "u_pointLightColor[%u]", idx);
+                rhi::setUniformVec3(sh, uniformName, colors[i]);
+
+                std::snprintf(uniformName, sizeof(uniformName), "u_pointLightRadius[%u]", idx);
+                rhi::setUniformFloat(sh, uniformName, radii[i]);
+            }
         }
+        // Restore static shader as current
+        rhi::bindShader(meshShader);
     }
 
-    // --- Shadow map uniforms for the Blinn-Phong pass ---
+    // --- Shadow map uniforms for both static and skinned Blinn-Phong passes ---
     if (shadowCfg.enabled && shadowMap.depthTexture != 0) {
         glActiveTexture(GL_TEXTURE0 + 1);
         glBindTexture(GL_TEXTURE_2D, shadowMap.depthTexture);
+
+        rhi::bindShader(meshShader);
         rhi::setUniformInt(meshShader, "u_shadowMap", 1);
         rhi::setUniformInt(meshShader, "u_shadowsEnabled", 1);
         rhi::setUniformFloat(meshShader, "u_shadowBias", shadowCfg.bias);
         rhi::setUniformMat4(meshShader, "u_lightSpaceMatrix", lightSpaceMat);
+
+        if (rhi::isValid(skinnedShader)) {
+            rhi::bindShader(skinnedShader);
+            rhi::setUniformInt(skinnedShader, "u_shadowMap", 1);
+            rhi::setUniformInt(skinnedShader, "u_shadowsEnabled", 1);
+            rhi::setUniformFloat(skinnedShader, "u_shadowBias", shadowCfg.bias);
+            rhi::setUniformMat4(skinnedShader, "u_lightSpaceMatrix", lightSpaceMat);
+        }
+        rhi::bindShader(meshShader);
     } else {
         rhi::setUniformInt(meshShader, "u_shadowsEnabled", 0);
+        if (rhi::isValid(skinnedShader)) {
+            rhi::bindShader(skinnedShader);
+            rhi::setUniformInt(skinnedShader, "u_shadowsEnabled", 0);
+            rhi::bindShader(meshShader);
+        }
     }
 
     // --- Per-entity draw loop ---
+    rhi::ShaderHandle currentShader = meshShader;
     for (const auto [entity, transform3d, meshComp] : view.each()) {
         // Validate mesh handle
         const MeshHandle handle = meshComp.meshHandle;
@@ -367,6 +426,29 @@ void meshRenderSystem(World& world, const Camera& camera3d,
         const MeshGpuRecord* rec = getMeshGpuRecord(handle);
         if (rec == nullptr) {
             continue;
+        }
+
+        // --- Detect skinned entity and select appropriate shader ---
+        const bool hasSkeleton = rec->hasSkeleton &&
+            world.registry().all_of<ffe::Skeleton>(entity);
+        const rhi::ShaderHandle targetShader = (hasSkeleton && rhi::isValid(skinnedShader))
+            ? skinnedShader : meshShader;
+
+        if (targetShader.id != currentShader.id) {
+            rhi::bindShader(targetShader);
+            currentShader = targetShader;
+
+            // Re-upload shadow uniforms after shader switch
+            if (shadowCfg.enabled && shadowMap.depthTexture != 0) {
+                glActiveTexture(GL_TEXTURE0 + 1);
+                glBindTexture(GL_TEXTURE_2D, shadowMap.depthTexture);
+                rhi::setUniformInt(currentShader, "u_shadowMap", 1);
+                rhi::setUniformInt(currentShader, "u_shadowsEnabled", 1);
+                rhi::setUniformFloat(currentShader, "u_shadowBias", shadowCfg.bias);
+                rhi::setUniformMat4(currentShader, "u_lightSpaceMatrix", lightSpaceMat);
+            } else {
+                rhi::setUniformInt(currentShader, "u_shadowsEnabled", 0);
+            }
         }
 
         // --- Build model matrix from Transform3D ---
@@ -382,8 +464,16 @@ void meshRenderSystem(World& world, const Camera& camera3d,
         const glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(model)));
 
         // --- Upload per-entity uniforms ---
-        rhi::setUniformMat4(meshShader, "u_model",        model);
-        rhi::setUniformMat3(meshShader, "u_normalMatrix",  normalMatrix);
+        rhi::setUniformMat4(currentShader, "u_model",        model);
+        rhi::setUniformMat3(currentShader, "u_normalMatrix",  normalMatrix);
+
+        // --- Upload bone matrices for skinned entities ---
+        if (hasSkeleton) {
+            const auto& skeleton = world.registry().get<ffe::Skeleton>(entity);
+            rhi::setUniformMat4Array(currentShader, "u_boneMatrices[0]",
+                                     skeleton.boneMatrices,
+                                     skeleton.boneCount > 0 ? skeleton.boneCount : 1);
+        }
 
         // --- Per-entity material (from Material3D if present, else defaults) ---
         glm::vec4 diffuseColor{1.0f, 1.0f, 1.0f, 1.0f};
@@ -405,34 +495,34 @@ void meshRenderSystem(World& world, const Camera& camera3d,
             specularMapTex = mat->specularMapTexture;
         }
 
-        rhi::setUniformVec4(meshShader, "u_diffuseColor", diffuseColor);
+        rhi::setUniformVec4(currentShader, "u_diffuseColor", diffuseColor);
 
         // Bind diffuse texture to unit 0
         rhi::bindTexture(diffuseTex, 0);
-        rhi::setUniformInt(meshShader, "u_diffuseTexture", 0);
+        rhi::setUniformInt(currentShader, "u_diffuseTexture", 0);
 
         // Upload specular material properties
-        rhi::setUniformVec3(meshShader, "u_specularColor", specularColor);
-        rhi::setUniformFloat(meshShader, "u_shininess", shininess);
+        rhi::setUniformVec3(currentShader, "u_specularColor", specularColor);
+        rhi::setUniformFloat(currentShader, "u_shininess", shininess);
 
         // Bind normal map to unit 2 (unit 1 is shadow map)
         if (rhi::isValid(normalMapTex)) {
             glActiveTexture(GL_TEXTURE0 + 2);
             glBindTexture(GL_TEXTURE_2D, normalMapTex.id);
-            rhi::setUniformInt(meshShader, "u_normalMap", 2);
-            rhi::setUniformInt(meshShader, "u_hasNormalMap", 1);
+            rhi::setUniformInt(currentShader, "u_normalMap", 2);
+            rhi::setUniformInt(currentShader, "u_hasNormalMap", 1);
         } else {
-            rhi::setUniformInt(meshShader, "u_hasNormalMap", 0);
+            rhi::setUniformInt(currentShader, "u_hasNormalMap", 0);
         }
 
         // Bind specular map to unit 3
         if (rhi::isValid(specularMapTex)) {
             glActiveTexture(GL_TEXTURE0 + 3);
             glBindTexture(GL_TEXTURE_2D, specularMapTex.id);
-            rhi::setUniformInt(meshShader, "u_specularMap", 3);
-            rhi::setUniformInt(meshShader, "u_hasSpecularMap", 1);
+            rhi::setUniformInt(currentShader, "u_specularMap", 3);
+            rhi::setUniformInt(currentShader, "u_hasSpecularMap", 1);
         } else {
-            rhi::setUniformInt(meshShader, "u_hasSpecularMap", 0);
+            rhi::setUniformInt(currentShader, "u_hasSpecularMap", 0);
         }
 
         // --- Issue indexed draw call via the mesh VAO ---

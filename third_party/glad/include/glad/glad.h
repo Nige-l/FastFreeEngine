@@ -244,6 +244,7 @@ typedef void (GLAD_API_PTR *PFNGLBINDVERTEXARRAYPROC)(GLuint);
 typedef void (GLAD_API_PTR *PFNGLENABLEVERTEXATTRIBARRAYPROC)(GLuint);
 typedef void (GLAD_API_PTR *PFNGLDISABLEVERTEXATTRIBARRAYPROC)(GLuint);
 typedef void (GLAD_API_PTR *PFNGLVERTEXATTRIBPOINTERPROC)(GLuint, GLint, GLenum, GLboolean, GLsizei, const void*);
+typedef void (GLAD_API_PTR *PFNGLVERTEXATTRIBIPOINTERPROC)(GLuint, GLint, GLenum, GLsizei, const void*);
 
 /* Texture functions */
 typedef void (GLAD_API_PTR *PFNGLGENTEXTURESPROC)(GLsizei, GLuint*);
@@ -332,6 +333,7 @@ extern PFNGLBINDVERTEXARRAYPROC         glad_glBindVertexArray;
 extern PFNGLENABLEVERTEXATTRIBARRAYPROC glad_glEnableVertexAttribArray;
 extern PFNGLDISABLEVERTEXATTRIBARRAYPROC glad_glDisableVertexAttribArray;
 extern PFNGLVERTEXATTRIBPOINTERPROC     glad_glVertexAttribPointer;
+extern PFNGLVERTEXATTRIBIPOINTERPROC    glad_glVertexAttribIPointer;
 
 extern PFNGLGENTEXTURESPROC             glad_glGenTextures;
 extern PFNGLDELETETEXTURESPROC          glad_glDeleteTextures;
@@ -412,6 +414,7 @@ extern PFNGLDEBUGMESSAGECONTROLPROC     glad_glDebugMessageControl;
 #define glEnableVertexAttribArray glad_glEnableVertexAttribArray
 #define glDisableVertexAttribArray glad_glDisableVertexAttribArray
 #define glVertexAttribPointer     glad_glVertexAttribPointer
+#define glVertexAttribIPointer    glad_glVertexAttribIPointer
 
 #define glGenTextures             glad_glGenTextures
 #define glDeleteTextures          glad_glDeleteTextures

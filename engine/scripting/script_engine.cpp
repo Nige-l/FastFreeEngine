@@ -14,6 +14,7 @@ extern "C" {
 #include "renderer/render_system.h"
 #include "renderer/mesh_loader.h"
 #include "renderer/mesh_renderer.h"
+#include "renderer/skeleton.h"
 #include "renderer/shadow_map.h"
 #include "renderer/screenshot.h"
 #include "renderer/rhi.h"
@@ -4885,6 +4886,232 @@ void ScriptEngine::registerEcsBindings() {
     };
     lua_pushcfunction(L, ffe_screenshot);
     lua_setfield(L, -2, "screenshot");
+
+    // ----------------------------------------------------------------
+    // 3D Skeletal Animation bindings
+    // ----------------------------------------------------------------
+
+    // ffe.playAnimation3D(entityId: integer, animIndex: integer, loop: boolean) -> nothing
+    // Start playing animation animIndex (0-based) on the entity.
+    // loop defaults to true. Adds AnimationState component if not present.
+    auto ffe_playAnimation3D = [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TNUMBER) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.playAnimation3D: argument 1 (entityId) must be a number");
+            return 0;
+        }
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = lua_tointeger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) { return 0; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) {
+            FFE_LOG_WARN("ScriptEngine", "ffe.playAnimation3D: invalid entity ID");
+            return 0;
+        }
+
+        // Check entity has a Mesh component with skeleton data
+        const auto* meshComp = world->registry().try_get<ffe::Mesh>(static_cast<entt::entity>(entityId));
+        if (meshComp == nullptr) {
+            FFE_LOG_WARN("ScriptEngine", "ffe.playAnimation3D: entity has no Mesh component");
+            return 0;
+        }
+        const ffe::renderer::MeshGpuRecord* rec = ffe::renderer::getMeshGpuRecord(meshComp->meshHandle);
+        if (rec == nullptr || !rec->hasSkeleton) {
+            FFE_LOG_WARN("ScriptEngine", "ffe.playAnimation3D: mesh has no skeleton data");
+            return 0;
+        }
+
+        const lua_Integer rawAnim = luaL_optinteger(state, 2, 0);
+        const ffe::u32 animIndex = (rawAnim >= 0) ? static_cast<ffe::u32>(rawAnim) : 0;
+        const bool loop = lua_isboolean(state, 3) ? (lua_toboolean(state, 3) != 0) : true;
+
+        // Validate animation index
+        const ffe::renderer::MeshAnimations* anims = ffe::renderer::getMeshAnimations(meshComp->meshHandle);
+        if (anims == nullptr || animIndex >= anims->clipCount) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.playAnimation3D: animIndex %u out of range (max %u)",
+                          animIndex, anims ? anims->clipCount : 0u);
+            return 0;
+        }
+
+        // Ensure Skeleton component exists
+        if (!world->registry().all_of<ffe::Skeleton>(static_cast<entt::entity>(entityId))) {
+            auto& skel = world->registry().emplace<ffe::Skeleton>(static_cast<entt::entity>(entityId));
+            const ffe::renderer::SkeletonData* skelData = ffe::renderer::getMeshSkeletonData(meshComp->meshHandle);
+            if (skelData != nullptr) {
+                skel.boneCount = skelData->boneCount;
+                // Initialize bone matrices to identity
+                for (ffe::u32 b = 0; b < skel.boneCount; ++b) {
+                    skel.boneMatrices[b] = glm::mat4(1.0f);
+                }
+            }
+        }
+
+        // Set or create AnimationState
+        auto& animState = world->registry().get_or_emplace<ffe::AnimationState>(
+            static_cast<entt::entity>(entityId));
+        animState.clipIndex = animIndex;
+        animState.time      = 0.0f;
+        animState.looping   = loop;
+        animState.playing   = true;
+
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_playAnimation3D);
+    lua_setfield(L, -2, "playAnimation3D");
+
+    // ffe.stopAnimation3D(entityId: integer) -> nothing
+    // Stop animation playback. Entity freezes at current pose.
+    auto ffe_stopAnimation3D = [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TNUMBER) { return 0; }
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = lua_tointeger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) { return 0; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) { return 0; }
+
+        auto* animState = world->registry().try_get<ffe::AnimationState>(
+            static_cast<entt::entity>(entityId));
+        if (animState != nullptr) {
+            animState->playing = false;
+        }
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_stopAnimation3D);
+    lua_setfield(L, -2, "stopAnimation3D");
+
+    // ffe.setAnimationSpeed3D(entityId: integer, speed: number) -> nothing
+    // Set playback speed multiplier. Negative values clamped to 0.
+    auto ffe_setAnimationSpeed = [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TNUMBER) { return 0; }
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = lua_tointeger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) { return 0; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) { return 0; }
+
+        auto* animState = world->registry().try_get<ffe::AnimationState>(
+            static_cast<entt::entity>(entityId));
+        if (animState != nullptr) {
+            ffe::f32 speed = static_cast<ffe::f32>(luaL_optnumber(state, 2, 1.0));
+            if (speed < 0.0f) speed = 0.0f;
+            animState->speed = speed;
+        }
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_setAnimationSpeed);
+    lua_setfield(L, -2, "setAnimationSpeed3D");
+
+    // ffe.getAnimationProgress3D(entityId: integer) -> number
+    // Returns time / duration as a float in [0.0, 1.0]. Returns 0.0 if no animation.
+    auto ffe_getAnimationProgress = [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TNUMBER) {
+            lua_pushnumber(state, 0.0);
+            return 1;
+        }
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); lua_pushnumber(state, 0.0); return 1; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = lua_tointeger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) { lua_pushnumber(state, 0.0); return 1; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) { lua_pushnumber(state, 0.0); return 1; }
+
+        const auto* animState = world->registry().try_get<ffe::AnimationState>(
+            static_cast<entt::entity>(entityId));
+        if (animState == nullptr) { lua_pushnumber(state, 0.0); return 1; }
+
+        const auto* meshComp = world->registry().try_get<ffe::Mesh>(static_cast<entt::entity>(entityId));
+        if (meshComp == nullptr) { lua_pushnumber(state, 0.0); return 1; }
+
+        const ffe::renderer::MeshAnimations* anims = ffe::renderer::getMeshAnimations(meshComp->meshHandle);
+        if (anims == nullptr || animState->clipIndex >= anims->clipCount) {
+            lua_pushnumber(state, 0.0);
+            return 1;
+        }
+
+        const ffe::f32 duration = anims->clips[animState->clipIndex].duration;
+        if (duration <= 0.0f) {
+            lua_pushnumber(state, 0.0);
+            return 1;
+        }
+
+        const double progress = static_cast<double>(animState->time / duration);
+        lua_pushnumber(state, std::clamp(progress, 0.0, 1.0));
+        return 1;
+    };
+    lua_pushcfunction(L, ffe_getAnimationProgress);
+    lua_setfield(L, -2, "getAnimationProgress3D");
+
+    // ffe.isAnimation3DPlaying(entityId: integer) -> boolean
+    // Returns true if AnimationState::playing == true.
+    auto ffe_isAnimation3DPlaying = [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TNUMBER) {
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); lua_pushboolean(state, 0); return 1; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = lua_tointeger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) { lua_pushboolean(state, 0); return 1; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) { lua_pushboolean(state, 0); return 1; }
+
+        const auto* animState = world->registry().try_get<ffe::AnimationState>(
+            static_cast<entt::entity>(entityId));
+        lua_pushboolean(state, (animState != nullptr && animState->playing) ? 1 : 0);
+        return 1;
+    };
+    lua_pushcfunction(L, ffe_isAnimation3DPlaying);
+    lua_setfield(L, -2, "isAnimation3DPlaying");
+
+    // ffe.getAnimationCount3D(entityId: integer) -> integer
+    // Returns number of animation clips for this entity's mesh.
+    auto ffe_getAnimationCount = [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TNUMBER) {
+            lua_pushinteger(state, 0);
+            return 1;
+        }
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); lua_pushinteger(state, 0); return 1; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = lua_tointeger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) { lua_pushinteger(state, 0); return 1; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) { lua_pushinteger(state, 0); return 1; }
+
+        const auto* meshComp = world->registry().try_get<ffe::Mesh>(static_cast<entt::entity>(entityId));
+        if (meshComp == nullptr) { lua_pushinteger(state, 0); return 1; }
+
+        const ffe::renderer::MeshAnimations* anims = ffe::renderer::getMeshAnimations(meshComp->meshHandle);
+        lua_pushinteger(state, (anims != nullptr) ? static_cast<lua_Integer>(anims->clipCount) : 0);
+        return 1;
+    };
+    lua_pushcfunction(L, ffe_getAnimationCount);
+    lua_setfield(L, -2, "getAnimationCount3D");
 
     lua_setglobal(L, "ffe");
 }

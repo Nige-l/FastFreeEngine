@@ -346,6 +346,87 @@ void main() {
 }
 )glsl";
 
+// --- Skinned mesh Blinn-Phong shaders (skeletal animation) ---
+// Extends MESH_BLINN_PHONG with bone matrix vertex transformation.
+// Vertex attributes: position(loc 0), normal(loc 1), texcoord(loc 2),
+//                    tangent(loc 3), joints(loc 4), weights(loc 5).
+// Uniform: u_boneMatrices[64] — array of bone matrices.
+
+static const char* const MESH_SKINNED_VERT_SOURCE = R"glsl(
+#version 330 core
+
+#define MAX_BONES 64
+
+layout(location = 0) in vec3 a_position;
+layout(location = 1) in vec3 a_normal;
+layout(location = 2) in vec2 a_texcoord;
+layout(location = 3) in vec3 a_tangent;
+layout(location = 4) in ivec4 a_joints;
+layout(location = 5) in vec4  a_weights;
+
+uniform mat4 u_model;
+uniform mat4 u_viewProjection;
+uniform mat3 u_normalMatrix;
+uniform mat4 u_lightSpaceMatrix;
+uniform mat4 u_boneMatrices[MAX_BONES];
+
+out vec3 v_fragPos;
+out vec3 v_normal;
+out vec2 v_texcoord;
+out vec4 v_fragPosLightSpace;
+out vec3 v_tangent;
+
+void main() {
+    // Compute skinning matrix from weighted bone transforms
+    mat4 skinMatrix = a_weights.x * u_boneMatrices[a_joints.x]
+                    + a_weights.y * u_boneMatrices[a_joints.y]
+                    + a_weights.z * u_boneMatrices[a_joints.z]
+                    + a_weights.w * u_boneMatrices[a_joints.w];
+
+    vec4 skinnedPos    = skinMatrix * vec4(a_position, 1.0);
+    vec3 skinnedNormal = mat3(skinMatrix) * a_normal;
+
+    vec4 worldPos       = u_model * skinnedPos;
+    v_fragPos           = worldPos.xyz;
+    v_normal            = u_normalMatrix * skinnedNormal;
+    v_tangent           = u_normalMatrix * (mat3(skinMatrix) * a_tangent);
+    v_texcoord          = a_texcoord;
+    v_fragPosLightSpace = u_lightSpaceMatrix * worldPos;
+    gl_Position         = u_viewProjection * worldPos;
+}
+)glsl";
+
+// Fragment shader is identical to MESH_BLINN_PHONG — reuse the same source.
+// (Both share the same fragment shader string pointer.)
+
+// --- Skinned shadow depth pass shader ---
+
+static const char* const SHADOW_DEPTH_SKINNED_VERT_SOURCE = R"glsl(
+#version 330 core
+
+#define MAX_BONES 64
+
+layout(location = 0) in vec3 a_position;
+layout(location = 4) in ivec4 a_joints;
+layout(location = 5) in vec4  a_weights;
+
+uniform mat4 u_lightSpaceMatrix;
+uniform mat4 u_model;
+uniform mat4 u_boneMatrices[MAX_BONES];
+
+void main() {
+    mat4 skinMatrix = a_weights.x * u_boneMatrices[a_joints.x]
+                    + a_weights.y * u_boneMatrices[a_joints.y]
+                    + a_weights.z * u_boneMatrices[a_joints.z]
+                    + a_weights.w * u_boneMatrices[a_joints.w];
+
+    vec4 skinnedPos = skinMatrix * vec4(a_position, 1.0);
+    gl_Position = u_lightSpaceMatrix * u_model * skinnedPos;
+}
+)glsl";
+
+// Fragment shader for skinned shadow depth is identical to the static version.
+
 // ==================== Library Implementation ====================
 
 struct ShaderPair {
@@ -355,12 +436,14 @@ struct ShaderPair {
 };
 
 static const ShaderPair PAIRS[] = {
-    { SOLID_VERT_SOURCE,               SOLID_FRAG_SOURCE,               "solid"            },
-    { TEXTURED_VERT_SOURCE,            TEXTURED_FRAG_SOURCE,            "textured"         },
-    { SPRITE_VERT_SOURCE,              SPRITE_FRAG_SOURCE,              "sprite"           },
-    { MESH_BLINN_PHONG_VERT_SOURCE,    MESH_BLINN_PHONG_FRAG_SOURCE,    "mesh_blinn_phong" },
-    { SHADOW_DEPTH_VERT_SOURCE,        SHADOW_DEPTH_FRAG_SOURCE,        "shadow_depth"     },
-    { SKYBOX_VERT_SOURCE,              SKYBOX_FRAG_SOURCE,              "skybox"           },
+    { SOLID_VERT_SOURCE,               SOLID_FRAG_SOURCE,               "solid"                 },
+    { TEXTURED_VERT_SOURCE,            TEXTURED_FRAG_SOURCE,            "textured"              },
+    { SPRITE_VERT_SOURCE,              SPRITE_FRAG_SOURCE,              "sprite"                },
+    { MESH_BLINN_PHONG_VERT_SOURCE,    MESH_BLINN_PHONG_FRAG_SOURCE,    "mesh_blinn_phong"      },
+    { SHADOW_DEPTH_VERT_SOURCE,        SHADOW_DEPTH_FRAG_SOURCE,        "shadow_depth"          },
+    { SKYBOX_VERT_SOURCE,              SKYBOX_FRAG_SOURCE,              "skybox"                },
+    { MESH_SKINNED_VERT_SOURCE,        MESH_BLINN_PHONG_FRAG_SOURCE,    "mesh_skinned"          },
+    { SHADOW_DEPTH_SKINNED_VERT_SOURCE, SHADOW_DEPTH_FRAG_SOURCE,       "shadow_depth_skinned"  },
 };
 static_assert(sizeof(PAIRS) / sizeof(PAIRS[0]) == static_cast<u32>(BuiltinShader::COUNT));
 

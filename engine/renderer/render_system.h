@@ -5,6 +5,7 @@
 #include "renderer/rhi_types.h"
 #include "renderer/mesh_loader.h"
 #include "renderer/render_queue.h"
+#include "renderer/skeleton.h"
 #include "renderer/sprite_batch.h"
 
 #include <glm/glm.hpp>
@@ -50,6 +51,38 @@ struct Material3D {
     rhi::TextureHandle specularMapTexture; // 4 bytes
 };
 static_assert(sizeof(Material3D) == 48, "Material3D must be 48 bytes");
+
+// --- Skeleton ECS component — per-entity bone matrices for skeletal animation ---
+// Each entity with a skinned mesh has its own Skeleton component containing
+// the final bone transforms for the current animation frame. These are the
+// matrices uploaded to the GPU as uniforms each draw call.
+//
+// Multiple entities sharing the same MeshHandle may be at different animation
+// frames, so bone matrices are per-entity (instance state, not asset state).
+//
+// The bone matrices hold the final transforms: worldTransform * inverseBindMatrix,
+// ready for vertex shader consumption.
+struct Skeleton {
+    glm::mat4 boneMatrices[renderer::MAX_BONES] = {}; // final bone transforms (model-space)
+    u32       boneCount = 0;
+};
+// Skeleton is ~4100 bytes (64 mat4 + u32 + padding). Verify it's at least
+// the expected minimum size (no silent truncation from incorrect MAX_BONES).
+static_assert(sizeof(Skeleton) >= renderer::MAX_BONES * sizeof(glm::mat4) + sizeof(u32),
+              "Skeleton too small — bone matrix array may be truncated");
+
+// --- AnimationState ECS component — per-entity animation playback state ---
+// Lightweight component (no pointers, no heap) that controls which animation
+// clip is playing, at what time, and at what speed.
+struct AnimationState {
+    u32  clipIndex  = 0;      // index into MeshAnimations::clips[]
+    f32  time       = 0.0f;   // current playback time in seconds
+    f32  speed      = 1.0f;   // playback speed multiplier (1.0 = normal)
+    bool looping    = true;
+    bool playing    = false;
+    u8   _pad[2]    = {};     // explicit padding
+};
+static_assert(sizeof(AnimationState) == 16, "AnimationState must be 16 bytes");
 
 // --- Transform component (needed by render system) ---
 // Defined here because the render system needs it and it is not yet in core.

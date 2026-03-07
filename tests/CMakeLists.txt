@@ -16,6 +16,7 @@ add_executable(ffe_tests
     renderer/test_shadow_map.cpp
     renderer/test_point_lights_materials.cpp
     renderer/test_skybox.cpp
+    renderer/test_skeleton.cpp
 )
 
 target_link_libraries(ffe_tests
@@ -40,6 +41,7 @@ add_executable(ffe_tests_scripting
     scripting/test_camera3d_bindings.cpp
     scripting/test_point_light_material_bindings.cpp
     scripting/test_skybox_bindings.cpp
+    scripting/test_animation3d_bindings.cpp
 )
 
 target_link_libraries(ffe_tests_scripting

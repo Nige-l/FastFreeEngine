@@ -53,6 +53,7 @@
 #endif
 
 #include "renderer/mesh_loader.h"
+#include "renderer/skeleton.h"
 #include "renderer/rhi.h"
 #include "renderer/rhi_types.h"
 #include "renderer/opengl/rhi_opengl.h"
@@ -61,6 +62,9 @@
 
 #include <glad/glad.h>
 
+// GL 3.0 core function missing from our GLAD generation.
+// glVertexAttribIPointer is required for integer vertex attributes (bone indices).
+// We load it via glfwGetProcAddress once, at first use.
 #include <climits>    // PATH_MAX
 #include <cstring>    // strnlen, strstr, memcpy, strcasecmp equivalent
 #include <cctype>     // tolower
@@ -68,7 +72,9 @@
 #include <stdlib.h>   // size_t
 #include "core/platform.h"
 #include <cinttypes>  // PRIu64
+#include <memory>     // std::unique_ptr, std::make_unique
 #include <new>        // std::nothrow
+#include <glm/gtc/type_ptr.hpp>  // glm::make_mat4
 
 namespace ffe::renderer {
 
@@ -81,8 +87,10 @@ namespace ffe::renderer {
 // Module state
 // ---------------------------------------------------------------------------
 
-static MeshGpuRecord s_meshPool[MAX_MESH_ASSETS + 1]; // slot 0 reserved (null handle)
-static u32           s_nextMeshSlot = 1;
+static MeshGpuRecord  s_meshPool[MAX_MESH_ASSETS + 1]; // slot 0 reserved (null handle)
+static SkeletonData   s_skeletonPool[MAX_MESH_ASSETS + 1];   // parallel array, indexed by MeshHandle::id
+static std::unique_ptr<MeshAnimations> s_animationPool[MAX_MESH_ASSETS + 1];  // parallel array, indexed by MeshHandle::id
+static u32            s_nextMeshSlot = 1;
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -362,10 +370,12 @@ MeshHandle loadMesh(const char* const path) {
         return MeshHandle{0};
     }
 
-    // --- Locate POSITION, NORMAL, TEXCOORD_0 accessors ---
+    // --- Locate POSITION, NORMAL, TEXCOORD_0, JOINTS_0, WEIGHTS_0 accessors ---
     const cgltf_accessor* posAccessor      = nullptr;
     const cgltf_accessor* normalAccessor   = nullptr;
     const cgltf_accessor* texcoordAccessor = nullptr;
+    const cgltf_accessor* jointsAccessor   = nullptr;
+    const cgltf_accessor* weightsAccessor  = nullptr;
 
     for (cgltf_size ai = 0; ai < prim.attributes_count; ++ai) {
         const cgltf_attribute& attr = prim.attributes[ai];
@@ -375,6 +385,10 @@ MeshHandle loadMesh(const char* const path) {
             normalAccessor = attr.data;
         } else if (attr.type == cgltf_attribute_type_texcoord && attr.index == 0) {
             texcoordAccessor = attr.data;
+        } else if (attr.type == cgltf_attribute_type_joints && attr.index == 0) {
+            jointsAccessor = attr.data;
+        } else if (attr.type == cgltf_attribute_type_weights && attr.index == 0) {
+            weightsAccessor = attr.data;
         }
     }
 
@@ -430,26 +444,194 @@ MeshHandle loadMesh(const char* const path) {
         return MeshHandle{0};
     }
 
+    // --- Detect skinned mesh (has both JOINTS_0 and WEIGHTS_0 + a skin) ---
+    const bool isSkinned = (jointsAccessor != nullptr && weightsAccessor != nullptr &&
+                            data->skins_count > 0);
+
     // --- SEC-M5: u64 arithmetic for size calculations ---
-    const u64 vboBytes = static_cast<u64>(vertexCount) * sizeof(rhi::MeshVertex);
+    const u64 vertexStride = isSkinned ? sizeof(SkinnedMeshVertex) : sizeof(rhi::MeshVertex);
+    const u64 vboBytes = static_cast<u64>(vertexCount) * vertexStride;
     const u64 iboBytes = static_cast<u64>(indexCount)  * sizeof(u32);
+
+    // --- Parse skeleton and animation data BEFORE freeing cgltf (cold path) ---
+    SkeletonData  parsedSkeleton;
+    auto parsedAnimations = std::make_unique<MeshAnimations>();
+
+    if (isSkinned) {
+        const cgltf_skin& skin = data->skins[0];
+
+        // Validate bone count
+        if (skin.joints_count > MAX_BONES) {
+            FFE_LOG_ERROR("MeshLoader",
+                          "loadMesh: bone count %zu exceeds MAX_BONES=%u in \"%s\"",
+                          skin.joints_count, MAX_BONES, canonPath);
+            cgltf_free(data);
+            return MeshHandle{0};
+        }
+
+        parsedSkeleton.boneCount = static_cast<u32>(skin.joints_count);
+
+        // Read inverse bind matrices
+        if (skin.inverse_bind_matrices != nullptr) {
+            for (u32 bi = 0; bi < parsedSkeleton.boneCount; ++bi) {
+                float mat[16];
+                cgltf_accessor_read_float(skin.inverse_bind_matrices,
+                                          static_cast<cgltf_size>(bi), mat, 16);
+                // cgltf stores matrices in column-major order, same as glm
+                parsedSkeleton.bones[bi].inverseBindMatrix = glm::make_mat4(mat);
+            }
+        }
+
+        // Build parent indices from the node tree
+        // First, create a mapping from cgltf_node* to bone index
+        for (u32 bi = 0; bi < parsedSkeleton.boneCount; ++bi) {
+            parsedSkeleton.bones[bi].parentIndex = -1; // default: root
+
+            const cgltf_node* boneNode = skin.joints[bi];
+            // Search for this bone's parent among the other joints
+            if (boneNode != nullptr) {
+                for (u32 pi = 0; pi < parsedSkeleton.boneCount; ++pi) {
+                    if (pi == bi) continue;
+                    const cgltf_node* parentCandidate = skin.joints[pi];
+                    if (parentCandidate == nullptr) continue;
+                    // Check if parentCandidate is the parent of boneNode
+                    for (cgltf_size ci = 0; ci < parentCandidate->children_count; ++ci) {
+                        if (parentCandidate->children[ci] == boneNode) {
+                            parsedSkeleton.bones[bi].parentIndex = static_cast<i32>(pi);
+                            break;
+                        }
+                    }
+                    if (parsedSkeleton.bones[bi].parentIndex >= 0) break;
+                }
+            }
+        }
+
+        // --- Parse animations ---
+        const u32 animCount = static_cast<u32>(
+            data->animations_count < MAX_ANIMATIONS_PER_MESH
+                ? data->animations_count : MAX_ANIMATIONS_PER_MESH);
+        parsedAnimations->clipCount = animCount;
+
+        for (u32 ai = 0; ai < animCount; ++ai) {
+            const cgltf_animation& anim = data->animations[ai];
+            AnimationClipData& clip = parsedAnimations->clips[ai];
+            clip.duration = 0.0f;
+            clip.channelCount = 0;
+
+            for (cgltf_size ci = 0; ci < anim.channels_count; ++ci) {
+                const cgltf_animation_channel& channel = anim.channels[ci];
+                if (channel.target_node == nullptr || channel.sampler == nullptr) continue;
+
+                // Map target node to bone index
+                i32 boneIdx = -1;
+                for (u32 bi = 0; bi < parsedSkeleton.boneCount; ++bi) {
+                    if (skin.joints[bi] == channel.target_node) {
+                        boneIdx = static_cast<i32>(bi);
+                        break;
+                    }
+                }
+                if (boneIdx < 0) continue; // target is not a bone in this skin
+
+                AnimationChannel& outCh = clip.channels[boneIdx];
+                outCh.boneIndex = static_cast<u32>(boneIdx);
+
+                const cgltf_animation_sampler* sampler = channel.sampler;
+                if (sampler->input == nullptr || sampler->output == nullptr) continue;
+
+                const u32 keyframeCount = static_cast<u32>(
+                    sampler->input->count < MAX_KEYFRAMES_PER_CHANNEL
+                        ? sampler->input->count : MAX_KEYFRAMES_PER_CHANNEL);
+
+                if (keyframeCount > sampler->input->count) continue;
+
+                switch (channel.target_path) {
+                    case cgltf_animation_path_type_translation: {
+                        outCh.translationCount = keyframeCount;
+                        for (u32 ki = 0; ki < keyframeCount; ++ki) {
+                            float t = 0.0f;
+                            cgltf_accessor_read_float(sampler->input, static_cast<cgltf_size>(ki), &t, 1);
+                            outCh.translationTimes[ki] = t;
+                            if (t > clip.duration) clip.duration = t;
+
+                            float val[3] = {0.0f, 0.0f, 0.0f};
+                            cgltf_accessor_read_float(sampler->output, static_cast<cgltf_size>(ki), val, 3);
+                            outCh.translationValues[ki] = {val[0], val[1], val[2]};
+                        }
+                        break;
+                    }
+                    case cgltf_animation_path_type_rotation: {
+                        outCh.rotationCount = keyframeCount;
+                        for (u32 ki = 0; ki < keyframeCount; ++ki) {
+                            float t = 0.0f;
+                            cgltf_accessor_read_float(sampler->input, static_cast<cgltf_size>(ki), &t, 1);
+                            outCh.rotationTimes[ki] = t;
+                            if (t > clip.duration) clip.duration = t;
+
+                            float val[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+                            cgltf_accessor_read_float(sampler->output, static_cast<cgltf_size>(ki), val, 4);
+                            // glTF quaternion order: (x, y, z, w); glm::quat constructor: (w, x, y, z)
+                            outCh.rotationValues[ki] = glm::quat(val[3], val[0], val[1], val[2]);
+                        }
+                        break;
+                    }
+                    case cgltf_animation_path_type_scale: {
+                        outCh.scaleCount = keyframeCount;
+                        for (u32 ki = 0; ki < keyframeCount; ++ki) {
+                            float t = 0.0f;
+                            cgltf_accessor_read_float(sampler->input, static_cast<cgltf_size>(ki), &t, 1);
+                            outCh.scaleTimes[ki] = t;
+                            if (t > clip.duration) clip.duration = t;
+
+                            float val[3] = {1.0f, 1.0f, 1.0f};
+                            cgltf_accessor_read_float(sampler->output, static_cast<cgltf_size>(ki), val, 3);
+                            outCh.scaleValues[ki] = {val[0], val[1], val[2]};
+                        }
+                        break;
+                    }
+                    default:
+                        break; // weights / other — skip
+                }
+
+                ++clip.channelCount;
+            }
+        }
+    }
 
     // --- Allocate CPU-side staging buffers ---
     // Use heap allocation (new std::nothrow) for staging — this is a cold path.
     // M-2: use new(std::nothrow), check for null before proceeding.
-    rhi::MeshVertex* const vertices = new(std::nothrow) rhi::MeshVertex[vertexCount];
-    if (vertices == nullptr) {
-        FFE_LOG_ERROR("MeshLoader",
-                      "loadMesh: failed to allocate vertex staging buffer (%u vertices)", vertexCount);
-        cgltf_free(data); // SEC-M6
-        return MeshHandle{0};
+
+    // For skinned meshes, allocate SkinnedMeshVertex; for static, MeshVertex.
+    void* vertexData = nullptr;
+    if (isSkinned) {
+        auto* skinnedVerts = new(std::nothrow) SkinnedMeshVertex[vertexCount];
+        if (skinnedVerts == nullptr) {
+            FFE_LOG_ERROR("MeshLoader",
+                          "loadMesh: failed to allocate skinned vertex staging buffer (%u vertices)", vertexCount);
+            cgltf_free(data);
+            return MeshHandle{0};
+        }
+        vertexData = skinnedVerts;
+    } else {
+        auto* staticVerts = new(std::nothrow) rhi::MeshVertex[vertexCount];
+        if (staticVerts == nullptr) {
+            FFE_LOG_ERROR("MeshLoader",
+                          "loadMesh: failed to allocate vertex staging buffer (%u vertices)", vertexCount);
+            cgltf_free(data);
+            return MeshHandle{0};
+        }
+        vertexData = staticVerts;
     }
 
     u32* const indices = new(std::nothrow) u32[indexCount];
     if (indices == nullptr) {
         FFE_LOG_ERROR("MeshLoader",
                       "loadMesh: failed to allocate index staging buffer (%u indices)", indexCount);
-        delete[] vertices;
+        if (isSkinned) {
+            delete[] static_cast<SkinnedMeshVertex*>(vertexData);
+        } else {
+            delete[] static_cast<rhi::MeshVertex*>(vertexData);
+        }
         cgltf_free(data); // SEC-M6
         return MeshHandle{0};
     }
@@ -458,27 +640,96 @@ MeshHandle loadMesh(const char* const path) {
     // cgltf_accessor_read_float / cgltf_accessor_read_index perform bounds checking.
     // Direct pointer arithmetic into buffer_view->data is prohibited.
 
-    for (u32 vi = 0; vi < vertexCount; ++vi) {
-        rhi::MeshVertex& v = vertices[vi];
+    if (isSkinned) {
+        auto* skinnedVerts = static_cast<SkinnedMeshVertex*>(vertexData);
+        for (u32 vi = 0; vi < vertexCount; ++vi) {
+            SkinnedMeshVertex& v = skinnedVerts[vi];
 
-        // Position (required)
-        float pos[3] = {0.0f, 0.0f, 0.0f};
-        cgltf_accessor_read_float(posAccessor, static_cast<cgltf_size>(vi), pos, 3);
-        v.px = pos[0]; v.py = pos[1]; v.pz = pos[2];
+            // Position (required)
+            float pos[3] = {0.0f, 0.0f, 0.0f};
+            cgltf_accessor_read_float(posAccessor, static_cast<cgltf_size>(vi), pos, 3);
+            v.px = pos[0]; v.py = pos[1]; v.pz = pos[2];
 
-        // Normal (optional — default to {0,1,0} if absent)
-        float norm[3] = {0.0f, 1.0f, 0.0f};
-        if (normalAccessor != nullptr) {
-            cgltf_accessor_read_float(normalAccessor, static_cast<cgltf_size>(vi), norm, 3);
+            // Normal
+            float norm[3] = {0.0f, 1.0f, 0.0f};
+            if (normalAccessor != nullptr) {
+                cgltf_accessor_read_float(normalAccessor, static_cast<cgltf_size>(vi), norm, 3);
+            }
+            v.nx = norm[0]; v.ny = norm[1]; v.nz = norm[2];
+
+            // Texcoord
+            float uv[2] = {0.0f, 0.0f};
+            if (texcoordAccessor != nullptr) {
+                cgltf_accessor_read_float(texcoordAccessor, static_cast<cgltf_size>(vi), uv, 2);
+            }
+            v.u = uv[0]; v.v = uv[1];
+
+            // Joint indices — read as uint via cgltf_accessor_read_uint
+            cgltf_uint joints[4] = {0, 0, 0, 0};
+            cgltf_accessor_read_uint(jointsAccessor, static_cast<cgltf_size>(vi), joints, 4);
+
+            // Validate joint indices: must be < boneCount
+            for (int j = 0; j < 4; ++j) {
+                if (joints[j] >= parsedSkeleton.boneCount) {
+                    FFE_LOG_ERROR("MeshLoader",
+                                  "loadMesh: vertex %u joint[%d]=%u >= boneCount=%u in \"%s\"",
+                                  vi, j, joints[j], parsedSkeleton.boneCount, canonPath);
+                    delete[] skinnedVerts;
+                    delete[] indices;
+                    cgltf_free(data);
+                    return MeshHandle{0};
+                }
+            }
+            v.jx = static_cast<u16>(joints[0]);
+            v.jy = static_cast<u16>(joints[1]);
+            v.jz = static_cast<u16>(joints[2]);
+            v.jw = static_cast<u16>(joints[3]);
+
+            // Weights
+            float weights[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+            cgltf_accessor_read_float(weightsAccessor, static_cast<cgltf_size>(vi), weights, 4);
+
+            // Renormalize weights if they don't sum to 1.0
+            const float weightSum = weights[0] + weights[1] + weights[2] + weights[3];
+            if (weightSum > 0.0001f && (weightSum < 0.999f || weightSum > 1.001f)) {
+                const float invSum = 1.0f / weightSum;
+                weights[0] *= invSum;
+                weights[1] *= invSum;
+                weights[2] *= invSum;
+                weights[3] *= invSum;
+            } else if (weightSum <= 0.0001f) {
+                // Zero weights — assign fully to first joint
+                weights[0] = 1.0f;
+                weights[1] = 0.0f;
+                weights[2] = 0.0f;
+                weights[3] = 0.0f;
+            }
+            v.wx = weights[0]; v.wy = weights[1]; v.wz = weights[2]; v.ww = weights[3];
         }
-        v.nx = norm[0]; v.ny = norm[1]; v.nz = norm[2];
+    } else {
+        auto* staticVerts = static_cast<rhi::MeshVertex*>(vertexData);
+        for (u32 vi = 0; vi < vertexCount; ++vi) {
+            rhi::MeshVertex& v = staticVerts[vi];
 
-        // Texcoord (optional — default to {0,0} if absent)
-        float uv[2] = {0.0f, 0.0f};
-        if (texcoordAccessor != nullptr) {
-            cgltf_accessor_read_float(texcoordAccessor, static_cast<cgltf_size>(vi), uv, 2);
+            // Position (required)
+            float pos[3] = {0.0f, 0.0f, 0.0f};
+            cgltf_accessor_read_float(posAccessor, static_cast<cgltf_size>(vi), pos, 3);
+            v.px = pos[0]; v.py = pos[1]; v.pz = pos[2];
+
+            // Normal (optional — default to {0,1,0} if absent)
+            float norm[3] = {0.0f, 1.0f, 0.0f};
+            if (normalAccessor != nullptr) {
+                cgltf_accessor_read_float(normalAccessor, static_cast<cgltf_size>(vi), norm, 3);
+            }
+            v.nx = norm[0]; v.ny = norm[1]; v.nz = norm[2];
+
+            // Texcoord (optional — default to {0,0} if absent)
+            float uv[2] = {0.0f, 0.0f};
+            if (texcoordAccessor != nullptr) {
+                cgltf_accessor_read_float(texcoordAccessor, static_cast<cgltf_size>(vi), uv, 2);
+            }
+            v.u = uv[0]; v.v = uv[1];
         }
-        v.u = uv[0]; v.v = uv[1];
     }
 
     // --- Extract index data using safe accessor API ---
@@ -492,11 +743,20 @@ MeshHandle loadMesh(const char* const path) {
     cgltf_free(data);
     data = nullptr;
 
+    // --- Helper lambda to free vertex data ---
+    auto freeVertexData = [&]() {
+        if (isSkinned) {
+            delete[] static_cast<SkinnedMeshVertex*>(vertexData);
+        } else {
+            delete[] static_cast<rhi::MeshVertex*>(vertexData);
+        }
+    };
+
     // --- Allocate mesh slot ---
     const u32 slot = findFreeMeshSlot();
     if (slot == 0) {
         FFE_LOG_ERROR("MeshLoader", "loadMesh: no free mesh slots");
-        delete[] vertices;
+        freeVertexData();
         delete[] indices;
         return MeshHandle{0};
     }
@@ -508,13 +768,13 @@ MeshHandle loadMesh(const char* const path) {
     rhi::BufferDesc vboDesc;
     vboDesc.type      = rhi::BufferType::VERTEX;
     vboDesc.usage     = rhi::BufferUsage::STATIC;
-    vboDesc.data      = vertices;
-    vboDesc.sizeBytes = static_cast<u32>(vboBytes);  // safe — vboBytes <= 32 MB < u32 max
+    vboDesc.data      = vertexData;
+    vboDesc.sizeBytes = static_cast<u32>(vboBytes);  // safe — vboBytes <= 56 MB < u32 max
 
     rec.vboHandle = rhi::createBuffer(vboDesc);
     if (!rhi::isValid(rec.vboHandle)) {
         FFE_LOG_ERROR("MeshLoader", "loadMesh: failed to create VBO for \"%s\"", canonPath);
-        delete[] vertices;
+        freeVertexData();
         delete[] indices;
         return MeshHandle{0};
     }
@@ -531,7 +791,7 @@ MeshHandle loadMesh(const char* const path) {
             rhi::destroyBuffer(rec.vboHandle);
             rec.vboHandle = {};
             rec.vboId = 0;
-            delete[] vertices;
+            freeVertexData();
             delete[] indices;
             return MeshHandle{0};
         }
@@ -550,7 +810,7 @@ MeshHandle loadMesh(const char* const path) {
         rhi::destroyBuffer(rec.vboHandle);
         rec.vboHandle = {};
         rec.vboId = 0;
-        delete[] vertices;
+        freeVertexData();
         delete[] indices;
         return MeshHandle{0};
     }
@@ -568,14 +828,14 @@ MeshHandle loadMesh(const char* const path) {
             rec.vboHandle = {};
             rec.iboId = 0;
             rec.vboId = 0;
-            delete[] vertices;
+            freeVertexData();
             delete[] indices;
             return MeshHandle{0};
         }
     }
 
     // CPU staging data is no longer needed after GPU upload
-    delete[] vertices;
+    freeVertexData();
     delete[] indices;
 
     // Step 9c-h: Create and configure the VAO for this mesh (GL 3.3 — no DSA)
@@ -585,28 +845,63 @@ MeshHandle loadMesh(const char* const path) {
     // Bind VBO inside VAO state capture
     glBindBuffer(GL_ARRAY_BUFFER, rec.vboId);
 
-    // Attribute layout matching rhi::MeshVertex exactly (ADR-007 Section 10.3):
-    //   location 0: position — 3 floats, offset 0,  stride 32
-    //   location 1: normal   — 3 floats, offset 12, stride 32
-    //   location 2: texcoord — 2 floats, offset 24, stride 32
+    if (isSkinned) {
+        // Skinned vertex layout: SkinnedMeshVertex (56 bytes)
+        //   location 0: position — 3 floats, offset 0
+        //   location 1: normal   — 3 floats, offset 12
+        //   location 2: texcoord — 2 floats, offset 24
+        //   location 4: joints   — 4 u16,    offset 32 (ivec4 via glVertexAttribIPointer)
+        //   location 5: weights  — 4 floats, offset 40
+        // Note: location 3 (tangent) is skipped — skinned meshes currently
+        // don't have tangent data. The shader handles tangent length = 0.
 
-    // location 0 — position
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE,
-                          static_cast<GLsizei>(sizeof(rhi::MeshVertex)),
-                          reinterpret_cast<const void*>(0));
+        const GLsizei stride = static_cast<GLsizei>(sizeof(SkinnedMeshVertex));
 
-    // location 1 — normal
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE,
-                          static_cast<GLsizei>(sizeof(rhi::MeshVertex)),
-                          reinterpret_cast<const void*>(12));
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride,
+                              reinterpret_cast<const void*>(0));
 
-    // location 2 — texcoord
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE,
-                          static_cast<GLsizei>(sizeof(rhi::MeshVertex)),
-                          reinterpret_cast<const void*>(24));
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, stride,
+                              reinterpret_cast<const void*>(12));
+
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, stride,
+                              reinterpret_cast<const void*>(24));
+
+        // location 4 — joints (integer attribute, must use glVertexAttribIPointer)
+        glEnableVertexAttribArray(4);
+        glVertexAttribIPointer(4, 4, GL_UNSIGNED_SHORT, stride,
+                               reinterpret_cast<const void*>(32));
+
+        // location 5 — weights
+        glEnableVertexAttribArray(5);
+        glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, stride,
+                              reinterpret_cast<const void*>(40));
+    } else {
+        // Static vertex layout: rhi::MeshVertex (32 bytes)
+        //   location 0: position — 3 floats, offset 0,  stride 32
+        //   location 1: normal   — 3 floats, offset 12, stride 32
+        //   location 2: texcoord — 2 floats, offset 24, stride 32
+
+        // location 0 — position
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE,
+                              static_cast<GLsizei>(sizeof(rhi::MeshVertex)),
+                              reinterpret_cast<const void*>(0));
+
+        // location 1 — normal
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE,
+                              static_cast<GLsizei>(sizeof(rhi::MeshVertex)),
+                              reinterpret_cast<const void*>(12));
+
+        // location 2 — texcoord
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE,
+                              static_cast<GLsizei>(sizeof(rhi::MeshVertex)),
+                              reinterpret_cast<const void*>(24));
+    }
 
     // Bind IBO inside VAO state capture (recorded in VAO state)
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, rec.iboId);
@@ -618,13 +913,28 @@ MeshHandle loadMesh(const char* const path) {
     // Note: do NOT unbind GL_ELEMENT_ARRAY_BUFFER after unbinding VAO — it's not stored outside VAO
 
     // --- Finalise the record ---
-    rec.indexCount  = indexCount;
-    rec.vertexCount = vertexCount;
-    rec.alive       = true;
+    rec.indexCount   = indexCount;
+    rec.vertexCount  = vertexCount;
+    rec.alive        = true;
+    rec.hasSkeleton  = isSkinned;
 
-    FFE_LOG_INFO("MeshLoader",
-                 "loadMesh: loaded \"%s\" — %u vertices, %u indices (slot %u)",
-                 path, vertexCount, indexCount, slot);
+    // Store skeleton and animation data in parallel arrays (cold path copy)
+    if (isSkinned) {
+        s_skeletonPool[slot]  = parsedSkeleton;
+        s_animationPool[slot] = std::move(parsedAnimations);
+
+        FFE_LOG_INFO("MeshLoader",
+                     "loadMesh: loaded \"%s\" — %u vertices, %u indices, %u bones, %u animations (slot %u)",
+                     path, vertexCount, indexCount,
+                     parsedSkeleton.boneCount, s_animationPool[slot]->clipCount, slot);
+    } else {
+        s_skeletonPool[slot]  = SkeletonData{};
+        s_animationPool[slot].reset();
+
+        FFE_LOG_INFO("MeshLoader",
+                     "loadMesh: loaded \"%s\" — %u vertices, %u indices (slot %u)",
+                     path, vertexCount, indexCount, slot);
+    }
 
     return MeshHandle{slot};
 }
@@ -664,9 +974,14 @@ void unloadMesh(const MeshHandle handle) {
         rec.vboId = 0;
     }
 
-    rec.indexCount  = 0;
-    rec.vertexCount = 0;
-    rec.alive       = false;
+    rec.indexCount   = 0;
+    rec.vertexCount  = 0;
+    rec.alive        = false;
+    rec.hasSkeleton  = false;
+
+    // Clear skeleton and animation data for this slot
+    s_skeletonPool[handle.id]  = SkeletonData{};
+    s_animationPool[handle.id].reset();
 }
 
 // ---------------------------------------------------------------------------
@@ -708,6 +1023,30 @@ const MeshGpuRecord* getMeshGpuRecord(const MeshHandle handle) {
     }
     const MeshGpuRecord& rec = s_meshPool[handle.id];
     return rec.alive ? &rec : nullptr;
+}
+
+const SkeletonData* getMeshSkeletonData(const MeshHandle handle) {
+    if (!isValid(handle) || handle.id > MAX_MESH_ASSETS) {
+        return nullptr;
+    }
+    const MeshGpuRecord& rec = s_meshPool[handle.id];
+    if (!rec.alive || !rec.hasSkeleton) {
+        return nullptr;
+    }
+    return &s_skeletonPool[handle.id];
+}
+
+const MeshAnimations* getMeshAnimations(const MeshHandle handle) {
+    if (!isValid(handle) || handle.id > MAX_MESH_ASSETS) {
+        return nullptr;
+    }
+    const MeshGpuRecord& rec = s_meshPool[handle.id];
+    if (!rec.alive || !rec.hasSkeleton) {
+        return nullptr;
+    }
+    const auto& animPtr = s_animationPool[handle.id];
+    if (!animPtr) return nullptr;
+    return animPtr.get();
 }
 
 } // namespace ffe::renderer

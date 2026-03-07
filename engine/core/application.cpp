@@ -2,6 +2,7 @@
 #include "core/input.h"
 #include "renderer/rhi.h"
 #include "renderer/render_system.h"
+#include "renderer/animation_system.h"
 #include "renderer/mesh_loader.h"
 #include "renderer/mesh_renderer.h"
 #include "renderer/shadow_map.h"
@@ -382,7 +383,15 @@ Result Application::startup() {
         renderer::animationUpdateSystem,
         renderer::ANIMATION_UPDATE_PRIORITY
     ));
-    // ParticleUpdateSystem runs at priority 55, after animation (50) and
+    // 3D AnimationUpdateSystem runs at priority 52, after 2D sprite animation (50)
+    // and before particles (55) and gameplay systems (>= 100). Advances skeletal
+    // animation time, samples keyframes, and writes bone matrices.
+    m_world.registerSystem(FFE_SYSTEM(
+        "Animation3DUpdate",
+        renderer::animationUpdateSystem3D,
+        renderer::ANIMATION_3D_UPDATE_PRIORITY
+    ));
+    // ParticleUpdateSystem runs at priority 55, after animation (50, 52) and
     // before gameplay systems (>= 100). Emits new particles, applies
     // velocity + gravity, kills expired particles.
     m_world.registerSystem(FFE_SYSTEM(

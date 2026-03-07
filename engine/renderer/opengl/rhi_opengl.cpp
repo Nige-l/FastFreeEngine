@@ -688,6 +688,14 @@ void setUniformMat4(const ShaderHandle handle, const char* name, const glm::mat4
     if (loc >= 0) glUniformMatrix4fv(loc, 1, GL_FALSE, glm::value_ptr(value));
 }
 
+void setUniformMat4Array(const ShaderHandle handle, const char* name, const glm::mat4* values, const u32 count) {
+    if (s_headless) return;
+    if (handle.id == 0 || handle.id >= MAX_SHADERS || !s_shaders[handle.id].alive) return;
+    if (values == nullptr || count == 0) return;
+    const GLint loc = getCachedUniformLocation(s_shaders[handle.id], name);
+    if (loc >= 0) glUniformMatrix4fv(loc, static_cast<GLsizei>(count), GL_FALSE, glm::value_ptr(values[0]));
+}
+
 // --- Pipeline state ---
 
 void applyPipelineState(const PipelineState& desired) {

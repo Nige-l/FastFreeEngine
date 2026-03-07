@@ -39,6 +39,7 @@ PFNGLBINDVERTEXARRAYPROC         glad_glBindVertexArray = NULL;
 PFNGLENABLEVERTEXATTRIBARRAYPROC glad_glEnableVertexAttribArray = NULL;
 PFNGLDISABLEVERTEXATTRIBARRAYPROC glad_glDisableVertexAttribArray = NULL;
 PFNGLVERTEXATTRIBPOINTERPROC     glad_glVertexAttribPointer = NULL;
+PFNGLVERTEXATTRIBIPOINTERPROC    glad_glVertexAttribIPointer = NULL;
 
 PFNGLGENTEXTURESPROC             glad_glGenTextures = NULL;
 PFNGLDELETETEXTURESPROC          glad_glDeleteTextures = NULL;
@@ -156,6 +157,7 @@ int gladLoadGLLoader(GLADloadproc load) {
     glad_glEnableVertexAttribArray = (PFNGLENABLEVERTEXATTRIBARRAYPROC)load("glEnableVertexAttribArray");
     glad_glDisableVertexAttribArray = (PFNGLDISABLEVERTEXATTRIBARRAYPROC)load("glDisableVertexAttribArray");
     glad_glVertexAttribPointer = (PFNGLVERTEXATTRIBPOINTERPROC)load("glVertexAttribPointer");
+    glad_glVertexAttribIPointer = (PFNGLVERTEXATTRIBIPOINTERPROC)load("glVertexAttribIPointer");
 
     glad_glGenTextures = (PFNGLGENTEXTURESPROC)load("glGenTextures");
     glad_glDeleteTextures = (PFNGLDELETETEXTURESPROC)load("glDeleteTextures");

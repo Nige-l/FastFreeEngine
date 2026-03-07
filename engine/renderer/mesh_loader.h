@@ -16,6 +16,7 @@
 
 #include "core/types.h"
 #include "renderer/rhi_types.h"
+#include "renderer/skeleton.h"
 
 namespace ffe::renderer {
 
@@ -48,7 +49,8 @@ struct MeshGpuRecord {
     rhi::BufferHandle iboHandle{};  // RHI handle for VRAM tracking + destroyBuffer
     u32 indexCount  = 0;
     u32 vertexCount = 0;
-    bool alive      = false;
+    bool alive       = false;
+    bool hasSkeleton = false;  // true if this mesh has skin data (skeletal animation)
 };
 
 // Load a glTF 2.0 mesh from a file path relative to the asset root.
@@ -82,5 +84,13 @@ u32 getMeshIndexCount(MeshHandle handle);
 // Returns nullptr if the handle is invalid or the slot is not alive.
 // Only for use by mesh_renderer.cpp — not part of the public game API.
 const MeshGpuRecord* getMeshGpuRecord(MeshHandle handle);
+
+// Returns the skeleton data for a mesh (read-only after load).
+// Returns nullptr if the mesh has no skeleton or the handle is invalid.
+const SkeletonData* getMeshSkeletonData(MeshHandle handle);
+
+// Returns the animation data for a mesh (read-only after load).
+// Returns nullptr if the mesh has no animations or the handle is invalid.
+const MeshAnimations* getMeshAnimations(MeshHandle handle);
 
 } // namespace ffe::renderer

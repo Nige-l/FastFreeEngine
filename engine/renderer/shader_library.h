@@ -6,12 +6,14 @@ namespace ffe::renderer {
 
 // Pre-defined shader IDs
 enum class BuiltinShader : u8 {
-    SOLID            = 0,
-    TEXTURED         = 1,
-    SPRITE           = 2,
-    MESH_BLINN_PHONG = 3,  // 3D Blinn-Phong lighting shader (ADR-007)
-    SHADOW_DEPTH     = 4,  // Depth-only pass for directional light shadow mapping
-    SKYBOX           = 5,  // Cubemap skybox rendering
+    SOLID                = 0,
+    TEXTURED             = 1,
+    SPRITE               = 2,
+    MESH_BLINN_PHONG     = 3,  // 3D Blinn-Phong lighting shader (ADR-007)
+    SHADOW_DEPTH         = 4,  // Depth-only pass for directional light shadow mapping
+    SKYBOX               = 5,  // Cubemap skybox rendering
+    MESH_SKINNED         = 6,  // Blinn-Phong + bone skinning (skeletal animation)
+    SHADOW_DEPTH_SKINNED = 7,  // Depth-only + bone skinning (skeletal animation shadow pass)
     COUNT
 };
 

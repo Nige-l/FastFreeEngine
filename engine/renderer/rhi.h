@@ -44,6 +44,7 @@ void setUniformVec3(ShaderHandle handle, const char* name, const glm::vec3& valu
 void setUniformVec4(ShaderHandle handle, const char* name, const glm::vec4& value);
 void setUniformMat3(ShaderHandle handle, const char* name, const glm::mat3& value);
 void setUniformMat4(ShaderHandle handle, const char* name, const glm::mat4& value);
+void setUniformMat4Array(ShaderHandle handle, const char* name, const glm::mat4* values, u32 count);
 
 // --- Pipeline state ---
 void applyPipelineState(const PipelineState& state);
