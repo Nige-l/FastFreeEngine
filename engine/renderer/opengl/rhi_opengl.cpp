@@ -747,6 +747,17 @@ void beginFrame(const glm::vec4& clearColor) {
     if (s_headless) return;
 
     ZoneScopedN("RHI::beginFrame");
+
+    // glClear(GL_DEPTH_BUFFER_BIT) is a no-op when glDepthMask is GL_FALSE.
+    // The 2D pipeline restores depthWrite=false after the 3D pass each frame,
+    // so without this call the depth buffer would never actually be cleared,
+    // leaving stale depth values that clip 3D geometry on subsequent frames.
+    // Always restore the depth mask before clearing, and sync the pipeline tracker.
+    if (!s_currentPipeline.depthWrite) {
+        glDepthMask(GL_TRUE);
+        s_currentPipeline.depthWrite = true;
+    }
+
     glClearColor(clearColor.r, clearColor.g, clearColor.b, clearColor.a);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }

@@ -45,6 +45,19 @@ Your report to PM must include:
 
 Report the exact error with file path, line number, and error message. Include enough context (5 lines before/after) for engine-dev to fix without re-reading the entire file. If multiple errors exist, report all of them — don't stop at the first.
 
+### vcpkg Package Management
+
+You own vcpkg package installation for all triplets needed by the current session. Run vcpkg installs as part of your build step — before building — when PM's plan requires a new triplet or new dependencies:
+
+```bash
+$VCPKG_ROOT/vcpkg install --triplet x64-linux 2>&1 | tail -20
+$VCPKG_ROOT/vcpkg install --triplet x64-mingw-dynamic 2>&1 | tail -20
+```
+
+**Important:** vcpkg package compilation can take 10–60 minutes per triplet (it builds from source). Always mention this in your report so PM and the user know why a build step is slow. Run vcpkg installs in background with `run_in_background=true` when they are for a non-blocking triplet (e.g., Windows packages while Linux build runs in parallel).
+
+If a vcpkg install fails, report it as a **VCPKG issue** (not an environment or code issue) — PM will decide whether to dispatch system-engineer or defer the failing triplet.
+
 ### Environment Issues
 
 If the build fails due to missing packages, broken toolchain, or system configuration issues (not code errors), flag this explicitly as an ENVIRONMENT issue. PM will dispatch system-engineer to fix the environment before you retry.
