@@ -3,6 +3,55 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 84: Phase 7 M8 — Phase Close
+
+### Summary
+
+Session 84 completed Phase 7 (Rendering Pipeline Modernisation). Updated README.md with all Phase 7 capabilities (PBR, post-processing, GPU instancing, anti-aliasing, skeletal animation, SSAO, sprite batching 2.0). Updated architecture-map.md with new subsystems added during Phase 7. Fixed 5 GCC-13 strncpy truncation warnings in tests/editor/test_exporter.cpp (replaced strncpy with snprintf). FULL build verified: 1228 tests passing on both Clang-18 and GCC-13, zero warnings. Phase 7 delivered 8 milestones across 11 sessions (74-84). game-dev-tester: SKIPPED (phase close session, no new API). Next: Phase 8 planning (user requested competitive analysis).
+
+### Planned
+
+- Phase 7 M8: Phase Close — FULL build, README update, architecture-map update, documentation sweep
+
+### Delivered
+
+- **README.md Update** -- all Phase 7 capabilities documented (PBR, bloom, tonemapping, GPU instancing, MSAA/FXAA, SSAO, sprite atlas)
+- **Architecture-map.md Update** -- new subsystems: PBR, PostProcessing, GPU Instancing, Anti-Aliasing, SSAO, Texture Atlas
+- **GCC-13 Warning Fix** -- 5 strncpy truncation warnings in test_exporter.cpp replaced with snprintf
+- **FULL Build Verified** -- 1228 tests, Clang-18 + GCC-13, zero warnings
+
+### Files Changed
+
+- `README.md` (MODIFIED -- Phase 7 capabilities)
+- `docs/architecture-map.md` (MODIFIED -- new subsystems)
+- `tests/editor/test_exporter.cpp` (MODIFIED -- strncpy -> snprintf, 5 instances)
+
+### Reviews
+
+- FULL build: PASS (1228 tests, both compilers, zero warnings)
+- game-dev-tester: SKIPPED (phase close session)
+
+### Phase 7 Summary
+
+Phase 7 delivered rendering pipeline modernisation across 11 sessions (74-84), 8 milestones:
+
+1. **M1 PBR Materials** (Sessions 74-76) -- Cook-Torrance BRDF, IBL, PBRMaterial component
+2. **M2 Post-Processing** (Sessions 77-78) -- HDR FBO, bloom, tone mapping (Reinhard/ACES), gamma
+3. **M3 GPU Instancing** (Session 79) -- automatic batching, 1024/batch, instanced shadows
+4. **M4 Anti-Aliasing** (Session 80) -- MSAA (2x/4x/8x) + FXAA 3.11
+5. **M5 Skeletal Animation** (Session 81) -- crossfade blending, interpolation modes, root motion
+6. **M6 SSAO** (Session 82) -- 32-sample hemisphere, half-res, LEGACY compatible
+7. **M7 Sprite Batching 2.0** (Session 83) -- runtime texture atlas, shelf packing, UV remapping
+8. **M8 Phase Close** (Session 84) -- FULL build, documentation sweep
+
+Total new tests from Phase 7: ~223. Lua bindings added: ~22. All features target LEGACY tier (OpenGL 3.3).
+
+### Next Session (85)
+
+Phase 8 planning. User requested competitive analysis for next phase direction.
+
+---
+
 ## 2026-03-07 — Session 83: Phase 7 M7 — Sprite Batching 2.0
 
 ### Summary
