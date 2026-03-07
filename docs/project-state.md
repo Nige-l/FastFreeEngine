@@ -6,11 +6,11 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 48 |
-| Total tests | 711 (Clang-18 + GCC-13 passing, zero warnings) |
-| Total Lua bindings | ~110 |
+| Last session | 49 |
+| Total tests | 735 (Clang-18 + GCC-13 passing, zero warnings) |
+| Total Lua bindings | ~115 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
-| Phase 2 (3D Foundation) | IN PROGRESS (see current phase section below) |
+| Phase 2 (3D Foundation) | COMPLETE |
 | Windows build | DONE (MinGW-w64 cross-compilation) |
 | macOS build | DONE (arm64 + x86_64) |
 | GitHub Actions CI | DONE (Linux Clang-18, Linux GCC-13, macOS arm64) |
@@ -32,7 +32,7 @@
 | Scene Mgmt | Stable | destroyAllEntities, cancelAllTimers, loadScene |
 | Input | Stable | keyboard+mouse+gamepad, pressed/held/released, action bindings |
 | Audio | Stable | miniaudio, WAV/OGG, playSound/playMusic, streaming, headless, 3D positional (playSound3D, listener sync) |
-| Physics (3D) | In Progress | Jolt Physics, rigid bodies (box/sphere/capsule), static/kinematic/dynamic, ECS sync, 8 Lua bindings |
+| Physics (3D) | Stable | Jolt Physics, rigid bodies, collision callbacks, raycasting, entity-body mapping, 13 Lua bindings |
 | Collision | Stable | Spatial hash, AABB/Circle, layer/mask, CollisionEvent |
 | Scripting | Stable | LuaJIT sandbox, 1M instruction budget, ffe.* API |
 | Save/Load | Stable | JSON on disk, path security, atomic writes |
@@ -57,36 +57,48 @@
 
 | Session | Summary |
 |---------|---------|
+| 49 | 3D physics gameplay layer — collision callbacks, raycasting, entity mapping, 5 Lua bindings, 735 tests. Phase 2 COMPLETE. |
 | 48 | 3D physics foundation — Jolt integration, rigid bodies, ECS sync, 8 Lua bindings, 711 tests |
 | 47 | 3D positional audio (spatial voices, listener sync, 4 Lua bindings), 686 tests |
 | 46 | Skeletal animation (bone hierarchy, GPU skinning, 8 Lua bindings), 1.37 GB static array fix, 664 tests |
 | 45 | Skybox / cubemap environment rendering, 3 new Lua bindings, security hardening, 627 tests |
-| 44 | Point lights (4 max) + materials system (specular, normal maps), 8 new Lua bindings, 618 tests |
 
-## Current Phase: Phase 2 — 3D Foundation (IN PROGRESS)
+## Phase 2 — 3D Foundation: COMPLETE
 
 **Goal:** Extend the renderer to support 3D games while keeping full 2D capability.
 
-### Delivered
+All deliverables met:
 - [x] 3D mesh loading (cgltf, .glb format)
 - [x] 3D mesh rendering (Blinn-Phong, vertex/index buffers)
-- [x] Basic lighting (directional, Blinn-Phong)
+- [x] Basic lighting (directional + point lights, Blinn-Phong)
 - [x] 3D camera (FPS and orbit modes)
-- [x] Mesh texture binding
-- [x] Shadow mapping (depth FBO, PCF 3x3, 4 Lua bindings)
-- [x] Point lights (up to 4, with Lua bindings)
-- [x] Materials system (specular maps, normal maps, shininess)
-- [x] Lua bindings for 3D (28 bindings)
+- [x] Materials system (diffuse, specular, normal maps, shininess)
+- [x] Skeletal animation (bone hierarchy, GPU skinning)
+- [x] 3D physics integration (Jolt — rigid bodies, collision callbacks, raycasting)
+- [x] Skybox / cubemap environment rendering
+- [x] Shadow mapping (depth FBO, PCF 3x3)
+- [x] 3D positional audio (spatial voices, listener sync)
+- [x] Lua bindings for all 3D features (~45 bindings)
 - [x] 3D demo game
-- [x] .context.md for 3D renderer
-- [x] Skybox / cubemap environment rendering (3 Lua bindings)
+- [x] .context.md files for all new subsystems
 
-### Remaining
-- [x] Skeletal animation (bone hierarchy, GPU skinning, 8 Lua bindings)
-- [x] 3D positional audio (spatial voices, listener sync, 4 Lua bindings)
-- [~] 3D physics integration (Jolt) — foundation done, gameplay layer (collisions, raycasting, character controller, constraints) in Session 49
+## Current Phase: Phase 3 — Standalone Editor (NOT STARTED)
 
-### Next Session (49) — Complete 3D physics gameplay layer, close out Phase 2
+**Goal:** A graphical application for building games with FFE, like Unity or Unreal Editor.
+
+### Deliverables
+- [ ] Standalone editor application (separate binary from the game runtime)
+- [ ] Scene view with 2D and 3D viewport
+- [ ] Entity inspector (create, modify, delete entities and components)
+- [ ] Asset browser (textures, audio, scripts, meshes)
+- [ ] Scene serialisation (save/load scene files)
+- [ ] Play-in-editor (run the game inside the editor viewport)
+- [ ] Build pipeline (export game as standalone executable)
+- [ ] Undo/redo system
+- [ ] Project creation wizard
+- [ ] LLM integration panel (connect AI assistant, generate code, explain systems)
+
+### Next Session (50) — Phase 3 kickoff: architecture design, editor scaffold, scene serialisation format
 
 ## Build Commands
 

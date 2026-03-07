@@ -3,6 +3,55 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-34 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 49: 3D Physics Gameplay Layer (Collision Callbacks + Raycasting) — PHASE 2 COMPLETE
+
+### Summary
+
+Session 49 completed the 3D physics gameplay layer, adding collision event callbacks, raycasting, and entity-body mapping on top of the Jolt foundation from Session 48. This closes out Phase 2 (3D Foundation) — all deliverables from the roadmap are met.
+
+### Features Implemented
+
+- **Collision callbacks** — contact listener dispatches collision enter/stay/exit events through the ECS, with Lua callback registration per entity
+- **Raycasting** — cast rays into the physics world for line-of-sight, ground detection, and interaction queries; returns hit entity, position, normal, and distance
+- **Entity-body mapping** — bidirectional lookup between ECS entities and Jolt physics bodies, enabling physics-to-gameplay event routing
+- **5 new Lua bindings**: collision callback registration, raycast single/closest, raycast all, entity-from-body lookup, body-from-entity lookup
+- **3D demo update** — extended with collision callback and raycast usage examples
+
+### Tests
+
+- 24 new tests (collision events, raycast queries, Lua binding integration)
+- **735 tests** total, passing on both Clang-18 and GCC-13, zero warnings
+
+### Reviews
+
+- **performance-critic:** PASS
+- **api-designer:** PASS (updated .context.md for physics and scripting)
+- **security-auditor:** PASS (no new attack surface — physics is internal-only)
+
+### Build Notes
+
+- FULL build: 735 tests on both Clang-18 and GCC-13, zero warnings, zero failures
+
+### Phase 2 Completion
+
+All Phase 2 (3D Foundation) deliverables are now complete:
+- 3D mesh loading/rendering, Blinn-Phong lighting, perspective camera
+- Materials (diffuse, specular, normal maps), shadow mapping, skybox
+- Skeletal animation, 3D positional audio, 3D physics (rigid bodies + gameplay layer)
+- ~45 Lua bindings for 3D features, 3D demo game, .context.md files
+
+**Next session (50) begins Phase 3: Standalone Editor.**
+
+### Deferred
+
+Nothing deferred. Phase 2 is clean.
+
+### game-dev-tester
+
+Skipped — no new API paradigm; collision callbacks and raycasting follow the established event/query patterns.
+
+---
+
 ## 2026-03-07 — Session 48: 3D Physics Foundation (Jolt)
 
 ### Summary
