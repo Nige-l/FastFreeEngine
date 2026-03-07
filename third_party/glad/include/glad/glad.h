@@ -273,6 +273,9 @@ typedef void (GLAD_API_PTR *PFNGLUNIFORM4FVPROC)(GLint, GLsizei, const GLfloat*)
 typedef void (GLAD_API_PTR *PFNGLUNIFORMMATRIX3FVPROC)(GLint, GLsizei, GLboolean, const GLfloat*);
 typedef void (GLAD_API_PTR *PFNGLUNIFORMMATRIX4FVPROC)(GLint, GLsizei, GLboolean, const GLfloat*);
 
+/* Pixel read functions */
+typedef void (GLAD_API_PTR *PFNGLREADPIXELSPROC)(GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, void*);
+
 /* Draw functions */
 typedef void (GLAD_API_PTR *PFNGLDRAWARRAYSPROC)(GLenum, GLint, GLsizei);
 typedef void (GLAD_API_PTR *PFNGLDRAWELEMENTSPROC)(GLenum, GLsizei, GLenum, const void*);
@@ -344,6 +347,8 @@ extern PFNGLUNIFORM4FVPROC             glad_glUniform4fv;
 extern PFNGLUNIFORMMATRIX3FVPROC       glad_glUniformMatrix3fv;
 extern PFNGLUNIFORMMATRIX4FVPROC       glad_glUniformMatrix4fv;
 
+extern PFNGLREADPIXELSPROC              glad_glReadPixels;
+
 extern PFNGLDRAWARRAYSPROC              glad_glDrawArrays;
 extern PFNGLDRAWELEMENTSPROC            glad_glDrawElements;
 
@@ -412,6 +417,8 @@ extern PFNGLDEBUGMESSAGECONTROLPROC     glad_glDebugMessageControl;
 #define glUniform4fv              glad_glUniform4fv
 #define glUniformMatrix3fv        glad_glUniformMatrix3fv
 #define glUniformMatrix4fv        glad_glUniformMatrix4fv
+
+#define glReadPixels              glad_glReadPixels
 
 #define glDrawArrays              glad_glDrawArrays
 #define glDrawElements            glad_glDrawElements

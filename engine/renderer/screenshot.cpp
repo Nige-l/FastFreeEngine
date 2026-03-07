@@ -6,6 +6,12 @@
 // Cold path only — this function allocates on the heap and calls glReadPixels.
 // Never call it per-frame.
 
+// GLAD must be included before any other header that could pull in system GL
+// headers (including stb_image_write.h on some platforms). GLAD defines all GL
+// function pointers; if a system <GL/gl.h> is included first, those symbols
+// are declared as extern functions and GLAD's re-declarations conflict.
+#include <glad/glad.h>
+
 // Suppress warnings stb_image_write generates under -Wall -Wextra.
 #ifdef __clang__
     #pragma clang diagnostic push
@@ -38,8 +44,6 @@
 #include "renderer/screenshot.h"
 #include "renderer/rhi.h"
 #include "core/logging.h"
-
-#include <glad/glad.h>
 
 #include <cstring> // memcpy
 #include <vector>  // pixel buffers (cold path — heap alloc is acceptable here)

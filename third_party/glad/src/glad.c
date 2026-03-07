@@ -72,6 +72,8 @@ PFNGLUNIFORM4FVPROC              glad_glUniform4fv = NULL;
 PFNGLUNIFORMMATRIX3FVPROC        glad_glUniformMatrix3fv = NULL;
 PFNGLUNIFORMMATRIX4FVPROC        glad_glUniformMatrix4fv = NULL;
 
+PFNGLREADPIXELSPROC              glad_glReadPixels = NULL;
+
 PFNGLDRAWARRAYSPROC              glad_glDrawArrays = NULL;
 PFNGLDRAWELEMENTSPROC            glad_glDrawElements = NULL;
 
@@ -177,6 +179,8 @@ int gladLoadGLLoader(GLADloadproc load) {
     glad_glUniform4fv = (PFNGLUNIFORM4FVPROC)load("glUniform4fv");
     glad_glUniformMatrix3fv = (PFNGLUNIFORMMATRIX3FVPROC)load("glUniformMatrix3fv");
     glad_glUniformMatrix4fv = (PFNGLUNIFORMMATRIX4FVPROC)load("glUniformMatrix4fv");
+
+    glad_glReadPixels = (PFNGLREADPIXELSPROC)load("glReadPixels");
 
     glad_glDrawArrays = (PFNGLDRAWARRAYSPROC)load("glDrawArrays");
     glad_glDrawElements = (PFNGLDRAWELEMENTSPROC)load("glDrawElements");
