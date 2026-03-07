@@ -94,6 +94,10 @@ PFNGLREADPIXELSPROC              glad_glReadPixels = NULL;
 PFNGLDRAWARRAYSPROC              glad_glDrawArrays = NULL;
 PFNGLDRAWELEMENTSPROC            glad_glDrawElements = NULL;
 
+PFNGLDRAWELEMENTSINSTANCEDPROC   glad_glDrawElementsInstanced = NULL;
+PFNGLDRAWARRAYSINSTANCEDPROC     glad_glDrawArraysInstanced = NULL;
+PFNGLVERTEXATTRIBDIVISORPROC     glad_glVertexAttribDivisor = NULL;
+
 PFNGLDEBUGMESSAGECALLBACKPROC    glad_glDebugMessageCallback = NULL;
 PFNGLDEBUGMESSAGECONTROLPROC     glad_glDebugMessageControl = NULL;
 
@@ -218,6 +222,11 @@ int gladLoadGLLoader(GLADloadproc load) {
 
     glad_glDrawArrays = (PFNGLDRAWARRAYSPROC)load("glDrawArrays");
     glad_glDrawElements = (PFNGLDRAWELEMENTSPROC)load("glDrawElements");
+
+    /* Instanced draw functions (core in GL 3.1+) */
+    glad_glDrawElementsInstanced = (PFNGLDRAWELEMENTSINSTANCEDPROC)load("glDrawElementsInstanced");
+    glad_glDrawArraysInstanced = (PFNGLDRAWARRAYSINSTANCEDPROC)load("glDrawArraysInstanced");
+    glad_glVertexAttribDivisor = (PFNGLVERTEXATTRIBDIVISORPROC)load("glVertexAttribDivisor");
 
     /* Optional: debug output (may not be available on GL 3.3, that's OK) */
     glad_glDebugMessageCallback = (PFNGLDEBUGMESSAGECALLBACKPROC)load("glDebugMessageCallback");

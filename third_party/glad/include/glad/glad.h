@@ -322,6 +322,11 @@ typedef void (GLAD_API_PTR *PFNGLREADPIXELSPROC)(GLint, GLint, GLsizei, GLsizei,
 typedef void (GLAD_API_PTR *PFNGLDRAWARRAYSPROC)(GLenum, GLint, GLsizei);
 typedef void (GLAD_API_PTR *PFNGLDRAWELEMENTSPROC)(GLenum, GLsizei, GLenum, const void*);
 
+/* Instanced draw functions (core in GL 3.1+) */
+typedef void (GLAD_API_PTR *PFNGLDRAWELEMENTSINSTANCEDPROC)(GLenum, GLsizei, GLenum, const void*, GLsizei);
+typedef void (GLAD_API_PTR *PFNGLDRAWARRAYSINSTANCEDPROC)(GLenum, GLint, GLsizei, GLsizei);
+typedef void (GLAD_API_PTR *PFNGLVERTEXATTRIBDIVISORPROC)(GLuint, GLuint);
+
 /* Debug output (extension, may not be available on GL 3.3) */
 typedef void (GLAD_API_PTR *PFNGLDEBUGMESSAGECALLBACKPROC)(GLDEBUGPROC, const void*);
 typedef void (GLAD_API_PTR *PFNGLDEBUGMESSAGECONTROLPROC)(GLenum, GLenum, GLenum, GLsizei, const GLuint*, GLboolean);
@@ -411,6 +416,10 @@ extern PFNGLREADPIXELSPROC              glad_glReadPixels;
 extern PFNGLDRAWARRAYSPROC              glad_glDrawArrays;
 extern PFNGLDRAWELEMENTSPROC            glad_glDrawElements;
 
+extern PFNGLDRAWELEMENTSINSTANCEDPROC   glad_glDrawElementsInstanced;
+extern PFNGLDRAWARRAYSINSTANCEDPROC     glad_glDrawArraysInstanced;
+extern PFNGLVERTEXATTRIBDIVISORPROC     glad_glVertexAttribDivisor;
+
 extern PFNGLDEBUGMESSAGECALLBACKPROC    glad_glDebugMessageCallback;
 extern PFNGLDEBUGMESSAGECONTROLPROC     glad_glDebugMessageControl;
 
@@ -498,6 +507,10 @@ extern PFNGLDEBUGMESSAGECONTROLPROC     glad_glDebugMessageControl;
 
 #define glDrawArrays              glad_glDrawArrays
 #define glDrawElements            glad_glDrawElements
+
+#define glDrawElementsInstanced   glad_glDrawElementsInstanced
+#define glDrawArraysInstanced     glad_glDrawArraysInstanced
+#define glVertexAttribDivisor     glad_glVertexAttribDivisor
 
 #define glDebugMessageCallback    glad_glDebugMessageCallback
 #define glDebugMessageControl     glad_glDebugMessageControl

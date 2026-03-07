@@ -19,6 +19,9 @@ enum class BuiltinShader : u8 {
     POST_THRESHOLD       = 10, // Bloom bright-pixel extract (luminance > threshold)
     POST_BLUR            = 11, // Separable Gaussian blur (horizontal/vertical via uniform)
     POST_FINAL           = 12, // Final composite: bloom + tone map + gamma
+    MESH_BLINN_PHONG_INSTANCED = 13, // Blinn-Phong instanced (model matrix from attribs)
+    MESH_PBR_INSTANCED         = 14, // PBR instanced (model matrix from attribs)
+    SHADOW_DEPTH_INSTANCED     = 15, // Shadow depth instanced (model matrix from attribs)
     COUNT
 };
 

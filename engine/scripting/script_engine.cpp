@@ -4056,6 +4056,42 @@ void ScriptEngine::registerEcsBindings() {
     lua_pushcfunction(L, ffe_unloadMesh);
     lua_setfield(L, -2, "unloadMesh");
 
+    // ffe.getInstanceCount(meshHandle: integer) -> integer
+    // Returns how many entities in the world have this mesh handle.
+    // Useful for debugging instancing behaviour.
+    auto ffe_getInstanceCount = [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TNUMBER) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.getInstanceCount: argument 1 must be a number");
+            lua_pushinteger(state, 0);
+            return 1;
+        }
+        const auto rawHandle = lua_tointeger(state, 1);
+        if (rawHandle <= 0 || rawHandle > static_cast<lua_Integer>(ffe::renderer::MAX_MESH_ASSETS)) {
+            lua_pushinteger(state, 0);
+            return 1;
+        }
+        // Retrieve World pointer from the Lua registry.
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            lua_pushinteger(state, 0);
+            return 1;
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+        if (world == nullptr) {
+            lua_pushinteger(state, 0);
+            return 1;
+        }
+        const ffe::u32 count = ffe::renderer::getInstanceCount(
+            *world, static_cast<ffe::u32>(rawHandle));
+        lua_pushinteger(state, static_cast<lua_Integer>(count));
+        return 1;
+    };
+    lua_pushcfunction(L, ffe_getInstanceCount);
+    lua_setfield(L, -2, "getInstanceCount");
+
     // ffe.createEntity3D(meshHandle: integer, x: number, y: number, z: number) -> integer
     // Create an entity with Transform3D and Mesh components at the given position.
     // Returns entity ID on success, 0 on failure.

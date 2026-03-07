@@ -762,6 +762,113 @@ void main() {
 // Fragment shader for PBR skinned is identical to the static PBR version.
 // Both share the same fragment shader string pointer (MESH_PBR_FRAG_SOURCE).
 
+// --- Instanced Blinn-Phong vertex shader ---
+// Model matrix read from per-instance vertex attributes (slots 8-11) instead of uniform.
+// Normal matrix computed in the shader from the instance model matrix.
+
+static const char* const MESH_BLINN_PHONG_INSTANCED_VERT_SOURCE = R"glsl(
+#version 330 core
+
+layout(location = 0) in vec3 a_position;
+layout(location = 1) in vec3 a_normal;
+layout(location = 2) in vec2 a_texcoord;
+layout(location = 3) in vec3 a_tangent;
+
+// Per-instance model matrix (4 vec4 columns at locations 8-11)
+layout(location = 8)  in vec4 a_instanceModel0;
+layout(location = 9)  in vec4 a_instanceModel1;
+layout(location = 10) in vec4 a_instanceModel2;
+layout(location = 11) in vec4 a_instanceModel3;
+
+uniform mat4 u_viewProjection;
+uniform mat4 u_lightSpaceMatrix;
+
+out vec3 v_fragPos;
+out vec3 v_normal;
+out vec2 v_texcoord;
+out vec4 v_fragPosLightSpace;
+out vec3 v_tangent;
+
+void main() {
+    mat4 model = mat4(a_instanceModel0, a_instanceModel1,
+                      a_instanceModel2, a_instanceModel3);
+    mat3 normalMatrix = transpose(inverse(mat3(model)));
+
+    vec4 worldPos       = model * vec4(a_position, 1.0);
+    v_fragPos           = worldPos.xyz;
+    v_normal            = normalMatrix * a_normal;
+    v_tangent           = normalMatrix * a_tangent;
+    v_texcoord          = a_texcoord;
+    v_fragPosLightSpace = u_lightSpaceMatrix * worldPos;
+    gl_Position         = u_viewProjection * worldPos;
+}
+)glsl";
+
+// --- Instanced PBR vertex shader ---
+// Same as Blinn-Phong instanced but paired with the PBR fragment shader.
+// The vertex outputs are identical — only the fragment shader differs.
+
+static const char* const MESH_PBR_INSTANCED_VERT_SOURCE = R"glsl(
+#version 330 core
+
+layout(location = 0) in vec3 a_position;
+layout(location = 1) in vec3 a_normal;
+layout(location = 2) in vec2 a_texcoord;
+layout(location = 3) in vec3 a_tangent;
+
+// Per-instance model matrix (4 vec4 columns at locations 8-11)
+layout(location = 8)  in vec4 a_instanceModel0;
+layout(location = 9)  in vec4 a_instanceModel1;
+layout(location = 10) in vec4 a_instanceModel2;
+layout(location = 11) in vec4 a_instanceModel3;
+
+uniform mat4 u_viewProjection;
+uniform mat4 u_lightSpaceMatrix;
+
+out vec3 v_fragPos;
+out vec3 v_normal;
+out vec2 v_texcoord;
+out vec4 v_fragPosLightSpace;
+out vec3 v_tangent;
+
+void main() {
+    mat4 model = mat4(a_instanceModel0, a_instanceModel1,
+                      a_instanceModel2, a_instanceModel3);
+    mat3 normalMatrix = transpose(inverse(mat3(model)));
+
+    vec4 worldPos       = model * vec4(a_position, 1.0);
+    v_fragPos           = worldPos.xyz;
+    v_normal            = normalMatrix * a_normal;
+    v_tangent           = normalMatrix * a_tangent;
+    v_texcoord          = a_texcoord;
+    v_fragPosLightSpace = u_lightSpaceMatrix * worldPos;
+    gl_Position         = u_viewProjection * worldPos;
+}
+)glsl";
+
+// --- Instanced shadow depth vertex shader ---
+// Depth-only pass with per-instance model matrix.
+
+static const char* const SHADOW_DEPTH_INSTANCED_VERT_SOURCE = R"glsl(
+#version 330 core
+
+layout(location = 0) in vec3 a_position;
+
+// Per-instance model matrix (4 vec4 columns at locations 8-11)
+layout(location = 8)  in vec4 a_instanceModel0;
+layout(location = 9)  in vec4 a_instanceModel1;
+layout(location = 10) in vec4 a_instanceModel2;
+layout(location = 11) in vec4 a_instanceModel3;
+
+uniform mat4 u_lightSpaceMatrix;
+
+void main() {
+    mat4 model = mat4(a_instanceModel0, a_instanceModel1,
+                      a_instanceModel2, a_instanceModel3);
+    gl_Position = u_lightSpaceMatrix * model * vec4(a_position, 1.0);
+}
+)glsl";
+
 // --- Post-processing: fullscreen triangle vertex shader ---
 // Generates a fullscreen triangle from gl_VertexID (0, 1, 2).
 // No VBO needed — just bind an empty VAO and glDrawArrays(GL_TRIANGLES, 0, 3).
@@ -925,6 +1032,9 @@ static const ShaderPair PAIRS[] = {
     { FULLSCREEN_VERT_SOURCE,          POST_THRESHOLD_FRAG_SOURCE,      "post_threshold"        },
     { FULLSCREEN_VERT_SOURCE,          POST_BLUR_FRAG_SOURCE,           "post_blur"             },
     { FULLSCREEN_VERT_SOURCE,          POST_FINAL_FRAG_SOURCE,          "post_final"            },
+    { MESH_BLINN_PHONG_INSTANCED_VERT_SOURCE, MESH_BLINN_PHONG_FRAG_SOURCE, "mesh_blinn_phong_instanced" },
+    { MESH_PBR_INSTANCED_VERT_SOURCE,  MESH_PBR_FRAG_SOURCE,            "mesh_pbr_instanced"    },
+    { SHADOW_DEPTH_INSTANCED_VERT_SOURCE, SHADOW_DEPTH_FRAG_SOURCE,     "shadow_depth_instanced"},
 };
 static_assert(sizeof(PAIRS) / sizeof(PAIRS[0]) == static_cast<u32>(BuiltinShader::COUNT));
 

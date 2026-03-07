@@ -291,6 +291,9 @@ Result Application::initSubsystemsInternal() {
     // only active when a PostProcessConfig is placed in the ECS context.
     renderer::initPostProcessing(m_config.windowWidth, m_config.windowHeight);
 
+    // 5b3. Initialize GPU instancing (shared instance VBO for batched mesh draws).
+    renderer::initInstancing();
+
     // 5c. Initialize sprite batch
     renderer::initSpriteBatch(m_spriteBatch,
         renderer::getShader(m_shaderLibrary, renderer::BuiltinShader::SPRITE));
@@ -606,6 +609,9 @@ void Application::shutdown() {
 
     // 5c. Shutdown sprite batch
     renderer::shutdownSpriteBatch(m_spriteBatch);
+
+    // 5b3. Shutdown GPU instancing (shared instance VBO)
+    renderer::shutdownInstancing();
 
     // 5b2. Shutdown post-processing pipeline (before shader library — shaders still valid)
     renderer::shutdownPostProcessing();

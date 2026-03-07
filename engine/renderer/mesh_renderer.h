@@ -108,4 +108,16 @@ void meshRenderSystem(World& world, const Camera& camera3d,
                       const ShadowConfig& shadowCfg, const ShadowMap& shadowMap,
                       const FogParams& fog = FogParams{});
 
+// --- GPU Instancing ---
+// Initialise the shared instance VBO (64 KB, GL_STREAM_DRAW).
+// Call once after GL context is available. No-op in headless mode.
+void initInstancing();
+
+// Destroy the shared instance VBO. Called from Application::shutdown().
+void shutdownInstancing();
+
+// Count how many entities in the world share the given MeshHandle.
+// Used by the ffe.getInstanceCount Lua binding for debugging.
+u32 getInstanceCount(World& world, u32 meshHandleId);
+
 } // namespace ffe::renderer
