@@ -3,6 +3,58 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 94: Docs & Process — README, Website, Screenshot Pipeline
+
+### Summary
+
+Session 94 focused on documentation, process reform, and screenshot tooling. Reformed the game-dev-tester role from reviewer to demo author; api-designer now owns README.md and website/ docs. Built a screenshot pipeline using Xvfb + Mesa llvmpipe for headless OpenGL rendering, capturing all 8 demos to docs/screenshots/. Updated README.md with Phase 8-9 status (terrain, Vulkan, post-processing), 1282 tests, ~198 bindings. Updated website docs (index, showcase, getting-started, renderer API reference) with new features and screenshots. Fixed stale binding names in architecture-map.md (fog, AA, SSAO, instancing, PBR). Updated environment.md with screenshot tooling documentation. No new tests — docs-only session.
+
+### Delivered
+
+- **Process Reform** -- game-dev-tester changed from reviewer to demo author; api-designer now owns README.md and website/ docs
+- **Screenshot Pipeline** -- tools/take_screenshot.sh (Xvfb + Mesa llvmpipe, headless OpenGL), tools/capture_all_screenshots.sh (all 8 demos)
+- **Screenshots Captured** -- 8 demos: hello_sprites, lua_demo, interactive_demo, pong, breakout, 3d_demo, showcase, showcase_runtime
+- **README.md Update** -- Phase 8-9 status, terrain system, Vulkan backend, post-processing stack, 1282 tests, ~198 bindings
+- **Website Updates** -- index.md, showcase.md, getting-started.md, api/renderer.md with new features and screenshots
+- **Architecture-Map Fixes** -- Corrected stale binding names (fog, AA, SSAO, instancing, PBR)
+- **Environment Docs** -- Screenshot tooling documentation added to docs/environment.md
+
+### Files Created (8)
+
+- `tools/take_screenshot.sh`
+- `tools/capture_all_screenshots.sh`
+- `docs/screenshots/hello_sprites.png`
+- `docs/screenshots/interactive_demo.png`
+- `docs/screenshots/lua_demo.png`
+- `docs/screenshots/pong.png`
+- `docs/screenshots/showcase.png`
+- `docs/screenshots/showcase_runtime.png`
+
+### Files Modified (9)
+
+- `.claude/CLAUDE.md` (process reform)
+- `.claude/agents/game-dev-tester.md` (role change)
+- `README.md` (Phase 8-9, screenshots, stats)
+- `docs/architecture-map.md` (binding name fixes)
+- `docs/environment.md` (screenshot tooling)
+- `docs/screenshots/3d_demo.png` (recaptured)
+- `docs/screenshots/breakout.png` (recaptured)
+- `website/docs/api/renderer.md` (new features)
+- `website/docs/community/showcase.md` (screenshots)
+- `website/docs/getting-started.md` (updates)
+- `website/docs/index.md` (updates)
+
+### Reviews
+
+- No code reviews required (docs-only session)
+
+### Build
+
+- No build required (docs-only session)
+- 1282 tests unchanged
+
+---
+
 ## 2026-03-07 — Session 93: Showcase Visual Overhaul — "Echoes of the Ancients"
 
 ### Summary

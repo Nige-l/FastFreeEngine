@@ -6,7 +6,7 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 93 |
+| Last session | 94 |
 | Total tests | 1282 (Clang-18, zero warnings) |
 | Total Lua bindings | ~198 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
@@ -44,11 +44,11 @@
 
 | Session | Summary |
 |---------|---------|
+| 94 | Docs & Process — README/website update (Phase 8-9, terrain, Vulkan, post-processing), screenshot pipeline (Xvfb + Mesa llvmpipe, 8 demos captured), process reform (game-dev-tester→demo author, api-designer owns docs), architecture-map binding fixes. 1282 tests (no new tests — docs only). |
 | 93 | Showcase Visual Overhaul — heightmap terrain (Levels 1 & 3), HDR bloom + ACES tone mapping, SSAO, FXAA, per-level atmospheric lighting and fog, terrain-aware gameplay, Python heightmap generator. 1282 tests (no new tests — showcase-only). |
 | 92 | Phase 9 M3: Terrain LOD + Frustum Culling — 3-level LOD per chunk (full/half/quarter), distance-based selection, reusable frustum culling (Griess-Hartmann, p-vertex AABB), 1 Lua binding, 13 new tests. 1282 tests (FAST). |
 | 91 | Phase 9 M2: Terrain Texturing — RGBA splat map blending (4 texture layers), triplanar projection for steep surfaces, TERRAIN shader (GLSL 330, Blinn-Phong+shadow+fog), TerrainMaterial struct, 3 Lua bindings, 16 new tests. 1269 tests (FAST). |
 | 90 | Phase 9 M1: Heightmap Terrain Rendering — chunked heightmap terrain (raw float + PNG loading), configurable chunk resolution, bilinear height queries, terrain renderer (Blinn-Phong, shadows, fog), 4 Lua bindings, 18 new tests. 1252 tests (FAST). |
-| 89 | Phase 8 M5 (PHASE CLOSE): Vulkan depth buffer + build-time SPIR-V — depth attachment (VMA, format selection), pipeline depth state, CMake glslc pipeline, embed_spirv.cmake, 6 GLSL 450 shaders, Blinn-Phong lighting. 10 new tests. FULL build: 1234 tests. Phase 8 COMPLETE. |
 
 ## Phase 8 — Vulkan Backend (COMPLETE, Sessions 85-89)
 
