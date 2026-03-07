@@ -14,6 +14,7 @@ local STATE_PLAYING        = "PLAYING"
 local STATE_PAUSED         = "PAUSED"
 local STATE_LEVEL_COMPLETE = "LEVEL_COMPLETE"
 local STATE_GAME_OVER      = "GAME_OVER"
+local STATE_VICTORY        = "VICTORY"
 
 local gameState    = STATE_PLAYING  -- skip menu for prototype
 local currentLevel = 0              -- 0 = not loaded yet
@@ -22,13 +23,18 @@ local artifactCount    = 0
 local totalArtifacts   = 1          -- per level
 local levelCompleteTimer = 0
 
+-- Victory tracking: cumulative stats across all 3 levels
+local totalArtifactsAll  = 0   -- total artifacts collected across all levels
+local totalPlayTime      = 0   -- seconds of active play time
+local victoryScreenTimer = 0   -- animation timer for congratulations screen
+
 --------------------------------------------------------------------
 -- Level registry — maps level number to its loader script path
 --------------------------------------------------------------------
 local LEVELS = {
     [1] = "levels/level1.lua",
     [2] = "levels/level2.lua",
-    -- [3] = "levels/level3.lua",   -- M4: The Summit
+    [3] = "levels/level3.lua",
 }
 
 local LEVEL_NAMES = {
@@ -115,8 +121,10 @@ end
 --------------------------------------------------------------------
 function collectArtifact()
     artifactCount = artifactCount + 1
+    totalArtifactsAll = totalArtifactsAll + 1
     ffe.log("[Showcase] Artifact collected: " .. tostring(artifactCount)
-        .. "/" .. tostring(totalArtifacts))
+        .. "/" .. tostring(totalArtifacts)
+        .. " (total: " .. tostring(totalArtifactsAll) .. ")")
     if artifactCount >= totalArtifacts then
         gameState = STATE_LEVEL_COMPLETE
         levelCompleteTimer = 0
@@ -175,6 +183,9 @@ function update(entityId, dt)
 
     -- State machine
     if gameState == STATE_PLAYING then
+        -- Track play time
+        totalPlayTime = totalPlayTime + dt
+
         -- Update game systems
         if Player then Player.update(dt) end
         if Camera then Camera.update(dt) end
@@ -192,9 +203,19 @@ function update(entityId, dt)
                 levelCompleteTimer = 0
                 loadLevel(currentLevel + 1)
             else
+                -- All 3 levels complete! Transition to victory screen
                 ffe.log("[Showcase] All levels complete! Congratulations!")
-                gameState = STATE_MENU
+                gameState = STATE_VICTORY
+                victoryScreenTimer = 0
+                ffe.stopMusic()
             end
+        end
+
+    elseif gameState == STATE_VICTORY then
+        victoryScreenTimer = victoryScreenTimer + dt
+        -- ESC or ENTER after viewing victory screen to quit
+        if ffe.isKeyPressed(ffe.KEY_ENTER) and victoryScreenTimer > 2.0 then
+            ffe.requestShutdown()
         end
 
     elseif gameState == STATE_GAME_OVER then
@@ -233,9 +254,50 @@ function update(entityId, dt)
         if currentLevel < totalLevels and LEVELS[currentLevel + 1] then
             ffe.drawText("Press ENTER to continue", sw / 2 - 180, sh / 2 + 10, 3, 0.8, 0.8, 0.8, 1)
         else
-            ffe.drawText("CONGRATULATIONS! You have completed", sw / 2 - 280, sh / 2, 3, 1, 0.9, 0.3, 1)
-            ffe.drawText("Echoes of the Ancients!", sw / 2 - 180, sh / 2 + 26, 3, 0.9, 0.75, 0.4, 1)
+            ffe.drawText("Press ENTER to see your results!", sw / 2 - 250, sh / 2 + 10, 3, 1, 0.9, 0.3, 1)
         end
+    elseif gameState == STATE_VICTORY then
+        -- Full-screen congratulations overlay
+        ffe.drawRect(0, 0, sw, sh, 0.05, 0.02, 0.08, 0.9)
+
+        -- Animated gold title with pulsing brightness
+        local pulse = 0.8 + 0.2 * math.sin(victoryScreenTimer * 2.5)
+        ffe.drawText("CONGRATULATIONS!", sw / 2 - 220, sh / 4 - 20, 5, pulse, pulse * 0.85, pulse * 0.3, 1)
+
+        -- Subtitle
+        ffe.drawText("You have completed", sw / 2 - 180, sh / 4 + 40, 3, 0.8, 0.7, 0.5, 1)
+        ffe.drawText("Echoes of the Ancients", sw / 2 - 200, sh / 4 + 70, 4, 0.9, 0.75, 0.4, 1)
+
+        -- Stats panel
+        local statsY = sh / 2 + 10
+        ffe.drawRect(sw / 4, statsY - 10, sw / 2, 130, 0.1, 0.05, 0.12, 0.7)
+
+        ffe.drawText("FINAL STATS", sw / 2 - 88, statsY, 3, 1, 0.9, 0.5, 1)
+
+        -- Total artifacts
+        local artifactStr = "Artifacts Collected: " .. tostring(totalArtifactsAll) .. " / " .. tostring(totalLevels)
+        ffe.drawText(artifactStr, sw / 2 - (#artifactStr * 8), statsY + 30, 2, 0.9, 0.85, 0.7, 1)
+
+        -- Play time (formatted as M:SS)
+        local totalMins = math.floor(totalPlayTime / 60)
+        local totalSecs = math.floor(totalPlayTime % 60)
+        local timeStr = "Play Time: " .. tostring(totalMins) .. ":" .. string.format("%02d", totalSecs)
+        ffe.drawText(timeStr, sw / 2 - (#timeStr * 8), statsY + 55, 2, 0.9, 0.85, 0.7, 1)
+
+        -- Levels completed
+        local levelStr = "Levels Completed: " .. tostring(totalLevels) .. " / " .. tostring(totalLevels)
+        ffe.drawText(levelStr, sw / 2 - (#levelStr * 8), statsY + 80, 2, 0.9, 0.85, 0.7, 1)
+
+        -- Prompt to exit
+        if victoryScreenTimer > 2.0 then
+            local blink = math.sin(victoryScreenTimer * 3) > 0
+            if blink then
+                ffe.drawText("Press ENTER to exit", sw / 2 - 152, sh - 80, 3, 0.7, 0.6, 0.4, 1)
+            end
+        end
+
+        -- Credits line
+        ffe.drawText("Built with FastFreeEngine", sw / 2 - 200, sh - 40, 2, 0.4, 0.3, 0.5, 1)
     elseif gameState == STATE_GAME_OVER then
         ffe.drawRect(0, sh / 2 - 50, sw, 100, 0, 0, 0, 0.7)
         ffe.drawText("GAME OVER", sw / 2 - 100, sh / 2 - 30, 4, 1, 0.2, 0.2, 1)
