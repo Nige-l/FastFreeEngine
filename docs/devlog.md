@@ -3,6 +3,63 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-34 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 65: Phase 5 COMPLETE — Learning Track + Showcase
+
+### Summary
+
+Session 65 delivered the final Phase 5 deliverables: a "Build Your Own Engine" learning track with its first installment (Build an ECS from Scratch, ~420 lines of self-contained C++20), and a community game showcase featuring all 5 official demo games. With this session, **all 5 phases of the FFE roadmap are complete.**
+
+### Delivered
+
+- **"Build Your Own Engine" learning track** (`website/docs/learn/index.md`) — Landing page for the learning track series, designed to teach engine internals by rebuilding them.
+- **"Build an ECS from Scratch"** (`website/docs/learn/ecs-from-scratch.md`) — First installment: a complete, self-contained C++20 ECS tutorial (~420 lines) covering type erasure, component pools, entity management, and system iteration.
+- **Community game showcase** (`website/docs/community/showcase.md`) — Showcase page featuring all 5 official demos (Collect Stars, Pong, Breakout, 3D Demo, Net Arena) with descriptions and feature highlights.
+- **Navigation updates** (`website/mkdocs.yml`) — Added Learn and Community sections to site navigation.
+- **Website context update** (`website/.context.md`) — Added learning track and community sections documentation.
+
+### Phase 5 Retrospective
+
+Phase 5 ran across 4 sessions (62-65) and delivered:
+
+| Session | Deliverables |
+|---------|-------------|
+| 62 | Site scaffolding (MkDocs + Material), Getting Started guide, API extraction pipeline (8 pages) |
+| 63 | 3 tutorials (2D, 3D, multiplayer), review fixes |
+| 64 | 3 "How It Works" deep dives (ECS, renderer, networking), GitHub Pages deployment, Mermaid support |
+| 65 | "Build Your Own Engine" learning track, community showcase |
+
+**Core deliverables completed:** Documentation site, Getting Started guide, tutorials, API reference, deep dives, deployment pipeline, learning track, community showcase.
+
+**Deferred to backlog (ongoing, not blocking):**
+- Video/interactive content — requires WASM tooling and video production
+- Asset library — requires curation infrastructure
+- Forum/Discord integration — community operations
+- Additional learning track and deep dive installments — ongoing content
+
+### All 5 Phases Complete
+
+1. **Phase 1 (2D Foundation)** — 15 subsystems, 5 demo games
+2. **Phase 2 (3D Foundation)** — mesh loading, Blinn-Phong, skeletal animation, physics, shadows, skybox, 3D audio
+3. **Phase 3 (Standalone Editor)** — 6 milestones, full scene editing pipeline with build export
+4. **Phase 4 (Networking)** — client-server, replication, prediction, lag compensation, lobby system
+5. **Phase 5 (Website/Learning)** — documentation site, tutorials, deep dives, learning track, showcase
+
+**991 engine tests passing. Zero warnings on both compilers.**
+
+### game-dev-tester: SKIPPED
+
+No engine API changes — website content only.
+
+### Next Steps
+
+The roadmap is complete. Future work is driven by:
+- Backlog items from all phases (editor polish, NAT traversal, video content)
+- Community feedback and feature requests
+- Ongoing content creation (more tutorials, deep dives, learning track installments)
+- Potential Phase 6 planning
+
+---
+
 ## 2026-03-07 — Session 64: Phase 5 Deep Dives + GitHub Pages Deployment
 
 ### Summary

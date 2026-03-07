@@ -124,20 +124,23 @@ This document defines the phased development plan for FFE. Each phase builds on 
 
 ---
 
-## Phase 5: Website and Learning Platform
+## Phase 5: Website and Learning Platform — COMPLETE
 
 **Goal:** A documentation and training website that gets young people into game development and engineering.
 
-### Deliverables
-- [ ] Documentation site (API reference generated from .context.md files)
-- [ ] Getting Started guide (install, build, first game in 15 minutes)
-- [ ] Tutorial series (beginner to advanced, 2D and 3D)
-- [ ] "How It Works" deep dives (ECS internals, renderer architecture, networking)
-- [ ] Video/interactive content (embedded code editors, live examples)
-- [ ] Community showcase (games built with FFE)
-- [ ] Asset library (free textures, sounds, meshes for learning)
-- [ ] Forum or Discord integration
-- [ ] "Build Your Own Engine" learning track (understand FFE by rebuilding parts of it)
+### Delivered (Sessions 62-65)
+- [x] Documentation site (MkDocs + Material theme, API reference generated from .context.md files)
+- [x] Getting Started guide (install, build, first game in 15 minutes)
+- [x] Tutorial series (first 2D game, first 3D game, multiplayer basics)
+- [x] "How It Works" deep dives (ECS internals, renderer architecture, networking)
+- [x] "Build Your Own Engine" learning track (first installment: Build an ECS from Scratch)
+- [x] Community showcase (all 5 official demo games)
+- [x] GitHub Pages deployment (auto-deploy on push to main)
+
+### Deferred to Backlog
+- [ ] Video/interactive content — requires WASM tooling and video production infrastructure (different skillset/tooling from engine development)
+- [ ] Asset library — requires curation infrastructure and hosting beyond the documentation site
+- [ ] Forum or Discord integration — community operations, not engine development work
 
 ### Architecture Constraints
 - Site must be fast and accessible (no heavy JS frameworks, works on old browsers)

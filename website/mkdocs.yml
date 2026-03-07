@@ -73,4 +73,9 @@ nav:
     - "Entity Component System": internals/ecs.md
     - "The Renderer": internals/renderer.md
     - "Multiplayer Networking": internals/networking.md
-  - Community: community.md
+  - Learn:
+    - learn/index.md
+    - "Build an ECS from Scratch": learn/ecs-from-scratch.md
+  - Community:
+    - community.md
+    - "Game Showcase": community/showcase.md
