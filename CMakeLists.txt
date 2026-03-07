@@ -8,18 +8,15 @@ if(DEFINED ENV{VCPKG_ROOT} AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
 endif()
 
 # vcpkg overlay ports — must be set before project() so vcpkg install picks them up.
-# The luajit overlay fixes cross-compilation for Windows/MinGW by rebuilding buildvm
-# with PE object support (the upstream vcpkg luajit host package only provides an
-# ELF-mode buildvm that cannot generate Windows PE objects).
+# The luajit overlay shadows the upstream vcpkg luajit port for ALL platforms.
 #
-# IMPORTANT: The overlay completely shadows the upstream vcpkg luajit port for ALL
-# platforms. It must ONLY be activated for MinGW cross-compilation — macOS and native
-# Linux must use the upstream port. VCPKG_TARGET_TRIPLET is set via -D on the command
-# line for cross-builds; if it contains "mingw", we need the overlay.
-if(DEFINED VCPKG_TARGET_TRIPLET AND VCPKG_TARGET_TRIPLET MATCHES "mingw")
-    set(VCPKG_OVERLAY_PORTS "${CMAKE_CURRENT_SOURCE_DIR}/cmake/vcpkg-overlays/ports"
-        CACHE STRING "vcpkg overlay ports directory")
-endif()
+# Why always-on: The upstream vcpkg luajit port has a build failure on arm64-osx
+# (the make command in portfile.cmake:87 fails). Our overlay fixes this and also
+# provides the Windows/MinGW PE buildvm cross-compilation support. The overlay's
+# native build path (Linux, macOS) is functionally identical to upstream — it just
+# uses our patched configure script and the MACOSX_DEPLOYMENT_TARGET fix.
+set(VCPKG_OVERLAY_PORTS "${CMAKE_CURRENT_SOURCE_DIR}/cmake/vcpkg-overlays/ports"
+    CACHE STRING "vcpkg overlay ports directory")
 
 project(FastFreeEngine
     VERSION 0.1.0

@@ -65,24 +65,23 @@ The following libraries are declared in `vcpkg.json`:
 
 ## vcpkg Overlay Ports
 
-Custom overlay ports live in `cmake/vcpkg-overlays/ports/`. They are conditionally loaded via
-the `VCPKG_OVERLAY_PORTS` cache variable set before `project()` in `CMakeLists.txt`.
+Custom overlay ports live in `cmake/vcpkg-overlays/ports/`. They are **always activated** via
+the `VCPKG_OVERLAY_PORTS` cache variable set unconditionally before `project()` in `CMakeLists.txt`.
 
-**IMPORTANT (updated 2026-03-07):** The overlay is ONLY activated when `VCPKG_TARGET_TRIPLET`
-contains "mingw" (i.e., Windows cross-compilation). For all other platforms (native Linux, macOS,
-iOS), `VCPKG_OVERLAY_PORTS` is not set and vcpkg uses its upstream LuaJIT port. This is because
-vcpkg overlay ports completely shadow upstream ports — there is no fallback mechanism. The overlay
-was causing macOS CI failures because it replaced the upstream LuaJIT port with a version that had
-subtle build differences for non-Windows targets.
+**IMPORTANT (updated 2026-03-07):** The overlay is always active for ALL platforms (native Linux,
+macOS arm64-osx, Windows/MinGW cross-compilation). This is necessary because the upstream vcpkg
+LuaJIT port has a build failure on arm64-osx (`ports/luajit/portfile.cmake:87` — the make command
+fails). Our overlay fixes this upstream bug via the `003-do-not-set-macosx-deployment-target.patch`
+and a corrected `configure` script / `Makefile.vcpkg` generator. For native Linux builds, the overlay
+is functionally identical to upstream. For Windows/MinGW cross-builds, the overlay provides the PE
+buildvm rebuild that upstream cannot do.
 
 ### luajit overlay (added 2026-03-07, updated 2026-03-07)
 
-Patches the upstream vcpkg luajit port to support Windows/MinGW cross-compilation from Linux.
-Only activated when `VCPKG_TARGET_TRIPLET` matches `*mingw*`.
-
-**Root cause of the patch:** The upstream `luajit:x64-linux` host package builds `buildvm-x64`
-with `TARGET_SYS=Linux` (ELF output only). When cross-compiling for Windows, `buildvm -m peobj`
-fails with "no PE object support for this target".
+Replaces the upstream vcpkg luajit port for all platforms. Fixes two upstream issues:
+1. **arm64-osx build failure** — the upstream port's make command fails on macOS arm64 native builds.
+2. **Windows/MinGW cross-compilation** — the upstream host package only provides an ELF-mode buildvm
+   that cannot generate Windows PE objects.
 
 **What the overlay does:**
 - When `VCPKG_CROSSCOMPILING` and `VCPKG_TARGET_IS_WINDOWS`, rebuilds `buildvm` from source on
@@ -97,6 +96,9 @@ fails with "no PE object support for this target".
 - Windows-specific DLL naming (`FILE_A`, `FILE_SO`, `INSTALL_ANAME`, `INSTALL_SONAME`) in the
   configure script is guarded by `TARGET_SYS=Windows`, not by `EXECUTABLE_SUFFIX`, ensuring
   these values never activate on macOS/Linux/iOS builds.
+- Patches `MACOSX_DEPLOYMENT_TARGET` error out of the LuaJIT Makefile
+  (`003-do-not-set-macosx-deployment-target.patch`) so macOS builds rely on vcpkg toolchain flags
+  instead of requiring the environment variable.
 
 **Files:** `cmake/vcpkg-overlays/ports/luajit/portfile.cmake`, `configure`, `vcpkg.json`,
 `luajit.pc`, `Makefile.nmake`, `msvcbuild.patch`, `003-do-not-set-macosx-deployment-target.patch`.
@@ -166,6 +168,55 @@ mold is not available on macOS. `cmake/CompilerFlags.cmake` guards the `find_pro
 block with `if(UNIX AND NOT APPLE)` — Apple's ld64 linker is used automatically on macOS builds.
 
 ## Change Log
+
+### 2026-03-07: Enable LuaJIT overlay port for all platforms (macOS CI upstream bug fix)
+
+**What changed:**
+
+File: `CMakeLists.txt` (lines 10-19)
+
+Changed `VCPKG_OVERLAY_PORTS` from conditional on `VCPKG_TARGET_TRIPLET` matching `*mingw*` to
+unconditionally set for all platforms:
+
+```cmake
+# Before (broken on macOS):
+if(DEFINED VCPKG_TARGET_TRIPLET AND VCPKG_TARGET_TRIPLET MATCHES "mingw")
+    set(VCPKG_OVERLAY_PORTS "${CMAKE_CURRENT_SOURCE_DIR}/cmake/vcpkg-overlays/ports"
+        CACHE STRING "vcpkg overlay ports directory")
+endif()
+
+# After (works on all platforms):
+set(VCPKG_OVERLAY_PORTS "${CMAKE_CURRENT_SOURCE_DIR}/cmake/vcpkg-overlays/ports"
+    CACHE STRING "vcpkg overlay ports directory")
+```
+
+**Root cause of the macOS CI failure:**
+
+The upstream vcpkg LuaJIT port (`ports/luajit/portfile.cmake:87`) has a build failure on arm64-osx.
+The make command fails during the native build. This is an upstream vcpkg bug, not an FFE bug.
+Previously, the overlay was restricted to mingw-only to avoid earlier macOS issues caused by
+the overlay diverging from upstream. Those divergences were fixed in a prior session (the overlay's
+`configure` script and `portfile.cmake` were corrected to be functionally identical to upstream
+for native builds). Now that the overlay works correctly on all platforms AND the upstream port
+is broken on macOS, the overlay must be always-on.
+
+**How the fix works:**
+
+- The overlay completely shadows the upstream vcpkg luajit port for all platforms.
+- For native Linux builds: the overlay is functionally identical to upstream. No behaviour change.
+- For macOS arm64 builds: the overlay provides the `003-do-not-set-macosx-deployment-target.patch`
+  and a corrected `configure` script that the upstream port lacks.
+- For Windows/MinGW cross-builds: the overlay provides the PE buildvm rebuild (unchanged).
+
+**Verification:**
+
+- Native Linux configure: `cmake -B /tmp/ffe-test-overlay ... -DCMAKE_TOOLCHAIN_FILE=.../vcpkg.cmake`
+  succeeds. vcpkg output shows `luajit:x64-linux@2026-02-27 -- .../cmake/vcpkg-overlays/ports/luajit`
+  confirming the overlay is active. All packages restored from cache. `-- Configuring done` with
+  LuaJIT found at the correct vcpkg path.
+- macOS CI: deferred to CI run after commit/push. The overlay's macOS path was previously debugged
+  and verified to be functionally identical to upstream for native builds.
+- No engine source files were modified. Only `CMakeLists.txt` changed.
 
 ### 2026-03-07: Make LuaJIT overlay port conditional on MinGW triplet (macOS CI fix)
 

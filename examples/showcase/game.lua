@@ -27,7 +27,7 @@ local levelCompleteTimer = 0
 --------------------------------------------------------------------
 local LEVELS = {
     [1] = "levels/level1.lua",
-    -- [2] = "levels/level2.lua",   -- M3: The Temple
+    [2] = "levels/level2.lua",
     -- [3] = "levels/level3.lua",   -- M4: The Summit
 }
 
