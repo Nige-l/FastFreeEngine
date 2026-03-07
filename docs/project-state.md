@@ -6,7 +6,7 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 75 |
+| Last session | 76 |
 | Total tests | 1052 (FAST build: Clang-18, zero warnings) |
 | Total Lua bindings | ~172 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
@@ -42,11 +42,11 @@
 
 | Session | Summary |
 |---------|---------|
+| 76 | Engine fix: framebuffer resize callback (stale screen dimensions), showcase halfExtents 2x mismatch fix, BattleMusic, director process reform. game-dev-tester SHIP 8/10. 1052 tests (FAST). |
 | 75 | Showcase demo 7 bugs fixed, 3 new Lua bindings (getMouseDeltaX/Y, setCursorCaptured), game-dev-tester process reformed (now mandatory for demo changes), director review. 1052 tests (FAST). |
 | 74 | Phase 7 M1: PBR Materials (Cook-Torrance BRDF, metallic-roughness, IBL via skybox cubemap), fog system, 41 new tests. 1046 tests (FAST). |
 | 73 | Phase 6 COMPLETE. Phase 7 ADR approved (PBR, post-processing, instancing, skeletal anim, AA, SSAO). README + ROADMAP updated. No C++ changes. |
 | 72 | Phase 6 M4b: Polish pass -- main menu, pause menu, victory particles/rank, gamepad dead-zones, dynamic HUD labels. 1005 tests (FAST). |
-| 71 | Phase 6 M4: Level 3 "The Summit" (floating platforms, moving platforms, sunset lighting, 4 guardians + boss, victory sequence with stats). 1005 tests (FAST). |
 
 ## Phase 7 — Rendering Pipeline Modernisation (IN PROGRESS)
 
@@ -54,14 +54,14 @@
 
 ### Milestones
 
-- [x] M1 (Sessions 74-75): PBR Materials -- PBRMaterial component, Cook-Torrance BRDF shader, IBL, Lua bindings, tests. Session 75: showcase bug fixes + process reform.
-- [ ] M2 (Sessions 76-77): Post-Processing -- HDR FBO chain, bloom, tone mapping, gamma correction
-- [ ] M3 (Sessions 78-79): GPU Instancing -- instance buffers, automatic batching, 1000-instance benchmark
-- [ ] M4 (Sessions 80-81): Skeletal Animation Completion -- crossfade blending, interpolation modes, root motion
-- [ ] M5 (Session 82): Anti-Aliasing -- MSAA + FXAA
-- [ ] M6 (Session 83): SSAO (STANDARD+ tier only)
-- [ ] M7 (Session 84): Sprite Batching 2.0 -- texture array batching
-- [ ] M8 (Session 85): Phase Close -- FULL build, profiling, documentation sweep
+- [x] M1 (Sessions 74-76): PBR Materials -- PBRMaterial component, Cook-Torrance BRDF shader, IBL, Lua bindings, tests. Sessions 75-76: showcase bug fixes, engine framebuffer resize fix, process reform.
+- [ ] M2 (Sessions 77-78): Post-Processing -- HDR FBO chain, bloom, tone mapping, gamma correction
+- [ ] M3 (Sessions 79-80): GPU Instancing -- instance buffers, automatic batching, 1000-instance benchmark
+- [ ] M4 (Sessions 81-82): Skeletal Animation Completion -- crossfade blending, interpolation modes, root motion
+- [ ] M5 (Session 83): Anti-Aliasing -- MSAA + FXAA
+- [ ] M6 (Session 84): SSAO (STANDARD+ tier only)
+- [ ] M7 (Session 85): Sprite Batching 2.0 -- texture array batching
+- [ ] M8 (Session 86): Phase Close -- FULL build, profiling, documentation sweep
 
 ## Build Commands
 

@@ -3,6 +3,46 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 76: Engine Framebuffer Resize Fix + Showcase Physics/Visual Scale Match
+
+### Summary
+
+Session 76 fixed an engine-level bug (missing framebuffer resize callback causing stale screen dimensions) and corrected physics/visual scale mismatches in all 3 showcase levels. Music updated to BattleMusic.mp3 for all levels. Director process reform files committed. Performance-critic: PASS. game-dev-tester: SHIP 8/10. FAST build: 1052 tests, zero warnings.
+
+### Planned
+
+- Fix framebuffer resize callback (engine bug found by renderer-specialist)
+- Fix physics halfExtents 2x mismatch in showcase levels
+- Update music to BattleMusic.mp3
+- Commit director process reform files from Session 75
+
+### Delivered
+
+- **Engine framebuffer resize callback** -- renderer-specialist discovered missing `glfwSetFramebufferSizeCallback`, causing `getScreenWidth`/`getScreenHeight` to return stale values after window resize. Added `glfwFramebufferSizeCallback`, `rhi::setViewportSize`, and `Application::onFramebufferResize`. Fixes text clipping and layout bugs at non-default resolutions.
+- **Physics halfExtents fix** -- All 3 showcase levels had physics bodies with halfExtents = 2x visual size (e.g., visual cube size N but physics halfExtent 2N). Corrected to match visual scale in all levels.
+- **BattleMusic** -- All showcase levels now use BattleMusic.mp3 as placeholder music.
+- **Director process reform** -- Committed updated agent files from Session 75: game-dev-tester is now mandatory for all demo/showcase changes (CLAUDE.md, PM, game-dev-tester, director agent files).
+
+### Files Changed
+
+- `engine/core/application.cpp` (MODIFIED -- framebuffer resize callback)
+- `engine/renderer/rhi.h` (MODIFIED -- setViewportSize declaration)
+- `engine/renderer/opengl/rhi_opengl.cpp` (MODIFIED -- setViewportSize implementation)
+- `examples/showcase/` (MODIFIED -- halfExtents fix, BattleMusic in all levels)
+- `.claude/agents/` (MODIFIED -- process reform files)
+
+### Reviews
+
+- performance-critic: PASS
+- security-auditor: SKIPPED (no new attack surface)
+- game-dev-tester: SHIP (8/10)
+
+### Next Session (77)
+
+Phase 7 M2: Post-Processing Pipeline -- HDR FBO chain, bloom, tone mapping, gamma correction.
+
+---
+
 ## 2026-03-07 — Session 75: Showcase Bug Fixes + game-dev-tester Process Reform
 
 ### Summary
