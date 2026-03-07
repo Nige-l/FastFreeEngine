@@ -5,6 +5,7 @@ add_subdirectory(physics)
 add_subdirectory(scripting)
 add_subdirectory(scene)
 add_subdirectory(editor)
+add_subdirectory(networking)
 
 # Umbrella target that links all engine modules.
 #
@@ -17,11 +18,11 @@ add_library(ffe_engine INTERFACE)
 if(APPLE)
     # Apple ld64 is multi-pass — no RESCAN needed, and it is not supported.
     target_link_libraries(ffe_engine INTERFACE
-        ffe_core ffe_renderer ffe_audio ffe_physics ffe_scripting ffe_scene ffe_editor
+        ffe_core ffe_renderer ffe_audio ffe_physics ffe_scripting ffe_scene ffe_editor ffe_networking
     )
 else()
     # GNU ld (Linux, Windows/MinGW) needs RESCAN for circular static lib deps.
     target_link_libraries(ffe_engine INTERFACE
-        "$<LINK_GROUP:RESCAN,ffe_core,ffe_renderer,ffe_audio,ffe_physics,ffe_scripting,ffe_scene,ffe_editor>"
+        "$<LINK_GROUP:RESCAN,ffe_core,ffe_renderer,ffe_audio,ffe_physics,ffe_scripting,ffe_scene,ffe_editor,ffe_networking>"
     )
 endif()

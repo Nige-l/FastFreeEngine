@@ -163,6 +163,23 @@ target_include_directories(ffe_tests_editor
 
 catch_discover_tests(ffe_tests_editor)
 
+# --- Networking tests ---
+# Separate executable because networking tests use ENet (loopback sockets)
+# and init/shutdown global state that must be isolated from other test suites.
+add_executable(ffe_tests_networking
+    test_main.cpp
+    networking/test_packet.cpp
+    networking/test_transport.cpp
+)
+
+target_link_libraries(ffe_tests_networking
+    PRIVATE
+        ffe_networking
+        Catch2::Catch2WithMain
+)
+
+catch_discover_tests(ffe_tests_networking)
+
 # --- Editor exporter tests ---
 # Separate executable for the build/export pipeline tests.
 # Links nlohmann-json for BuildConfig serialisation. Does not link ImGui.
