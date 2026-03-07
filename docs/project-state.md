@@ -6,15 +6,15 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 41 |
-| Total tests | 530 (Clang-18 passing) |
-| Total Lua bindings | ~80 |
+| Last session | 42 |
+| Total tests | 559 (both Clang-18 and GCC-13 passing) |
+| Total Lua bindings | ~83 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
 | Phase 2 (3D Foundation) | COMPLETE |
 | Windows build | DONE (MinGW-w64 cross-compilation) |
 | macOS build | DONE (arm64 + x86_64) |
 | GitHub Actions CI | DONE (Linux Clang-18, Linux GCC-13, macOS arm64) |
-| GCC-13 verification | Pending — run FULL build at start of Session 42 |
+| GCC-13 verification | DONE (559/559 tests, 0 warnings — Session 42) |
 
 ## Engine Subsystems
 
@@ -22,7 +22,7 @@
 |-----------|--------|----------|
 | ECS | Stable | World, createEntity/destroyEntity, function-pointer systems |
 | Renderer (2D) | Stable | OpenGL 3.3, sprite batching (2048/batch), render queue, rotation+flip |
-| Renderer (3D) | Stable | cgltf .glb, Blinn-Phong, Transform3D/Mesh/Material3D, 10 Lua bindings |
+| Renderer (3D) | Stable | cgltf .glb, Blinn-Phong, Transform3D/Mesh/Material3D, set3DCameraFPS/Orbit, setMeshTexture, 13 Lua bindings |
 | Text (bitmap) | Stable | 8x8 bitmap font atlas, drawText, drawRect |
 | Text (TTF) | Stable | stb_truetype, loadFont/drawFontText/measureText, 8 font slots |
 | Sprite Animation | Stable | SpriteAnimation component, grid atlas |
@@ -47,24 +47,24 @@
 
 ## Known Issues / Deferred Items
 
-- GCC-13 FULL build verification pending (Session 42)
 - UNC path (`\\server\share`) blocking on Windows — comment-only, no test env
 - MSVC native build support — deferred (MinGW cross-compile works)
+- set3DCameraFPS lacks NaN/Inf guards (MINOR — set3DCameraOrbit has them; backlog)
 
 ## Recent Sessions (last 5)
 
 | Session | Summary |
 |---------|---------|
+| 42 | 3D camera modes (FPS/orbit), mesh texture binding, process restructuring, 559 tests |
 | 41 | CI fix (vcpkg toolchain, X11 deps), GLAD glReadPixels fix, screenshot tests pass, 530 tests |
 | 40 | macOS arm64+x86_64 build, CI workflow, screenshot tool (blocked by GLAD gap) |
 | 39 | Windows MinGW-w64 cross-compilation, platform.h canonicalizePath, ADS path fix |
 | 38 | 3D Foundation implementation — cgltf, Blinn-Phong, 10 Lua bindings, 519 tests |
-| 37 | Phase 2 architecture — ADR-007 3D Foundation design + security shift-left |
 
-## Next Session (42) Should Start With
+## Next Session (43) Should Start With
 
-- FULL build (Clang-18 + GCC-13) to verify GCC-13 still passes after Sessions 40-41 changes
-- Phase 2 ROADMAP items: `ffe.set3DCameraFPS`, `ffe.set3DCameraOrbit`, `ffe.setMeshTexture`, UV loading, Blinn-Phong texture uniform
+- ROADMAP Phase 2 remaining: materials system (specular maps, normal maps), skeletal animation, 3D physics, skybox, shadow mapping, 3D audio
+- PM to assess priority and select next deliverable at Session 43 start
 
 ## Build Commands
 
@@ -88,8 +88,8 @@ cmake --build build-mingw
 |------|-------|
 | Constitution | `.claude/CLAUDE.md` |
 | Roadmap | `docs/ROADMAP.md` |
-| Devlog (recent) | `docs/devlog.md` (Sessions 36+) |
-| Devlog (archive) | `docs/devlog-archive.md` (Sessions 1-35) |
+| Devlog (recent) | `docs/devlog.md` (Sessions 35+) |
+| Devlog (archive) | `docs/devlog-archive.md` (Sessions 1-34) |
 | Project state | `docs/project-state.md` (this file) |
 | Environment log | `docs/environment.md` |
 | Agent definitions | `.claude/agents/*.md` |

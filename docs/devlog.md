@@ -692,3 +692,80 @@ GCC-13 verification to run at start of Session 42.
 ### Next Session (42): 3D Camera Modes + Diffuse Texture Support
 
 Phase 2 ROADMAP items: `ffe.set3DCameraFPS`, `ffe.set3DCameraOrbit` (perspective camera modes), `ffe.setMeshTexture` (diffuse texture binding for 3D meshes), UV loading from TEXCOORD_0, Blinn-Phong shader texture uniform.
+
+---
+
+## 2026-03-07 — Session 42: 3D Camera Modes + Mesh Texture + Process Review
+
+### Goal
+
+Add FPS and orbit camera convenience bindings, activate diffuse texture support on 3D meshes, and address process concerns raised by the user (devlog size, git commit ownership, agent scope).
+
+### Work Completed
+
+**Feature A: Perspective Camera Modes**
+
+- `ffe.set3DCameraFPS(x, y, z, yaw_deg, pitch_deg)`: position-based FPS camera with pitch clamped to [-89, 89] degrees. Forward vector computed from Euler angles.
+- `ffe.set3DCameraOrbit(target_x, target_y, target_z, radius, yaw_deg, pitch_deg)`: orbits a target point at given radius, pitch clamped to [-85, 85] degrees. Guards: radius > 0, all inputs finite.
+- Both are pure binding-layer functions — no new C++ types, no changes to Application or Camera struct. Math computed in the binding, calls existing `set3DCamera` internally.
+- 3D demo (`examples/3d_demo/game.lua`) updated to use `ffe.set3DCameraOrbit` instead of manual sin/cos.
+
+**Feature B: Diffuse Texture on 3D Meshes**
+
+- `ffe.setMeshTexture(entityId, textureHandle)`: sets `Material3D.diffuseTexture` on an entity. Pass 0 to clear.
+- Architect audit revealed: shader, renderer, Material3D struct, and UV loading ALL already fully implemented — only the Lua binding was missing.
+- TEXCOORD_0 confirmed loaded in mesh_loader.cpp (attribute location 2, vec2 float).
+
+**Process Restructuring (Director Review)**
+
+User raised concerns about devlog reading overhead, git commit ownership confusion, and system-engineer scope creep. Director performed a full process review:
+
+1. **Devlog split**: Created `docs/project-state.md` (95-line living document — agents read this for context). Archived Sessions 1-34 to `docs/devlog-archive.md`. Current devlog trimmed to Sessions 35+.
+2. **Git commit ownership**: PM is sole owner of `git add/commit/push`. Added to CLAUDE.md Section 7 with scenario table. All other agents explicitly prohibited.
+3. **system-engineer scope**: Explicit "You do NOT" list — no full builds, no test suites, no git commits. Diagnostic commands only.
+4. **Stale references fixed**: engine-dev contradictory build line removed, PM/test-engineer updated from 3-phase to 5-phase.
+
+### Expert Panel
+
+| Reviewer | Verdict | Key Finding |
+|----------|---------|-------------|
+| performance-critic | PASS | MINOR: set3DCameraFPS lacks NaN/Inf guards (set3DCameraOrbit has them) |
+| security-auditor | PASS | LOW: setMeshTexture arg2 silently coerces non-numbers to 0 |
+| api-designer | PASS | Updated renderer + scripting .context.md; flagged design note yaw convention discrepancy |
+
+### Build Results
+
+| Compiler | Tests | Warnings | Result |
+|----------|-------|----------|--------|
+| Clang-18 | 559/559 | 0 | PASS |
+| GCC-13 | 559/559 | 0 | PASS |
+
+### Files Changed
+
+| File | Status |
+|------|--------|
+| engine/scripting/script_engine.cpp | MODIFIED (3 new bindings) |
+| tests/scripting/test_camera3d_bindings.cpp | NEW (24 tests) |
+| tests/CMakeLists.txt | MODIFIED |
+| examples/3d_demo/game.lua | MODIFIED (orbit camera) |
+| engine/renderer/.context.md | MODIFIED |
+| engine/scripting/.context.md | MODIFIED |
+| docs/architecture/design-note-camera-modes-and-mesh-texture.md | NEW |
+| .claude/CLAUDE.md | MODIFIED (git commit ownership, project-state refs) |
+| .claude/agents/*.md | MODIFIED (5 agent files) |
+| docs/project-state.md | NEW |
+| docs/devlog-archive.md | NEW |
+| docs/devlog.md | RESTRUCTURED |
+| docs/agents/changelog.md | MODIFIED |
+| docs/environment.md | MODIFIED |
+
+### Session 42 Stats
+
+- 559 total tests (29 new: 24 camera, 5 texture)
+- Zero warnings on both compilers
+- 3 new Lua bindings
+- Process restructuring: 9 agent/doc files updated
+
+### Next Session
+
+ROADMAP Phase 2 remaining: materials system (specular maps, normal maps), skeletal animation, 3D physics, skybox, shadow mapping, 3D audio. PM to assess priority at Session 43 start.
