@@ -3,6 +3,56 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 89: Phase 8 M5 — Vulkan Depth Buffer + Build-Time SPIR-V (PHASE CLOSE)
+
+### Summary
+
+Session 89 delivered Phase 8 M5 and closed Phase 8 (Vulkan Backend). Depth buffer support: VkImage depth attachment via VMA with automatic format selection (D32_SFLOAT preferred, fallback to D32_SFLOAT_S8 then D24_UNORM_S8), depth testing enabled in the render pass, framebuffer integration, and swap chain recreation support. Pipeline depth state added to PipelineConfig (depthTestEnabled, depthWriteEnabled, depthCompareOp). Build-time SPIR-V compilation: CMake pipeline that finds glslc or glslangValidator, `embed_spirv.cmake` generates constexpr u32 arrays from GLSL source, graceful fallback to pre-compiled headers when no SPIR-V compiler is available. Six GLSL 450 shader source files added (triangle, textured, blinn_phong -- vert+frag each). Full Blinn-Phong directional lighting implemented in the Vulkan fragment shader (diffuse + specular + ambient). 10 new tests (depth format selection, pipeline defaults, depth clear values, SPIR-V magic number validation). All reviews PASS (performance, API, security). FULL build: 1234 tests, zero warnings, both Clang-18 and GCC-13. game-dev-tester: SKIPPED (internal backend, no new Lua API).
+
+**Phase 8 (Vulkan Backend) is COMPLETE.** Five milestones across Sessions 85-89 delivered: compile-time backend selection, volk loader, VMA memory management, SPIR-V shader pipeline, vertex/index buffers, textures, uniform buffers, descriptor sets, resource manager with handle pools, full RHI implementation, depth buffer, and build-time shader compilation. The Vulkan backend targets STANDARD and MODERN tiers alongside the existing OpenGL 3.3 LEGACY backend.
+
+### Planned
+
+- Phase 8 M5: Vulkan depth buffer, build-time SPIR-V compilation, phase close
+
+### Delivered
+
+- **Depth Buffer** -- VkImage depth attachment via VMA, format selection (D32_SFLOAT -> D32_SFLOAT_S8 -> D24_UNORM_S8), depth testing in render pass, framebuffer integration, swap chain recreation
+- **Pipeline Depth State** -- PipelineConfig depth fields (depthTestEnabled, depthWriteEnabled, depthCompareOp)
+- **Build-Time SPIR-V** -- CMake pipeline with glslc/glslangValidator, `embed_spirv.cmake` generates constexpr u32 arrays, graceful fallback to pre-compiled headers
+- **GLSL 450 Shaders** -- 6 source files: triangle.vert/frag, textured.vert/frag, blinn_phong.vert/frag
+- **Full Blinn-Phong** -- Directional lighting with diffuse, specular, ambient in Vulkan fragment shader
+- **Tests** -- 10 new tests (depth format, pipeline defaults, depth clear, SPIR-V magic)
+- **Context.md** -- Updated for M5 phase completion
+
+### Reviews
+
+- performance-critic: **PASS**
+- api-designer: **PASS**
+- security-auditor: **PASS**
+- game-dev-tester: SKIPPED (internal backend)
+
+### Files Created
+
+- `cmake/embed_spirv.cmake`
+- `engine/renderer/vulkan/shaders/triangle.vert`, `triangle.frag`
+- `engine/renderer/vulkan/shaders/textured.vert`, `textured.frag`
+- `engine/renderer/vulkan/shaders/blinn_phong.vert`, `blinn_phong.frag`
+
+### Files Modified
+
+- `engine/renderer/vulkan/vk_init.h`, `vk_init.cpp`
+- `engine/renderer/vulkan/vk_pipeline.h`, `vk_pipeline.cpp`
+- `engine/renderer/vulkan/rhi_vulkan.cpp`
+- `engine/renderer/CMakeLists.txt`
+- `engine/renderer/.context.md`
+- `tests/renderer/test_rhi_vulkan.cpp`
+- `tests/CMakeLists.txt`
+
+### Test Count: 1234 (FULL build — Clang-18 + GCC-13, zero warnings)
+
+---
+
 ## 2026-03-07 — Session 88: Phase 8 M4 — Vulkan Mesh Rendering
 
 ### Summary

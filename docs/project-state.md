@@ -6,8 +6,8 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 88 |
-| Total tests | 1234 (Clang-18, zero warnings) |
+| Last session | 89 |
+| Total tests | 1234 (FULL build — Clang-18 + GCC-13, zero warnings) |
 | Total Lua bindings | ~190 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
 | Phase 2 (3D Foundation) | COMPLETE |
@@ -16,7 +16,8 @@
 | Phase 5 (Website/Learning) | COMPLETE (Sessions 62-65) |
 | Phase 6 (Showcase Game) | COMPLETE (Sessions 66-73) |
 | Phase 7 (Rendering Pipeline) | COMPLETE (Sessions 74-84) |
-| Phase 8 (Vulkan Backend) | IN PROGRESS (Session 85+, M4 done) |
+| Phase 8 (Vulkan Backend) | COMPLETE (Sessions 85-89) |
+| Phase 9 (Terrain/Open World) | NEXT |
 | Windows build | DONE (MinGW-w64 cross-compilation) |
 | macOS build | DISABLED (upstream LuaJIT arm64-osx vcpkg issue) |
 | GitHub Actions CI | DONE (Linux Clang-18, Linux GCC-13) |
@@ -43,13 +44,13 @@
 
 | Session | Summary |
 |---------|---------|
+| 89 | Phase 8 M5 (PHASE CLOSE): Vulkan depth buffer + build-time SPIR-V — depth attachment (VMA, format selection), pipeline depth state, CMake glslc pipeline, embed_spirv.cmake, 6 GLSL 450 shaders, Blinn-Phong lighting. 10 new tests. FULL build: 1234 tests. Phase 8 COMPLETE. |
 | 88 | Phase 8 M4: Vulkan Mesh Rendering — resource manager (handle pools), full RHI impl (buffers/textures/shaders/uniforms/draw), Blinn-Phong SPIR-V, SceneUBO+LightUBO. 17 new tests. 1234 tests (FAST). |
 | 87 | Phase 8 M3: Vulkan Textures + Uniform Buffers — VkImage/VMA, descriptors, MVPUniform, textured quad rendering. 10 new tests. 1234 tests (FAST). |
 | 86 | Phase 8 M2: Vulkan Shader Compilation + Vertex Buffers — VMA integration, SPIR-V shaders, graphics pipeline, staged buffer uploads, triangle rendering. 13 new tests. 1234 tests (FAST). |
 | 85 | Phase 8 M1: Vulkan Backend Bootstrap — compile-time FFE_BACKEND selection, volk loader, instance/device/swapchain init, RHI Vulkan impl (clear-color), tier validation. 6 new tests. 1234 tests (FAST). |
-| 84 | Phase 7 M8: Phase Close — README update, architecture-map update, GCC-13 strncpy warning fix. FULL build: 1228 tests. Phase 7 COMPLETE. |
 
-## Phase 8 — Vulkan Backend (IN PROGRESS)
+## Phase 8 — Vulkan Backend (COMPLETE, Sessions 85-89)
 
 **Goal:** Add a Vulkan rendering backend alongside OpenGL, targeting STANDARD and MODERN tiers. ADR: `docs/architecture/adr-phase8-vulkan-backend.md`
 
@@ -59,7 +60,11 @@
 - [x] M2 (Session 86): Vulkan Shader Compilation + Vertex Buffers -- VMA integration, embedded SPIR-V shaders (constexpr u32 arrays), VkManagedBuffer (staging upload), VkManagedShader, PipelineConfig + createGraphicsPipeline (dynamic viewport/scissor), colored triangle rendering. 13 new CPU-only tests.
 - [x] M3 (Session 87): Vulkan Textures + Uniform Buffers -- VkImage/VkImageView/VkSampler via VMA, descriptor sets/pools (UBO + sampler), MVPUniform (192B per-frame host-coherent), embedded SPIR-V textured quad shaders, orthographic MVP, indexed draw with checkerboard texture. 10 new CPU-only tests.
 - [x] M4 (Session 88): Vulkan Mesh Rendering -- vk_resource_manager (256 buffer/texture, 32 shader handle pools, 1-based handles), full RHI impl (createBuffer/updateBuffer/destroyBuffer, createTexture/destroyTexture/bindTexture, createShader/destroyShader/useShader, setUniformMat4/Vec3/Float/Int via FNV-1a hash, drawArrays/drawIndexed), SceneUBO (256B) + LightUBO (64B), Blinn-Phong SPIR-V headers (placeholder, glslc TODO), render pass restructured for multi-draw-call frames. 17 new CPU-only tests.
-- [ ] M5: Vulkan Depth Buffer + Build-Time SPIR-V -- depth buffer attachment, build-time glslc compilation, full Blinn-Phong lighting, phase close (FULL build).
+- [x] M5 (Session 89): Vulkan Depth Buffer + Build-Time SPIR-V -- VkImage depth attachment (VMA, D32_SFLOAT/D32_SFLOAT_S8/D24_UNORM_S8 format selection), PipelineConfig depth state, CMake glslc/glslangValidator pipeline (embed_spirv.cmake, constexpr u32 arrays), 6 GLSL 450 shader source files (triangle/textured/blinn_phong vert+frag), full Blinn-Phong directional lighting. 10 new tests. FULL build: 1234 tests, zero warnings, Clang-18 + GCC-13. **PHASE 8 COMPLETE.**
+
+## Phase 9 — Terrain and Open World (NEXT)
+
+**Goal:** Large-scale outdoor environment support with terrain rendering, LOD, and streaming. See `docs/ROADMAP.md` for full deliverables.
 
 ## Build Commands
 

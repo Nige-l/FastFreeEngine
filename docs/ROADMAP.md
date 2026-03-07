@@ -230,16 +230,24 @@ This document defines the phased development plan for FFE. Each phase builds on 
 
 ---
 
-## Phase 8: Vulkan Backend
+## Phase 8: Vulkan Backend — COMPLETE (Sessions 85-89)
 
 **Goal:** Add a Vulkan rendering backend alongside OpenGL, targeting STANDARD and MODERN tiers for significantly improved draw call throughput and GPU utilization.
 
-### Deliverables (planned)
-- [ ] Vulkan RHI implementation behind existing abstraction layer
-- [ ] Runtime backend selection (OpenGL or Vulkan)
-- [ ] Validation layer integration for development builds
-- [ ] Vulkan-specific optimizations (pipeline caching, descriptor sets)
-- [ ] MODERN tier features (compute shaders, ray tracing hooks)
+### Delivered (Sessions 85-89)
+- [x] Vulkan RHI implementation behind existing abstraction layer (volk loader, VMA memory management, full RHI: buffers, textures, shaders, uniforms, draw calls)
+- [x] Compile-time backend selection (FFE_BACKEND=OPENGL|VULKAN, Vulkan requires STANDARD+ tier)
+- [x] Validation layer integration for development builds
+- [x] Vulkan-specific infrastructure (descriptor sets/pools, SPIR-V shader pipeline, resource manager with handle pools)
+- [x] Depth buffer support (format selection, pipeline depth state)
+- [x] Build-time SPIR-V compilation (CMake glslc pipeline with fallback)
+- [x] Blinn-Phong lighting in Vulkan (6 GLSL 450 shaders)
+- [x] 56 CPU-only tests across 5 milestones
+
+### Deferred to Backlog
+- [ ] Runtime backend selection (currently compile-time; runtime hot-swap is a future enhancement)
+- [ ] MODERN tier features (compute shaders, ray tracing hooks) — requires additional Vulkan extension work
+- [ ] Pipeline caching (VkPipelineCache serialization for faster startup)
 
 ---
 
