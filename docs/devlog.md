@@ -3,6 +3,57 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 96: Physics Sync Fix + Demo Polish
+
+### Summary
+
+Session 96 fixed a critical bug where `setTransform3D` did not sync position/rotation to the Jolt physics body, causing entities with RigidBody3D to fall through the ground after teleportation. The fix updates the Jolt body's position and rotation whenever `setTransform3D` is called on an entity that has a RigidBody3D component. Added 3 new tests verifying the sync behavior. Extensive demo polish across the Echoes of the Ancients showcase: player animation support, AI color tracking (enemies match their type color), HUD improvements (crosshair, enemy counter, gem counter, crystal tracker), music enabled, and guardian animations across all levels. Updated README and website with 4 new showcase screenshots, water rendering feature mention, and Phase 9 marked complete. Updated .context.md files for scripting and physics with physics sync documentation.
+
+### Delivered
+
+- **Physics Sync Fix** -- setTransform3D now calls Jolt BodyInterface::SetPositionAndRotation when entity has RigidBody3D, fixing fall-through-ground bug
+- **3 New Tests** -- physics sync position, rotation, and no-body fallback in test_physics3d_bindings.cpp
+- **Demo Polish** -- player.lua animation support, ai.lua color tracking, hud.lua crosshair + enemy/gem/crystal counters, music enabled, guardian animations across all 3 levels + test_level
+- **README + Website** -- 4 showcase screenshots, test count 1336, 200+ bindings, water rendering feature, Phase 9 complete
+- **.context.md Updates** -- engine/scripting/.context.md and engine/physics/.context.md document physics sync behavior
+
+### Files Modified (15)
+
+- `engine/scripting/script_engine.cpp` (setTransform3D physics sync)
+- `engine/scripting/.context.md` (physics sync docs)
+- `engine/physics/.context.md` (physics sync docs)
+- `tests/scripting/test_physics3d_bindings.cpp` (3 new tests)
+- `examples/showcase/lib/player.lua` (animation support)
+- `examples/showcase/lib/ai.lua` (color tracking)
+- `examples/showcase/lib/hud.lua` (crosshair, counters)
+- `examples/showcase/lib/combat.lua` (updates)
+- `examples/showcase/levels/level1.lua` (music, guardian anims, HUD)
+- `examples/showcase/levels/level2.lua` (music, guardian anims, HUD)
+- `examples/showcase/levels/level3.lua` (music, guardian anims, HUD)
+- `examples/showcase/levels/test_level.lua` (music, guardian anims, HUD)
+- `README.md` (screenshots, test count, Phase 9 complete)
+- `website/docs/index.md` (updates)
+- `website/docs/community/showcase.md` (updates)
+
+### Files Created (4)
+
+- `docs/screenshots/showcase_menu.png`
+- `docs/screenshots/showcase_level1.png`
+- `docs/screenshots/showcase_level2.png`
+- `docs/screenshots/showcase_level3.png`
+
+### Reviews
+
+- performance-critic: PASS (sync only on explicit setTransform3D call, not per-frame)
+- api-designer: PASS (.context.md updated)
+
+### Build
+
+- FAST build (Clang-18): 1336 tests, zero warnings
+- 3 new tests (+3 from 1333)
+
+---
+
 ## 2026-03-07 — Session 95: Water Rendering + Engine Fixes
 
 ### Summary

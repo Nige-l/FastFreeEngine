@@ -21,6 +21,8 @@ local DAMAGE_COOLDOWN  = 0.5    -- seconds of invulnerability after taking damag
 local PLAYER_HALF_Y    = 0.5    -- half-height of player box
 local PLAYER_HALF_XZ   = 0.4    -- half-width/depth of player box
 local X_ROT_CORRECTION = -90    -- CesiumMan is Y-up; rotate -90 on X to stand upright
+local ANIM_IDLE        = 0      -- first animation clip (idle/default)
+local ANIM_WALK        = -1     -- set dynamically based on clip count
 
 --------------------------------------------------------------------
 -- State
@@ -30,6 +32,7 @@ local health          = MAX_HEALTH
 local isGrounded      = false
 local damageCooldown  = 0
 local meshHandle      = 0
+local isMoving        = false   -- tracks whether player is walking (for animation)
 
 -- Pre-allocated transform buffer (avoid GC pressure)
 local tbuf = {}
@@ -75,6 +78,23 @@ function Player.create(x, y, z, cubeMeshHandle)
     health         = MAX_HEALTH
     damageCooldown = 1.0   -- 1-second spawn invulnerability (Bug 3 fix)
     isGrounded     = false
+    isMoving       = false
+
+    -- Start skeletal animation if the mesh has animation clips
+    local animCount = ffe.getAnimationCount3D(playerEntity)
+    if animCount > 0 then
+        ANIM_IDLE = 0
+        -- If there are multiple clips, use clip 1 as walk (common convention)
+        if animCount > 1 then
+            ANIM_WALK = 1
+        else
+            ANIM_WALK = 0  -- only one clip; use it for everything
+        end
+        ffe.playAnimation3D(playerEntity, ANIM_IDLE, true)
+        ffe.log("[Player] Started animation (clips=" .. tostring(animCount) .. ")")
+    else
+        ffe.log("[Player] No animation clips found on mesh")
+    end
 
     ffe.log("[Player] Created at ("
         .. tostring(x) .. ", " .. tostring(y) .. ", " .. tostring(z) .. ")")
@@ -206,6 +226,22 @@ function Player.update(dt)
             px, py, pz,
             X_ROT_CORRECTION, facingDeg, 0,
             1.8, 1.8, 1.8)
+    end
+
+    -- Switch animation between walk and idle based on movement
+    local wasMoving = isMoving
+    isMoving = (moveMag > 0.1)
+    if isMoving ~= wasMoving then
+        local animCount = ffe.getAnimationCount3D(playerEntity)
+        if animCount > 0 then
+            if isMoving and ANIM_WALK >= 0 then
+                ffe.playAnimation3D(playerEntity, ANIM_WALK, true)
+                ffe.setAnimationSpeed3D(playerEntity, 1.5)  -- slightly faster walk
+            elseif not isMoving then
+                ffe.playAnimation3D(playerEntity, ANIM_IDLE, true)
+                ffe.setAnimationSpeed3D(playerEntity, 1.0)
+            end
+        end
     end
 end
 

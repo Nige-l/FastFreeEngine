@@ -10,7 +10,11 @@ Games and demos built with FastFreeEngine. Everything on this page is open sourc
 
 A 3-level 3D action-exploration game that pushes every major FFE subsystem. Navigate ancient temples, solve environmental puzzles, defeat enemies in real-time combat, and explore atmospheric outdoor environments.
 
-**What it demonstrates:** Heightmap terrain with splat-map texturing, HDR bloom and ACES tone mapping, SSAO, FXAA, linear fog, per-level atmospheric lighting, PBR materials, skeletal animation, 3D physics (Jolt), combat system, puzzle mechanics, menu screens, and game flow (menus, gameplay, victory).
+**What it demonstrates:** Heightmap terrain with splat-map texturing, water rendering (reflection, waves, Fresnel), HDR bloom and ACES tone mapping, SSAO, FXAA, linear fog, per-level atmospheric lighting, PBR materials, skeletal animation, 3D physics (Jolt), combat system, puzzle mechanics, menu screens, and game flow (menus, gameplay, victory).
+
+| Title Screen | The Courtyard | The Temple | The Summit |
+|:---:|:---:|:---:|:---:|
+| ![Menu](../../docs/screenshots/showcase_menu.png) | ![Level 1](../../docs/screenshots/showcase_level1.png) | ![Level 2](../../docs/screenshots/showcase_level2.png) | ![Level 3](../../docs/screenshots/showcase_level3.png) |
 
 **How to run:**
 

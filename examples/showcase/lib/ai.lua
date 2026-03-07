@@ -99,6 +99,9 @@ function AI.create(entityId, waypoints, health)
     local sy = tbuf.sy or 1.0
     local sz = tbuf.sz or 1.0
 
+    -- Also capture the entity's current mesh color so we can restore it
+    -- after a damage flash, instead of hardcoding a single color.
+    -- (The Lua API does not have getMeshColor, so we store it at registration.)
     enemies[entityId] = {
         entity        = entityId,
         state         = STATE_PATROL,
@@ -110,6 +113,10 @@ function AI.create(entityId, waypoints, health)
         scaleX        = sx,
         scaleY        = sy,
         scaleZ        = sz,
+        colorR        = 0.8,
+        colorG        = 0.2,
+        colorB        = 0.15,
+        colorA        = 1.0,
     }
     ffe.log("[AI] Enemy registered: " .. tostring(entityId)
         .. " with " .. tostring(#(waypoints or {})) .. " waypoints"
@@ -265,6 +272,20 @@ function AI.updateOne(enemy, playerX, playerY, playerZ, dt)
 end
 
 --------------------------------------------------------------------
+-- AI.setEnemyColor(entityId, r, g, b, a)
+-- Store the enemy's base color for damage flash restoration.
+-- Call after AI.create if the enemy is not the default red.
+--------------------------------------------------------------------
+function AI.setEnemyColor(entityId, r, g, b, a)
+    local enemy = enemies[entityId]
+    if not enemy then return end
+    enemy.colorR = r or 0.8
+    enemy.colorG = g or 0.2
+    enemy.colorB = b or 0.15
+    enemy.colorA = a or 1.0
+end
+
+--------------------------------------------------------------------
 -- AI.isEnemy(entityId) -> boolean
 --------------------------------------------------------------------
 function AI.isEnemy(entityId)
@@ -281,11 +302,12 @@ function AI.damageEnemy(entityId, amount)
 
     enemy.health = enemy.health - (amount or 10)
 
-    -- Flash white on hit
+    -- Flash white on hit, then restore to the enemy's registered base color
     ffe.setMeshColor(entityId, 1, 1, 1, 1.0)
     ffe.after(0.1, function()
         if enemies[entityId] and enemies[entityId].state ~= STATE_DEAD then
-            ffe.setMeshColor(entityId, 0.8, 0.2, 0.15, 1.0)
+            local e = enemies[entityId]
+            ffe.setMeshColor(entityId, e.colorR, e.colorG, e.colorB, e.colorA)
         end
     end)
 

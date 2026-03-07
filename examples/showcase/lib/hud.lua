@@ -113,6 +113,33 @@ function HUD.draw(playerHealth, maxHealth, artifactCount, totalArtifacts, levelN
         ffe.drawText(promptText, px, py, 2, 1, 1, 0.7, alpha)
     end
 
+    -- Enemy info: if an enemy is nearby, show its health below the crosshair
+    if AI and Player then
+        local aliveCount, totalCount = AI.getEnemyCount()
+        if aliveCount > 0 then
+            -- Show enemy count in top-right area
+            local enemyStr = "Enemies: " .. tostring(aliveCount)
+            local enemyX = sw - (#enemyStr * 16) - 16
+            ffe.drawRect(enemyX - 4, 32, #enemyStr * 16 + 8, 22, 0, 0, 0, 0.5)
+            ffe.drawText(enemyStr, enemyX, 34, 2, 0.9, 0.3, 0.2, 0.9)
+        end
+    end
+
+    -- Crosshair (center screen) -- shows attack feedback
+    local crosshairSize = 8
+    local cx = math.floor(sw / 2)
+    local cy = math.floor(sh / 2)
+
+    -- Attack flash: crosshair turns red-orange briefly when swinging
+    local chR, chG, chB, chA = 0.8, 0.8, 0.8, 0.5  -- default: subtle grey
+    if Combat and Combat.isSwinging and Combat.isSwinging() then
+        chR, chG, chB, chA = 1.0, 0.5, 0.1, 0.9  -- attack flash: orange
+    end
+
+    -- Draw crosshair: 4 small rects forming a + shape
+    ffe.drawRect(cx - 1, cy - crosshairSize, 2, crosshairSize * 2, chR, chG, chB, chA)
+    ffe.drawRect(cx - crosshairSize, cy - 1, crosshairSize * 2, 2, chR, chG, chB, chA)
+
     -- Controls hint (bottom bar) -- fit text to screen width
     ffe.drawRect(0, sh - 28, sw, 28, 0, 0, 0, 0.4)
     local controlsText = "WASD:Move  Mouse:Look  LMB:Attack  Space:Jump  E:Interact  Esc:Pause"

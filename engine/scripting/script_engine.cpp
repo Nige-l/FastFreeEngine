@@ -4202,6 +4202,16 @@ void ScriptEngine::registerEcsBindings() {
         t3d.rotation = rotation;
         t3d.scale    = {sx, sy, sz};
 
+        // Sync to Jolt physics body if entity has a RigidBody3D component.
+        // Without this, physics3dSyncSystem overwrites Transform3D each frame,
+        // causing desync (e.g. player falls through ground when Lua sets rotation).
+        const auto* rb = world->registry().try_get<ffe::RigidBody3D>(
+            static_cast<entt::entity>(entityId));
+        if (rb != nullptr && rb->initialized && ffe::physics::isValid(rb->handle)) {
+            ffe::physics::setBodyPosition(rb->handle, {px, py, pz});
+            ffe::physics::setBodyRotation(rb->handle, rotation);
+        }
+
         return 0;
     };
     lua_pushcfunction(L, ffe_setTransform3D);

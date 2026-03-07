@@ -37,7 +37,7 @@ end
 
 ## What FFE Gives You
 
-**2D and 3D Rendering** -- Sprite batching, 3D mesh loading (glTF), Blinn-Phong and PBR (Cook-Torrance) lighting, shadow mapping, skybox environments, skeletal animation, and heightmap terrain with LOD and splat-map texturing.
+**2D and 3D Rendering** -- Sprite batching, 3D mesh loading (glTF), Blinn-Phong and PBR (Cook-Torrance) lighting, shadow mapping, skybox environments, skeletal animation, heightmap terrain with LOD and splat-map texturing, and water rendering with reflection, waves, and Fresnel effect.
 
 **Post-Processing** -- HDR bloom, ACES/Reinhard tone mapping, screen-space ambient occlusion (SSAO), FXAA anti-aliasing, fog, and gamma correction. All configurable from Lua.
 
@@ -45,7 +45,7 @@ end
 
 **Vulkan Backend** -- OpenGL 3.3 is the default (LEGACY tier), but a Vulkan rendering backend is available for STANDARD and MODERN tiers with SPIR-V shaders and VMA memory management.
 
-**Lua Scripting** -- Sandboxed LuaJIT with ~198 bindings covering input, entities, audio, physics, collisions, cameras, terrain, post-processing, networking, and more. Write game logic without touching C++.
+**Lua Scripting** -- Sandboxed LuaJIT with 200+ bindings covering input, entities, audio, physics, collisions, cameras, terrain, water, post-processing, networking, and more. Write game logic without touching C++.
 
 **Audio** -- WAV and OGG playback via miniaudio. One-shot sound effects, streaming music, and 3D spatial audio.
 
@@ -70,7 +70,7 @@ FFE exists to unlock creativity and get young people into engineering. The mains
 - **Performance is accessibility.** Running well on old hardware means more people can build and play games.
 - **Designed to be learned from.** The engine is not just a tool -- it is a teaching platform. Every subsystem is documented for both humans and AI assistants.
 - **No hidden costs.** MIT licensed. No per-seat fees, no revenue share, no surprise license changes.
-- **Ship real games.** FFE is not a toy engine. It supports 2D and 3D rendering, multiplayer networking, a standalone editor with a build pipeline, terrain, post-processing, PBR materials, and skeletal animation. 1282 tests verify it all works. The goal is everything needed to build and ship a complete game.
+- **Ship real games.** FFE is not a toy engine. It supports 2D and 3D rendering, multiplayer networking, a standalone editor with a build pipeline, terrain, post-processing, PBR materials, and skeletal animation. 1336 tests verify it all works. The goal is everything needed to build and ship a complete game.
 
 ---
 

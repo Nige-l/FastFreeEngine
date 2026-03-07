@@ -31,15 +31,14 @@ local sfxCollect = ffe.loadSound("audio/sfx_collect.wav")
 local sfxHit     = ffe.loadSound("audio/sfx_hit.wav")
 local sfxGate    = ffe.loadSound("audio/sfx_gate.wav")
 
--- Music: engine only supports WAV/OGG, skip MP3 to avoid error spam
--- local musicHandle = ffe.loadMusic("audio/BattleMusic.ogg")
-local musicHandle = nil
+-- Music: darker theme for the underground temple
+local musicHandle = ffe.loadMusic("audio/music_pixelcrown.ogg")
 if musicHandle and musicHandle ~= 0 then
     ffe.playMusic(musicHandle, true)
     ffe.setMusicVolume(0.3)
-    ffe.log("[Level2] Music playing")
+    ffe.log("[Level2] Music playing: music_pixelcrown.ogg")
 else
-    ffe.log("[Level2] No music loaded (MP3 not supported, provide OGG/WAV)")
+    ffe.log("[Level2] No music loaded (file missing or audio unavailable)")
 end
 
 --------------------------------------------------------------------
@@ -564,6 +563,7 @@ if cubeMesh ~= 0 then
             { x = -3, y = 0.8, z = -16 },
             { x =  0, y = 0.8, z = -9  },
         }, 80)
+        AI.setEnemyColor(guardian1, 0.55, 0.2, 0.6, 1.0)  -- purple
     end
 end
 
@@ -590,6 +590,7 @@ if cubeMesh ~= 0 then
             { x = -3, y = 0.8, z = 16 },
             { x =  3, y = 0.8, z = 16 },
         }, 80)
+        AI.setEnemyColor(guardian2, 0.55, 0.2, 0.6, 1.0)  -- purple
     end
 end
 
@@ -620,6 +621,7 @@ if cubeMesh ~= 0 then
             { x = -4, y = 1.0, z = -4 },
             { x =  4, y = 1.0, z = -4 },
         }, 160)
+        AI.setEnemyColor(bossGuardian, 0.7, 0.5, 0.15, 1.0)  -- dark gold/bronze
     end
 end
 
@@ -746,6 +748,9 @@ if HUD then
     HUD.showPrompt("The Temple -- Activate the crystals to open the portal", 5.0)
 end
 
+-- Wall inscription hint: show sequence clue when player is near the entrance area
+local hintShown = false
+
 --------------------------------------------------------------------
 -- Internal: distance XZ (ignore Y for interaction range)
 --------------------------------------------------------------------
@@ -794,6 +799,37 @@ ffe.every(TICK_RATE, function()
     end
 
     -- ================================================================
+    -- Crystal sequence HUD: show which crystals are activated
+    -- ================================================================
+    if not puzzleSolved then
+        local seqStr = "Crystals: "
+        for si = 1, #CORRECT_SEQUENCE do
+            local cname = CORRECT_SEQUENCE[si]
+            local cd = crystalByName[cname]
+            if cd and cd.activated then
+                seqStr = seqStr .. "[*]"
+            else
+                seqStr = seqStr .. "[ ]"
+            end
+        end
+        local sw = ffe.getScreenWidth()
+        local seqX = sw - (#seqStr * 16) - 16
+        ffe.drawRect(seqX - 4, 56, #seqStr * 16 + 8, 22, 0, 0, 0, 0.5)
+        ffe.drawText(seqStr, seqX, 58, 2, 0.6, 0.4, 1.0, 0.9)
+    end
+
+    -- ================================================================
+    -- Show gem counter (below crystal indicator)
+    -- ================================================================
+    if gemsCollected < totalGems then
+        local sw2 = ffe.getScreenWidth()
+        local gemStr = "Gems: " .. tostring(gemsCollected) .. "/" .. tostring(totalGems)
+        local gemX = sw2 - (#gemStr * 16) - 16
+        ffe.drawRect(gemX - 4, 80, #gemStr * 16 + 8, 22, 0, 0, 0, 0.5)
+        ffe.drawText(gemStr, gemX, 82, 2, 0.8, 0.4, 0.9, 0.9)
+    end
+
+    -- ================================================================
     -- Crystal puzzle reset flash timer
     -- ================================================================
     if puzzleResetTimer > 0 then
@@ -831,6 +867,18 @@ ffe.every(TICK_RATE, function()
         -- Handle interaction press
         if nearCrystal and Player.isInteracting() then
             tryCrystalActivation(nearCrystal.name)
+        end
+    end
+
+    -- Show inscription hint when near the entrance archway (south)
+    if Player and not puzzleSolved and not hintShown then
+        local px, py, pz = Player.getPosition()
+        local entranceDist = distXZ(px, pz, 0, -17)
+        if entranceDist < 4.0 then
+            if HUD then
+                HUD.showPrompt("Ancient inscription: Sky, Forest, Twilight, Sea", 4.0)
+            end
+            hintShown = true
         end
     end
 

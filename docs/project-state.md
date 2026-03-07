@@ -6,8 +6,8 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 95 |
-| Total tests | 1333 (Clang-18, zero warnings) |
+| Last session | 96 |
+| Total tests | 1336 (Clang-18, zero warnings) |
 | Total Lua bindings | ~206 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
 | Phase 2 (3D Foundation) | COMPLETE |
@@ -17,7 +17,7 @@
 | Phase 6 (Showcase Game) | COMPLETE (Sessions 66-73) |
 | Phase 7 (Rendering Pipeline) | COMPLETE (Sessions 74-84) |
 | Phase 8 (Vulkan Backend) | COMPLETE (Sessions 85-89) |
-| Phase 9 (Terrain/Open World) | IN PROGRESS (Session 90+) |
+| Phase 9 (Terrain/Open World) | COMPLETE (Sessions 90-95) |
 | Windows build | DONE (MinGW-w64 cross-compilation) |
 | macOS build | DISABLED (upstream LuaJIT arm64-osx vcpkg issue) |
 | GitHub Actions CI | DONE (Linux Clang-18, Linux GCC-13) |
@@ -39,16 +39,17 @@
 - set3DCameraFPS lacks NaN/Inf guards (MINOR -- backlog)
 - NAT traversal / relay server -- deferred to backlog
 - Installer / easy setup wizard -- user should install, connect AI model, start making games without build complexity (user request, Session 75)
+- **Procedural Music Generation** -- Algorithmic music system using built-in synthesis/instruments to generate thematic background music for scenes. Could integrate with the editor for preview. Reduces dependency on external music creation tools.
 
 ## Recent Sessions (last 5)
 
 | Session | Summary |
 |---------|---------|
+| 96 | Physics Sync Fix + Demo Polish — setTransform3D syncs to Jolt body (fixes fall-through-ground), 3 new tests, showcase demo polish (player animation, AI color tracking, HUD crosshair/counters, music, guardian animations), README screenshots, Phase 9 marked complete. 1336 tests. |
 | 95 | Water Rendering + Engine Fixes — water system (reflection FBO, waves, fresnel, 8 bindings), clip plane fix (post-processing black screen), terrain entity creation, unindexed mesh support (fox.glb), process reform. 1333 tests (+51). |
 | 94 | Docs & Process — README/website update (Phase 8-9, terrain, Vulkan, post-processing), screenshot pipeline (Xvfb + Mesa llvmpipe, 8 demos captured), process reform (game-dev-tester→demo author, api-designer owns docs), architecture-map binding fixes. 1282 tests (no new tests — docs only). |
 | 93 | Showcase Visual Overhaul — heightmap terrain (Levels 1 & 3), HDR bloom + ACES tone mapping, SSAO, FXAA, per-level atmospheric lighting and fog, terrain-aware gameplay, Python heightmap generator. 1282 tests (no new tests — showcase-only). |
 | 92 | Phase 9 M3: Terrain LOD + Frustum Culling — 3-level LOD per chunk (full/half/quarter), distance-based selection, reusable frustum culling (Griess-Hartmann, p-vertex AABB), 1 Lua binding, 13 new tests. 1282 tests (FAST). |
-| 91 | Phase 9 M2: Terrain Texturing — RGBA splat map blending (4 texture layers), triplanar projection for steep surfaces, TERRAIN shader (GLSL 330, Blinn-Phong+shadow+fog), TerrainMaterial struct, 3 Lua bindings, 16 new tests. 1269 tests (FAST). |
 
 ## Phase 8 — Vulkan Backend (COMPLETE, Sessions 85-89)
 
@@ -62,7 +63,7 @@
 - [x] M4 (Session 88): Vulkan Mesh Rendering -- vk_resource_manager (256 buffer/texture, 32 shader handle pools, 1-based handles), full RHI impl (createBuffer/updateBuffer/destroyBuffer, createTexture/destroyTexture/bindTexture, createShader/destroyShader/useShader, setUniformMat4/Vec3/Float/Int via FNV-1a hash, drawArrays/drawIndexed), SceneUBO (256B) + LightUBO (64B), Blinn-Phong SPIR-V headers (placeholder, glslc TODO), render pass restructured for multi-draw-call frames. 17 new CPU-only tests.
 - [x] M5 (Session 89): Vulkan Depth Buffer + Build-Time SPIR-V -- VkImage depth attachment (VMA, D32_SFLOAT/D32_SFLOAT_S8/D24_UNORM_S8 format selection), PipelineConfig depth state, CMake glslc/glslangValidator pipeline (embed_spirv.cmake, constexpr u32 arrays), 6 GLSL 450 shader source files (triangle/textured/blinn_phong vert+frag), full Blinn-Phong directional lighting. 10 new tests. FULL build: 1234 tests, zero warnings, Clang-18 + GCC-13. **PHASE 8 COMPLETE.**
 
-## Phase 9 — Terrain and Open World (IN PROGRESS, Session 90+)
+## Phase 9 — Terrain and Open World (COMPLETE, Sessions 90-95)
 
 **Goal:** Large-scale outdoor environment support with terrain rendering, LOD, and streaming. ADR: `docs/architecture/adr-phase9-terrain.md`. See `docs/ROADMAP.md` for full deliverables.
 

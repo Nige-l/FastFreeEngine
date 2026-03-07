@@ -203,6 +203,13 @@ if foxMesh ~= 0 then
             { x =  5, y = 0.5, z =  3 },
             { x = -5, y = 0.5, z =  3 },
         }, 75)
+        AI.setEnemyColor(guardian, 0.85, 0.25, 0.15, 1.0)  -- fiery red
+        -- Start walk animation if fox model has clips
+        local animCount = ffe.getAnimationCount3D(guardian)
+        if animCount > 0 then
+            ffe.playAnimation3D(guardian, 0, true)
+            ffe.setAnimationSpeed3D(guardian, 1.2)
+        end
 
         ffe.log("[TestLevel] Guardian placed at ("
             .. tostring(gx) .. ", " .. tostring(gy) .. ", " .. tostring(gz) .. ")")

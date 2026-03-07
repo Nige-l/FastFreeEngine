@@ -45,15 +45,14 @@ local sfxCollect = ffe.loadSound("audio/sfx_collect.wav")
 local sfxHit     = ffe.loadSound("audio/sfx_hit.wav")
 local sfxGate    = ffe.loadSound("audio/sfx_gate.wav")
 
--- Music: engine only supports WAV/OGG, skip MP3 to avoid error spam
--- local musicHandle = ffe.loadMusic("audio/BattleMusic.ogg")
-local musicHandle = nil
+-- Music: courtyard theme (OGG format)
+local musicHandle = ffe.loadMusic("audio/music_courtyard.ogg")
 if musicHandle and musicHandle ~= 0 then
     ffe.playMusic(musicHandle, true)
     ffe.setMusicVolume(0.35)
-    ffe.log("[Level1] Music playing")
+    ffe.log("[Level1] Music playing: music_courtyard.ogg")
 else
-    ffe.log("[Level1] No music loaded (MP3 not supported, provide OGG/WAV)")
+    ffe.log("[Level1] No music loaded (file missing or audio unavailable)")
 end
 
 --------------------------------------------------------------------
@@ -238,6 +237,12 @@ if figureMesh ~= 0 then
         ffe.setTransform3D(statue, 0, 2.8, 0, 0, 0, 0, 0.6, 0.6, 0.6)
         ffe.setMeshColor(statue, 0.55, 0.6, 0.5, 1.0)  -- weathered bronze
         ffe.setMeshSpecular(statue, 0.5, 0.5, 0.4, 64)
+        -- Animate the statue if the model has clips (eerie slow movement)
+        local statueAnimCount = ffe.getAnimationCount3D(statue)
+        if statueAnimCount > 0 then
+            ffe.playAnimation3D(statue, 0, true)
+            ffe.setAnimationSpeed3D(statue, 0.3)  -- very slow, statue-like
+        end
     end
 end
 
@@ -370,6 +375,13 @@ if foxMesh ~= 0 then
             { x = 10, y = 0.8, z =   5 },
             { x = 15, y = 0.8, z =  10 },
         }, 80)
+        AI.setEnemyColor(guardian1, 0.85, 0.25, 0.15, 1.0)  -- fiery red
+        -- Start walk animation if fox model has clips
+        local animCount = ffe.getAnimationCount3D(guardian1)
+        if animCount > 0 then
+            ffe.playAnimation3D(guardian1, 0, true)
+            ffe.setAnimationSpeed3D(guardian1, 1.2)
+        end
     end
 end
 
@@ -396,6 +408,13 @@ if foxMesh ~= 0 then
             { x = -10, y = 0.8, z = -5 },
             { x = -15, y = 0.8, z = -10 },
         }, 80)
+        AI.setEnemyColor(guardian2, 0.85, 0.25, 0.15, 1.0)  -- fiery red
+        -- Start walk animation if fox model has clips
+        local animCount = ffe.getAnimationCount3D(guardian2)
+        if animCount > 0 then
+            ffe.playAnimation3D(guardian2, 0, true)
+            ffe.setAnimationSpeed3D(guardian2, 1.2)
+        end
     end
 end
 
@@ -615,6 +634,15 @@ local TICK_RATE = 0.016  -- ~60 Hz
 
 ffe.every(TICK_RATE, function()
     if getGameState and getGameState() ~= "PLAYING" then return end
+
+    -- Show gem counter (top-right area, below enemies)
+    if gemsCollected < totalGems then
+        local sw = ffe.getScreenWidth()
+        local gemStr = "Gems: " .. tostring(gemsCollected) .. "/" .. tostring(totalGems)
+        local gemX = sw - (#gemStr * 16) - 16
+        ffe.drawRect(gemX - 4, 56, #gemStr * 16 + 8, 22, 0, 0, 0, 0.5)
+        ffe.drawText(gemStr, gemX, 58, 2, 0.4, 0.85, 1.0, 0.9)
+    end
 
     -- Rotate and bob artifacts / gems
     artifactAngle = artifactAngle + 90 * TICK_RATE

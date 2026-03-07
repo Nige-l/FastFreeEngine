@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-1282 tests | Zero warnings | Clang-18 + GCC-13 | ~198 Lua bindings | 6 demo games
+1336 tests | Zero warnings | Clang-18 + GCC-13 | 200+ Lua bindings | 6 demo games
 
 ---
 
@@ -26,7 +26,9 @@ FFE is free and open source forever. MIT licensed. That is not up for debate.
 
 FFE's flagship demo is a **3-level 3D action-exploration game** showcasing the engine's full capabilities. Built entirely in Lua on top of the engine, it proves that FFE can ship real, playable games -- not just tech demos.
 
-![Echoes of the Ancients](docs/screenshots/showcase.png)
+| Title Screen | The Courtyard | The Temple | The Summit |
+|:---:|:---:|:---:|:---:|
+| ![Menu](docs/screenshots/showcase_menu.png) | ![Level 1](docs/screenshots/showcase_level1.png) | ![Level 2](docs/screenshots/showcase_level2.png) | ![Level 3](docs/screenshots/showcase_level3.png) |
 
 **3 Levels:**
 - **The Courtyard** -- Outdoor ruins on heightmap terrain with push-block puzzles, guardian enemies, destructible walls, fog, directional shadows, and 4 point lights
@@ -92,7 +94,7 @@ All subsystems below are implemented and working together in six demo games incl
 ### Core Engine
 
 - **ECS** -- Entity Component System built on EnTT with a thin `World` wrapper and function-pointer system dispatch. No virtual calls in hot paths.
-- **Lua Scripting** -- Sandboxed LuaJIT with instruction budget (1M ops), blocked globals, and ~198 `ffe.*` API bindings across all subsystems.
+- **Lua Scripting** -- Sandboxed LuaJIT with instruction budget (1M ops), blocked globals, and 200+ `ffe.*` API bindings across all subsystems.
 - **Arena Allocator** -- Linear bump allocator with cache-line alignment and per-frame reset. Zero heap allocations in hot paths.
 - **Input System** -- State-based keyboard, mouse, and gamepad input (pressed/held/released) with action mapping (64 actions, 4 bindings each). Up to 4 controllers. Xbox controller supported.
 - **Timers** -- `ffe.after()` and `ffe.every()` with cancel support. 256 max concurrent timers, fixed-size array.
@@ -122,6 +124,7 @@ All subsystems below are implemented and working together in six demo games incl
 - **Materials** -- Diffuse, specular, and normal map support with configurable shininess.
 - **Shadow Mapping** -- Depth FBO with PCF 3x3 filtering. Configurable bias and shadow area. Instanced shadow pass for GPU-instanced meshes.
 - **Skybox** -- Cubemap environment rendering (6-face loading).
+- **Water Rendering** -- Reflective water planes with animated waves, Fresnel effect, and configurable color/opacity. Lua bindings.
 - **Linear Fog** -- Distance-based fog with configurable color, near, and far distances. Lua bindings.
 - **Skeletal Animation** -- Bone hierarchy with GPU skinning (64 max bones). Crossfade blending, interpolation modes, root motion. Play/stop/speed control from Lua.
 - **Terrain System** -- Heightmap terrain with chunked rendering (raw float + PNG loading), splat map texturing (4 RGBA layers), triplanar projection for steep surfaces, 3-level LOD (full/half/quarter resolution with distance-based selection), frustum culling, and bilinear height queries. Lua bindings for loading, texturing, and LOD configuration.
@@ -283,7 +286,7 @@ cmake --build build-mingw
 
 ### Running Tests
 
-1282 Catch2 tests covering core, renderer (2D and 3D), scripting, audio, physics, networking, terrain, and more:
+1336 Catch2 tests covering core, renderer (2D and 3D), scripting, audio, physics, networking, terrain, and more:
 
 ```bash
 ctest --test-dir build --output-on-failure --parallel $(nproc)
@@ -423,11 +426,11 @@ engine/
   renderer/vulkan/  Vulkan RHI implementation (compile-time selectable via FFE_BACKEND)
   audio/        miniaudio integration, WAV/OGG/MP3, SFX + streaming music, 3D spatial audio
   physics/      2D collision (spatial hash, AABB/circle) + 3D physics (Jolt, rigid bodies, raycasting)
-  scripting/    Lua sandbox, ~198 ffe.* API bindings, instruction budget
+  scripting/    Lua sandbox, 200+ ffe.* API bindings, instruction budget
   networking/   ENet transport, replication, server/client, prediction, lobby, lag compensation
   editor/       Standalone editor application (ImGui, hierarchy, inspector, viewport, gizmos)
 
-tests/          1282 Catch2 tests (core, renderer, scripting, audio, physics, networking, terrain)
+tests/          1336 Catch2 tests (core, renderer, scripting, audio, physics, networking, terrain)
 examples/       Demo games (showcase, lua_demo, pong, breakout, 3d_demo, net_demo, hello_sprites, headless_test)
 assets/
   textures/     PNG textures and spritesheets
@@ -518,7 +521,7 @@ FastFreeEngine is licensed under the [MIT License](LICENSE). Free and open sourc
 
 ## Status
 
-**Active development.** Eight phases complete, Phase 9 in progress.
+**Active development.** Nine phases complete.
 
 | Phase | Status |
 |-------|--------|
@@ -530,17 +533,15 @@ FastFreeEngine is licensed under the [MIT License](LICENSE). Free and open sourc
 | Phase 6 -- Showcase Game ("Echoes of the Ancients") | COMPLETE |
 | Phase 7 -- Rendering Pipeline Modernization | COMPLETE |
 | Phase 8 -- Vulkan Backend | COMPLETE |
-| Phase 9 -- Terrain / Open World | IN PROGRESS |
+| Phase 9 -- Terrain / Open World | COMPLETE |
 
-Phase 8 delivered a compile-time selectable Vulkan renderer (`-DFFE_BACKEND=Vulkan`) with volk function loading, VMA memory management, build-time SPIR-V shader compilation, and Blinn-Phong lighting -- targeting STANDARD and MODERN hardware tiers.
-
-Phase 9 (in progress) is delivering heightmap terrain with chunked rendering, splat map texturing (4 RGBA layers), triplanar projection, 3-level LOD, frustum culling, and bilinear height queries. World streaming is next.
+Phase 9 delivered heightmap terrain with chunked rendering, splat map texturing (4 RGBA layers), triplanar projection, 3-level LOD, frustum culling, bilinear height queries, and water rendering with reflection, animated waves, and Fresnel effect.
 
 ### Planned Future Work
 
 FFE has an ambitious roadmap ahead. Planned work includes:
 
-- **World Streaming** -- Async chunk loading/unloading based on camera position (Phase 9 M4)
+- **World Streaming** -- Async chunk loading/unloading based on camera position for large open worlds
 - **Advanced Editor** -- Project wizard, preferences persistence, visual scripting, LLM integration panel, prefab system
 - **Cross-Platform Native Builds** -- Native Windows (MSVC), native macOS (Xcode), Linux packaging (AppImage/Flatpak)
 - **Asset Pipeline** -- Texture compression, mesh optimization, asset bundling, hot-reload during development
@@ -548,7 +549,7 @@ FFE has an ambitious roadmap ahead. Planned work includes:
 - **AI Tooling** -- LLM integration panel in the editor, AI-assisted level design, code generation from natural language
 - **Advanced Vulkan Features** -- Compute shaders, GPU-driven rendering, ray tracing on MODERN tier
 
-1282 tests pass on both compilers with zero warnings. The engine supports full 2D and 3D game development with PBR rendering, post-processing, GPU instancing, MSAA/FXAA, SSAO, heightmap terrain, a Vulkan backend, multiplayer networking, a standalone editor, 3D physics, skeletal animation with crossfade blending, shadow mapping, and more -- demonstrated across six playable demos including the flagship "Echoes of the Ancients" showcase.
+1336 tests pass on both compilers with zero warnings. The engine supports full 2D and 3D game development with PBR rendering, post-processing, GPU instancing, MSAA/FXAA, SSAO, heightmap terrain, water rendering, a Vulkan backend, multiplayer networking, a standalone editor, 3D physics, skeletal animation with crossfade blending, shadow mapping, and more -- demonstrated across six playable demos including the flagship "Echoes of the Ancients" showcase.
 
 See `docs/devlog.md` for the full session-by-session development history.
 

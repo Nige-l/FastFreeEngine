@@ -18,6 +18,7 @@ local ATTACK_DAMAGE   = 25     -- damage per hit
 -- State
 --------------------------------------------------------------------
 local cooldownTimer = 0
+local swingTimer    = 0        -- visual attack swing feedback timer
 
 --------------------------------------------------------------------
 -- Combat.update(dt)
@@ -27,6 +28,18 @@ function Combat.update(dt)
     if cooldownTimer > 0 then
         cooldownTimer = cooldownTimer - dt
     end
+    if swingTimer > 0 then
+        swingTimer = swingTimer - dt
+    end
+end
+
+--------------------------------------------------------------------
+-- Combat.isSwinging() -> boolean
+-- Returns true while the attack swing animation is active.
+-- Used by the HUD to show a crosshair flash.
+--------------------------------------------------------------------
+function Combat.isSwinging()
+    return swingTimer > 0
 end
 
 --------------------------------------------------------------------
@@ -42,6 +55,7 @@ function Combat.attack(playerPos, playerForward)
     end
 
     cooldownTimer = ATTACK_COOLDOWN
+    swingTimer    = 0.15   -- brief visual swing indicator
 
     -- Cast a ray from the player position in the forward direction
     local ox = playerPos.x

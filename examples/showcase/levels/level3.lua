@@ -47,15 +47,14 @@ local sfxCollect = ffe.loadSound("audio/sfx_collect.wav")
 local sfxHit     = ffe.loadSound("audio/sfx_hit.wav")
 local sfxGate    = ffe.loadSound("audio/sfx_gate.wav")
 
--- Music: engine only supports WAV/OGG, skip MP3 to avoid error spam
--- local musicHandle = ffe.loadMusic("audio/BattleMusic.ogg")
-local musicHandle = nil
+-- Music: epic outdoor theme for the summit climax
+local musicHandle = ffe.loadMusic("audio/music_courtyard.ogg")
 if musicHandle and musicHandle ~= 0 then
     ffe.playMusic(musicHandle, true)
-    ffe.setMusicVolume(0.35)
-    ffe.log("[Level3] Music playing")
+    ffe.setMusicVolume(0.4)
+    ffe.log("[Level3] Music playing: music_courtyard.ogg")
 else
-    ffe.log("[Level3] No music loaded (MP3 not supported, provide OGG/WAV)")
+    ffe.log("[Level3] No music loaded (file missing or audio unavailable)")
 end
 
 --------------------------------------------------------------------
@@ -418,6 +417,13 @@ if foxMesh ~= 0 then
             { x =  11, y = 3.8, z = -7 },
             { x =  9,  y = 3.8, z = -7 },
         }, 80)
+        AI.setEnemyColor(guardian1, 0.9, 0.4, 0.15, 1.0)  -- orange-red sunset tint
+        -- Start walk animation if fox model has clips
+        local animCount = ffe.getAnimationCount3D(guardian1)
+        if animCount > 0 then
+            ffe.playAnimation3D(guardian1, 0, true)
+            ffe.setAnimationSpeed3D(guardian1, 1.2)
+        end
     end
 end
 
@@ -444,6 +450,12 @@ if foxMesh ~= 0 then
             { x =  -9, y = 4.8, z = -7 },
             { x = -11, y = 4.8, z = -7 },
         }, 80)
+        AI.setEnemyColor(guardian2, 0.9, 0.4, 0.15, 1.0)  -- orange-red sunset tint
+        local animCount = ffe.getAnimationCount3D(guardian2)
+        if animCount > 0 then
+            ffe.playAnimation3D(guardian2, 0, true)
+            ffe.setAnimationSpeed3D(guardian2, 1.2)
+        end
     end
 end
 
@@ -470,6 +482,12 @@ if foxMesh ~= 0 then
             { x = -10, y = 5.8, z =  8 },
             { x = -12, y = 5.8, z =  8 },
         }, 120)
+        AI.setEnemyColor(guardian3, 0.8, 0.3, 0.1, 1.0)  -- darker orange
+        local animCount = ffe.getAnimationCount3D(guardian3)
+        if animCount > 0 then
+            ffe.playAnimation3D(guardian3, 0, true)
+            ffe.setAnimationSpeed3D(guardian3, 1.0)
+        end
     end
 end
 
@@ -498,6 +516,12 @@ if foxMesh ~= 0 then
             { x = -4, y = 0.8, z = -4 },
             { x =  4, y = 0.8, z = -4 },
         }, 200)
+        AI.setEnemyColor(bossGuardian, 1.0, 0.8, 0.2, 1.0)  -- gold boss tint
+        local animCount = ffe.getAnimationCount3D(bossGuardian)
+        if animCount > 0 then
+            ffe.playAnimation3D(bossGuardian, 0, true)
+            ffe.setAnimationSpeed3D(bossGuardian, 0.8)  -- boss is slower, more menacing
+        end
     end
 end
 
@@ -628,6 +652,17 @@ ffe.every(TICK_RATE, function()
                 end
             end
         end
+    end
+
+    -- ================================================================
+    -- Show gem counter (top-right area, below enemies)
+    -- ================================================================
+    if gemsCollected < totalGems then
+        local sw = ffe.getScreenWidth()
+        local gemStr = "Gems: " .. tostring(gemsCollected) .. "/" .. tostring(totalGems)
+        local gemX = sw - (#gemStr * 16) - 16
+        ffe.drawRect(gemX - 4, 56, #gemStr * 16 + 8, 22, 0, 0, 0, 0.5)
+        ffe.drawText(gemStr, gemX, 58, 2, 0.9, 0.7, 0.2, 0.9)
     end
 
     -- ================================================================
