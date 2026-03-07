@@ -1,8 +1,8 @@
--- lib/camera.lua -- Orbit camera module for "Echoes of the Ancients"
+-- lib/camera.lua -- FPS-style orbit camera for "Echoes of the Ancients"
 --
 -- Third-person orbit camera that follows the player.
--- Mouse-controlled orbit (horizontal = yaw, vertical = pitch).
--- Right stick on gamepad for camera control.
+-- FPS-style free mouse look (cursor captured, no right-click needed).
+-- Right stick on gamepad as fallback.
 -- Smooth follow via lerp toward player position.
 -- Collision avoidance: raycast behind player to prevent wall clipping.
 --
@@ -18,7 +18,7 @@ local ORBIT_MIN_RADIUS = 3.0     -- minimum distance (collision clamp)
 local ORBIT_MAX_RADIUS = 15.0    -- maximum zoom out
 local PITCH_MIN        = -30.0   -- degrees (looking up)
 local PITCH_MAX        = 60.0    -- degrees (looking down)
-local MOUSE_SENSITIVITY = 0.15   -- degrees per pixel of mouse movement
+local MOUSE_SENSITIVITY = 0.17   -- degrees per pixel (~0.003 rad/px)
 local GAMEPAD_SENSITIVITY = 120  -- degrees per second for right stick
 local FOLLOW_SPEED     = 8.0     -- lerp speed for smooth follow
 local CAMERA_HEIGHT_OFFSET = 1.5 -- look slightly above player center
@@ -32,9 +32,6 @@ local radius     = ORBIT_RADIUS
 local targetX    = 0.0       -- smoothed target position
 local targetY    = 0.0
 local targetZ    = 0.0
-local prevMouseX = 0
-local prevMouseY = 0
-local initialized = false
 
 --------------------------------------------------------------------
 -- Camera.update(dt)
@@ -51,40 +48,12 @@ function Camera.update(dt)
     targetY = targetY + ((py + CAMERA_HEIGHT_OFFSET) - targetY) * lerpFactor
     targetZ = targetZ + (pz - targetZ) * lerpFactor
 
-    -- Mouse look: track delta from previous frame
-    local mx = ffe.getMouseX()
-    local my = ffe.getMouseY()
+    -- FPS-style mouse look: use raw mouse deltas (cursor is captured)
+    local dx = ffe.getMouseDeltaX()
+    local dy = ffe.getMouseDeltaY()
 
-    if not initialized then
-        prevMouseX = mx
-        prevMouseY = my
-        initialized = true
-    end
-
-    -- Only orbit when right mouse button is held (free look)
-    if ffe.isMouseHeld(ffe.MOUSE_RIGHT) then
-        local dx = mx - prevMouseX
-        local dy = my - prevMouseY
-        yaw   = yaw   + dx * MOUSE_SENSITIVITY
-        pitch = pitch + dy * MOUSE_SENSITIVITY
-    end
-
-    prevMouseX = mx
-    prevMouseY = my
-
-    -- Keyboard camera controls (arrow keys as fallback)
-    if ffe.isKeyHeld(ffe.KEY_LEFT) then
-        yaw = yaw - 90 * dt
-    end
-    if ffe.isKeyHeld(ffe.KEY_RIGHT) then
-        yaw = yaw + 90 * dt
-    end
-    if ffe.isKeyHeld(ffe.KEY_UP) then
-        pitch = pitch - 45 * dt
-    end
-    if ffe.isKeyHeld(ffe.KEY_DOWN) then
-        pitch = pitch + 45 * dt
-    end
+    yaw   = yaw   + dx * MOUSE_SENSITIVITY
+    pitch = pitch + dy * MOUSE_SENSITIVITY
 
     -- Gamepad: right stick for camera orbit (with dead-zone)
     if ffe.isGamepadConnected(0) then

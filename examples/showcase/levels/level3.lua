@@ -48,10 +48,14 @@ local sfxHit     = ffe.loadSound("audio/sfx_hit.wav")
 local sfxGate    = ffe.loadSound("audio/sfx_gate.wav")
 local musicHandle = ffe.loadMusic("audio/music_pixelcrown.ogg")
 
--- Start background music (epic/adventurous for the finale)
-if musicHandle then
+-- Start background music (with fallback logging, Bug 4)
+if musicHandle and musicHandle ~= 0 then
     ffe.playMusic(musicHandle, true)
     ffe.setMusicVolume(0.35)
+    ffe.log("[Level3] Music playing: audio/music_pixelcrown.ogg")
+else
+    ffe.log("[Level3] WARNING: Could not load music (handle=" .. tostring(musicHandle) .. ")")
+    ffe.log("[Level3] Expected file at: assets/audio/music_pixelcrown.ogg")
 end
 
 --------------------------------------------------------------------
@@ -129,14 +133,20 @@ end
 -- CENTRAL ARENA: Large circular-ish platform (12x1x12) at Y=0
 -- The main battleground where the final artifact awaits.
 --------------------------------------------------------------------
--- Main arena floor (layered for visual interest)
-createStaticBox(0, -0.5, 0, 6, 0.5, 6, 0.45, 0.35, 0.28)
+-- Main arena floor (larger 60x60 for visibility, Bug 2)
+createStaticBox(0, -0.5, 0, 30, 0.5, 30, 0.50, 0.38, 0.30)
 
 -- Arena edge ring (decorative border boxes around the perimeter)
-createVisualBox(0, -0.3, 0, 6.5, 0.2, 6.5, 0.35, 0.25, 0.2, 1.0)
+createVisualBox(0, -0.3, 0, 30.5, 0.2, 30.5, 0.35, 0.25, 0.2, 1.0)
 
 -- Arena inner ring (slightly raised center)
 createStaticBox(0, 0.05, 0, 3.5, 0.05, 3.5, 0.5, 0.4, 0.32)
+
+-- Edge border walls for spatial reference (Bug 2)
+createStaticBox(0, 0.25, 30,  30, 0.25, 0.3,  0.3, 0.22, 0.18)
+createStaticBox(0, 0.25, -30, 30, 0.25, 0.3,  0.3, 0.22, 0.18)
+createStaticBox(30, 0.25, 0,  0.3, 0.25, 30,  0.3, 0.22, 0.18)
+createStaticBox(-30, 0.25, 0, 0.3, 0.25, 30,  0.3, 0.22, 0.18)
 
 --------------------------------------------------------------------
 -- ALTAR: Central raised platform for the final artifact
@@ -561,7 +571,7 @@ end)
 --------------------------------------------------------------------
 Player.create(0, 3.5, -15, cesiumMesh)
 Camera.setPosition(0, 3.5, -15)
-Camera.setYawPitch(0, 20)  -- slight downward pitch to see the arena below
+Camera.setYawPitch(0, 35)  -- Pitch down to see the ground on spawn (Bug 2)
 
 if HUD then
     HUD.showPrompt("The Summit -- Reach the central altar and claim the final artifact!", 5.0)
@@ -658,5 +668,5 @@ ffe.log("[Level3]   2. Navigate moving platforms to reach distant areas")
 ffe.log("[Level3]   3. Defeat or avoid the 4 summit guardians")
 ffe.log("[Level3]   4. Collect the Final Artifact from the central altar")
 ffe.log("[Level3]   5. Explore for hidden gems on floating platforms")
-ffe.log("[Level3] Controls: WASD move, SPACE jump, LMB attack, Right-click drag camera")
+ffe.log("[Level3] Controls: WASD move, SPACE jump, Mouse look, LMB attack, ESC pause")
 ffe.log("[Level3] Gamepad: L-Stick move, R-Stick camera, A jump, X attack, Y interact")

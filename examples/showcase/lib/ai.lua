@@ -32,6 +32,10 @@ local DEFAULT_HEALTH    = 100
 --------------------------------------------------------------------
 local enemies = {}
 
+-- Grace period: enemies only patrol (no detect/chase/attack) for this many seconds
+-- after AI.reset() or AI.init(). Prevents instant damage on level load (Bug 3).
+local graceTimer = 3.0
+
 -- Pre-allocated transform buffer
 local tbuf = {}
 
@@ -70,10 +74,13 @@ local function moveToward(entityId, tx, ty, tz, speed, dt)
     vy = vy or 0
     ffe.setLinearVelocity(entityId, nx * speed, vy, nz * speed)
 
-    -- Face movement direction (use fox model scale 0.03 for non-cube enemies)
+    -- Face movement direction, using the entity's registered scale
+    local enemy = enemies[entityId]
     local facingDeg = math.deg(math.atan2(nx, nz))
-    local sc = 0.03  -- fox model scale; cube enemies would use 1.0
-    ffe.setTransform3D(entityId, ex, ey, ez, 0, facingDeg, 0, sc, sc, sc)
+    local scX = enemy and enemy.scaleX or 1.0
+    local scY = enemy and enemy.scaleY or 1.0
+    local scZ = enemy and enemy.scaleZ or 1.0
+    ffe.setTransform3D(entityId, ex, ey, ez, 0, facingDeg, 0, scX, scY, scZ)
 end
 
 --------------------------------------------------------------------
@@ -83,6 +90,15 @@ end
 -- health: optional starting health (default 100)
 --------------------------------------------------------------------
 function AI.create(entityId, waypoints, health)
+    -- Capture the entity's current scale at registration time so that
+    -- moveToward() preserves it instead of hardcoding a single value.
+    -- This fixes the bug where cube-based guardians (Level 2, scale ~1.0)
+    -- were overwritten to fox-model scale (0.03) every frame.
+    ffe.fillTransform3D(entityId, tbuf)
+    local sx = tbuf.sx or 1.0
+    local sy = tbuf.sy or 1.0
+    local sz = tbuf.sz or 1.0
+
     enemies[entityId] = {
         entity        = entityId,
         state         = STATE_PATROL,
@@ -91,9 +107,13 @@ function AI.create(entityId, waypoints, health)
         waypoints     = waypoints or {},
         waypointIndex = 1,
         attackTimer   = 0,
+        scaleX        = sx,
+        scaleY        = sy,
+        scaleZ        = sz,
     }
     ffe.log("[AI] Enemy registered: " .. tostring(entityId)
-        .. " with " .. tostring(#(waypoints or {})) .. " waypoints")
+        .. " with " .. tostring(#(waypoints or {})) .. " waypoints"
+        .. " scale=(" .. tostring(sx) .. ", " .. tostring(sy) .. ", " .. tostring(sz) .. ")")
 end
 
 --------------------------------------------------------------------
@@ -102,11 +122,56 @@ end
 --------------------------------------------------------------------
 function AI.updateAll(dt)
     if not Player then return end
+
+    -- Tick grace timer: during grace period, enemies only patrol (no chase/attack)
+    if graceTimer > 0 then
+        graceTimer = graceTimer - dt
+    end
+
     local px, py, pz = Player.getPosition()
 
     for entId, enemy in pairs(enemies) do
         if enemy.state ~= STATE_DEAD then
-            AI.updateOne(enemy, px, py, pz, dt)
+            if graceTimer > 0 then
+                -- Grace period: force patrol only (skip detection/chase/attack)
+                AI.updatePatrolOnly(enemy, dt)
+            else
+                AI.updateOne(enemy, px, py, pz, dt)
+            end
+        end
+    end
+end
+
+--------------------------------------------------------------------
+-- AI.updatePatrolOnly(enemy, dt)
+-- Patrol-only update during grace period: no player detection.
+--------------------------------------------------------------------
+function AI.updatePatrolOnly(enemy, dt)
+    local entId = enemy.entity
+
+    -- Force back to PATROL if chasing/attacking (from a previous life)
+    if enemy.state == STATE_CHASE or enemy.state == STATE_ATTACK then
+        enemy.state = STATE_PATROL
+        ffe.setLinearVelocity(entId, 0, 0, 0)
+    end
+
+    if enemy.state == STATE_PATROL and #enemy.waypoints > 0 then
+        ffe.fillTransform3D(entId, tbuf)
+        local ex = tbuf.x or 0
+        local ey = tbuf.y or 0
+        local ez = tbuf.z or 0
+
+        local wp = enemy.waypoints[enemy.waypointIndex]
+        moveToward(entId, wp.x, wp.y, wp.z, PATROL_SPEED, dt)
+
+        local dx = ex - wp.x
+        local dz = ez - wp.z
+        local distToWP = math.sqrt(dx * dx + dz * dz)
+        if distToWP < WAYPOINT_THRESHOLD then
+            enemy.waypointIndex = enemy.waypointIndex + 1
+            if enemy.waypointIndex > #enemy.waypoints then
+                enemy.waypointIndex = 1
+            end
         end
     end
 end
@@ -261,6 +326,7 @@ end
 --------------------------------------------------------------------
 function AI.reset()
     enemies = {}
+    graceTimer = 3.0  -- Reset grace period on level load
 end
 
 ffe.log("[AI] Module loaded")

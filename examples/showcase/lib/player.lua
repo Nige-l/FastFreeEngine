@@ -20,6 +20,7 @@ local MAX_HEALTH       = 100
 local DAMAGE_COOLDOWN  = 0.5    -- seconds of invulnerability after taking damage
 local PLAYER_HALF_Y    = 0.5    -- half-height of player box
 local PLAYER_HALF_XZ   = 0.4    -- half-width/depth of player box
+local X_ROT_CORRECTION = -90    -- CesiumMan is Y-up; rotate -90 on X to stand upright
 
 --------------------------------------------------------------------
 -- State
@@ -53,9 +54,9 @@ function Player.create(x, y, z, cubeMeshHandle)
         return
     end
 
-    -- Set transform: position, no rotation
+    -- Set transform: position, X rotation correction for Y-up glTF models
     -- Character models (CesiumMan etc) need different scale than cube fallback
-    ffe.setTransform3D(playerEntity, x, y, z, 0, 0, 0, 0.5, 0.5, 0.5)
+    ffe.setTransform3D(playerEntity, x, y, z, X_ROT_CORRECTION, 0, 0, 0.5, 0.5, 0.5)
 
     -- Distinct player color: bright cyan
     ffe.setMeshColor(playerEntity, 0.1, 0.8, 0.9, 1.0)
@@ -72,7 +73,7 @@ function Player.create(x, y, z, cubeMeshHandle)
     })
 
     health         = MAX_HEALTH
-    damageCooldown = 0
+    damageCooldown = 1.0   -- 1-second spawn invulnerability (Bug 3 fix)
     isGrounded     = false
 
     ffe.log("[Player] Created at ("
@@ -148,18 +149,20 @@ function Player.update(dt)
         moveZ = moveZ + (fwdZ * (-ly) + rgtZ * lx)
     end
 
-    -- Normalize and apply move speed
+    -- Normalize direction then scale by speed.
+    -- When moveMag > 1.0 (e.g. diagonal keyboard), clamp to unit length.
+    -- When moveMag <= 1.0 (e.g. partial gamepad stick), preserve magnitude
+    -- as a fraction of full speed, but still normalize the direction first.
     local moveMag = math.sqrt(moveX * moveX + moveZ * moveZ)
     if moveMag > 0.001 then
-        -- Normalize to unit length, then scale by speed
-        local scale = MOVE_SPEED / moveMag
-        if moveMag > 1.0 then
-            moveX = moveX * scale
-            moveZ = moveZ * scale
-        else
-            moveX = moveX * MOVE_SPEED
-            moveZ = moveZ * MOVE_SPEED
-        end
+        local invMag = 1.0 / moveMag
+        local dirX = moveX * invMag
+        local dirZ = moveZ * invMag
+        -- Clamp magnitude to [0, 1] so diagonal keyboard input doesn't exceed speed
+        local mag = moveMag
+        if mag > 1.0 then mag = 1.0 end
+        moveX = dirX * mag * MOVE_SPEED
+        moveZ = dirZ * mag * MOVE_SPEED
     end
 
     -- Apply movement by setting horizontal velocity (preserve vertical for gravity)
@@ -193,12 +196,12 @@ function Player.update(dt)
         )
     end
 
-    -- Rotate player to face movement direction
+    -- Rotate player to face movement direction (combine yaw with X correction)
     if moveMag > 0.1 then
         local facingDeg = math.deg(math.atan2(moveX, moveZ))
         ffe.setTransform3D(playerEntity,
             px, py, pz,
-            0, facingDeg, 0,
+            X_ROT_CORRECTION, facingDeg, 0,
             0.5, 0.5, 0.5)
     end
 end

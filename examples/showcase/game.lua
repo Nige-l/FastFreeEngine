@@ -113,6 +113,9 @@ local function loadLevel(levelNum)
     currentLevel   = levelNum
     gameState      = STATE_PLAYING
 
+    -- Capture mouse for FPS-style look (Bug 6)
+    ffe.setCursorCaptured(true)
+
     ffe.log("[Showcase] Loading level " .. tostring(levelNum) .. ": " .. path)
     ffe.loadScene(path)
 end
@@ -129,12 +132,14 @@ function collectArtifact()
     if artifactCount >= totalArtifacts then
         gameState = STATE_LEVEL_COMPLETE
         levelCompleteTimer = 0
+        ffe.setCursorCaptured(false)  -- Release cursor for level-complete screen
         ffe.log("[Showcase] Level complete!")
     end
 end
 
 function triggerGameOver()
     gameState = STATE_GAME_OVER
+    ffe.setCursorCaptured(false)  -- Release cursor for game-over screen
     ffe.log("[Showcase] Game Over")
 end
 
@@ -166,6 +171,8 @@ local function cleanupToMenu()
     totalPlayTime = 0
     victoryScreenTimer = 0
     gameState = STATE_MENU
+    -- Release mouse cursor for menu navigation (Bug 6)
+    ffe.setCursorCaptured(false)
     if Menus then Menus.resetTitle() end
     -- Set dark atmospheric background for title screen
     ffe.setBackgroundColor(0.04, 0.03, 0.06)
@@ -275,6 +282,7 @@ function update(entityId, dt)
             local action = Menus.handlePauseInput(dt)
             if action == "resume" then
                 gameState = STATE_PLAYING
+                ffe.setCursorCaptured(true)  -- Re-capture cursor for gameplay
             elseif action == "restart" then
                 loadLevel(currentLevel)
             elseif action == "quit" then
@@ -312,11 +320,13 @@ function update(entityId, dt)
     if gameState == STATE_PLAYING then
         if ffe.isKeyPressed(ffe.KEY_ESCAPE) or ffe.isKeyPressed(ffe.KEY_P) then
             gameState = STATE_PAUSED
+            ffe.setCursorCaptured(false)  -- Release cursor for pause menu
             if Menus then Menus.resetPause() end
         end
         -- Also allow gamepad START to pause
         if ffe.isGamepadConnected(0) and ffe.isGamepadButtonPressed(0, ffe.GAMEPAD_START) then
             gameState = STATE_PAUSED
+            ffe.setCursorCaptured(false)  -- Release cursor for pause menu
             if Menus then Menus.resetPause() end
         end
     end
@@ -349,6 +359,7 @@ function update(entityId, dt)
                 ffe.log("[Showcase] All levels complete! Congratulations!")
                 gameState = STATE_VICTORY
                 victoryScreenTimer = 0
+                ffe.setCursorCaptured(false)  -- Release cursor for victory screen
                 ffe.stopMusic()
             end
         end
@@ -561,6 +572,7 @@ end
 --------------------------------------------------------------------
 function shutdown()
     ffe.log("[Showcase] Shutdown")
+    ffe.setCursorCaptured(false)  -- Ensure cursor is released on exit
     if Player then Player.cleanup() end
     ffe.stopMusic()
     ffe.disableFog()

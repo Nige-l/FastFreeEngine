@@ -21,7 +21,10 @@ When given a goal you:
    - Which agents can run in **parallel** (Claude will spawn them simultaneously)
    - Which agents must run **sequentially** (Claude will wait for each to complete)
    - The specific instructions/prompt for each agent invocation
-4. Decide whether game-dev-tester is needed (new API paradigm or high discoverability risk). Document skip in devlog if not invoked.
+4. Decide whether game-dev-tester is needed:
+   - **MANDATORY** if the session creates or modifies any files under `examples/`. game-dev-tester runs in Phase 3 (parallel with other reviewers) to play-test the demo. This is not optional. "No new API paradigm" is NOT a valid skip reason when demo files changed.
+   - **Conditional** for pure engine features with no demo changes — invoke if a new API paradigm or high discoverability risk exists.
+   - Document skip reason in devlog if not invoked. If demo files were changed and game-dev-tester was not dispatched, that is a process violation.
 5. Flag any ambiguities or missing information before work starts
 
 ### Dispatch Plan Format
@@ -45,6 +48,7 @@ PHASE 3 — Expert Panel
   [parallel] performance-critic: <instructions>
   [parallel] security-auditor: <instructions>
   [parallel] api-designer: <instructions>
+  [parallel] game-dev-tester: <instructions> (MANDATORY if examples/ changed)
 
 PHASE 4 — Remediation
   <conditional on Phase 3 results>

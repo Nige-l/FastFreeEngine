@@ -210,6 +210,7 @@ Each directory has a clear owner. Agents do not write to directories they do not
 | `engine/scene/` | `engine-dev` (future — scene graph, serialisation) |
 | `editor/` | `engine-dev` (future — standalone editor application) |
 | `website/` | TBD (future — documentation and training site) |
+| `examples/` | `engine-dev` + `game-dev-tester` (engine-dev writes, game-dev-tester play-tests) |
 | `tests/` | `engine-dev` (note: `test-engineer` is dormant — available for release audits, not routine sessions) |
 | `docs/architecture/` | `architect` |
 | `docs/agents/` | `director` |
@@ -275,6 +276,7 @@ All reviewers run in parallel with zero dependencies between them:
 - `performance-critic` (always)
 - `security-auditor` post-implementation review (only if the feature touches attack surface per Section 5)
 - `api-designer` (reviews public API, updates `.context.md`)
+- `game-dev-tester` demo validation (MANDATORY when any `examples/` files were created or modified — see Section 7 game-dev-tester rules)
 
 These are all read-only agents. **Sequential dispatch of Phase 3 agents is a process violation.** They have no dependencies on each other and must run simultaneously.
 
@@ -318,13 +320,17 @@ After Phase 5 passes: **commit** (see Git Commit Ownership below).
 - No other agent runs `git commit`, `git push`, or `git add`. If an agent needs something committed mid-session (e.g., a CI fix that must be pushed to test), PM does the commit.
 - `build-engineer` never commits. `system-engineer` never commits. `engine-dev` never commits.
 
-### game-dev-tester: Conditional Only
+### game-dev-tester: Mandatory for Demos, Conditional for Features
 
-`game-dev-tester` is invoked only when:
-- A new API paradigm is introduced (not just a new binding in an existing pattern)
-- PM judges that discoverability risk is high
+`game-dev-tester` is invoked in two modes:
 
-If `game-dev-tester` is not invoked, document the skip in the devlog.
+**Mode 1 — Demo Validation (MANDATORY):** When a session creates or modifies any demo or example game (`examples/`), `game-dev-tester` must be dispatched to play-test the demo. This is not optional. game-dev-tester reads the Lua source, traces the game logic, identifies bugs, missing error handling, broken interactions, and UX issues. It reports a bug list with severity ratings. Any HIGH or CRITICAL bugs must be fixed before the session ends.
+
+This mode exists because the user found 7 bugs on first run of the showcase game after 7 sessions of building it without play-testing. Demo quality is a direct reflection of engine quality. If game-dev-tester would have caught it, and it was not invoked, that is a process failure.
+
+**Mode 2 — API Validation (conditional):** When a new API paradigm is introduced (not just a new binding in an existing pattern), or PM judges that discoverability risk is high, game-dev-tester writes a small Lua game or component that exercises the new API. This mode is conditional — PM decides whether to invoke.
+
+If `game-dev-tester` is not invoked in either mode, document the skip reason in the devlog. "No new API paradigm" is NOT a valid skip reason when demo files were changed.
 
 ### Build Cycle Rules
 
@@ -370,7 +376,7 @@ A feature is **not done** until every applicable item is satisfied:
 - [ ] Lua bindings exist where applicable
 - [ ] `api-designer` has reviewed the Lua bindings
 - [ ] A working Lua usage example exists
-- [ ] `game-dev-tester` has validated the API (if invoked per Section 7), OR skip documented in devlog
+- [ ] `game-dev-tester` has validated any demo/example changes (MANDATORY per Section 7), OR validated new API (if invoked), OR skip documented with valid reason in devlog
 - [ ] A `.context.md` file exists in the system's directory, written for LLM consumption
 - [ ] Changes are committed with a clear [Conventional Commit](https://www.conventionalcommits.org/) message
 
@@ -436,6 +442,7 @@ Performance is how we deliver on this mission. By running well on old hardware, 
 | Is my code fast enough? | Ask `performance-critic` |
 | Is my code secure? | Ask `security-auditor` |
 | Is my API good? | Ask `api-designer`, then `game-dev-tester` |
+| Did I change examples/? | `game-dev-tester` MUST play-test the demo (mandatory, not conditional) |
 | Can Claude write code directly? | **No** — invoke `project-manager` for a plan, then dispatch the agents PM specifies |
 | Can Claude decide which agents to invoke? | **No** — PM's plan specifies agents and order; Claude dispatches, never decides |
 | Can Claude reorder or skip agents in PM's plan? | **No** — follow PM's plan exactly unless the user explicitly overrides |

@@ -104,9 +104,10 @@ function Menus.drawTitle(dt)
     local topLineY = sh * 0.18
     drawGoldLine(topLineY, 500, 0.4)
 
-    -- Main title: "ECHOES OF THE ANCIENTS"
-    local titleScale = 5
+    -- Main title: "ECHOES OF THE ANCIENTS" -- scale to fit screen (Bug 5)
     local titleText = "ECHOES OF THE ANCIENTS"
+    local titleScale = math.min(5, math.floor(sw / (#titleText * 8)))
+    if titleScale < 1 then titleScale = 1 end
     local titleX = centerX(titleText, titleScale)
     local titleY = math.floor(sh * 0.22)
 
@@ -118,9 +119,10 @@ function Menus.drawTitle(dt)
     -- Bottom decorative line under title
     drawGoldLine(titleY + titleScale * 8 + 8, 500, 0.4)
 
-    -- Subtitle: "A FastFreeEngine Showcase"
-    local subScale = 3
+    -- Subtitle: "A FastFreeEngine Showcase" -- scale to fit (Bug 5)
     local subText = "A FastFreeEngine Showcase"
+    local subScale = math.min(3, math.floor(sw / (#subText * 8)))
+    if subScale < 1 then subScale = 1 end
     local subX = centerX(subText, subScale)
     local subY = titleY + titleScale * 8 + 24
     ffe.drawText(subText, subX, subY, subScale,
@@ -156,17 +158,19 @@ function Menus.drawTitle(dt)
     local helpScale = 2
     local helpAlpha = 0.7
 
-    -- Keyboard controls
-    local kbLine1 = "WASD - Move | Mouse - Look | E - Interact"
-    local kbLine2 = "SPACE - Jump | LMB - Attack | ESC - Pause"
+    -- Keyboard controls (updated for FPS mouse look, Bug 6)
+    local kbLine1 = "WASD - Move | Mouse - Look | LMB - Attack"
+    local kbLine2 = "SPACE - Jump | E - Interact | ESC - Pause"
     ffe.drawText(kbLine1, centerX(kbLine1, helpScale), helpY + 8, helpScale,
         GREY_R, GREY_G, GREY_B, helpAlpha)
     ffe.drawText(kbLine2, centerX(kbLine2, helpScale), helpY + 32, helpScale,
         GREY_R, GREY_G, GREY_B, helpAlpha)
 
-    -- Gamepad controls
-    local gpLine = "Gamepad: Left Stick - Move | Right Stick - Look | A - Jump | X - Attack | Y - Interact"
-    ffe.drawText(gpLine, centerX(gpLine, helpScale), helpY + 64, helpScale,
+    -- Gamepad controls -- scale down if too wide for screen (Bug 5)
+    local gpLine = "Gamepad: L-Stick Move | R-Stick Look | A Jump | X Attack | Y Interact"
+    local gpScale = helpScale
+    if #gpLine * 8 * gpScale > sw - 24 then gpScale = 1 end
+    ffe.drawText(gpLine, centerX(gpLine, gpScale), helpY + 64, gpScale,
         GREY_R, GREY_G, GREY_B, helpAlpha * 0.7)
 
     -- Decorative line below controls

@@ -46,10 +46,14 @@ local sfxHit     = ffe.loadSound("audio/sfx_hit.wav")
 local sfxGate    = ffe.loadSound("audio/sfx_gate.wav")
 local musicHandle = ffe.loadMusic("audio/music_courtyard.ogg")
 
--- Start background music
-if musicHandle then
+-- Start background music (with fallback logging, Bug 4)
+if musicHandle and musicHandle ~= 0 then
     ffe.playMusic(musicHandle, true)
     ffe.setMusicVolume(0.35)
+    ffe.log("[Level1] Music playing: audio/music_courtyard.ogg")
+else
+    ffe.log("[Level1] WARNING: Could not load music (handle=" .. tostring(musicHandle) .. ")")
+    ffe.log("[Level1] Expected file at: assets/audio/music_courtyard.ogg")
 end
 
 --------------------------------------------------------------------
@@ -119,9 +123,22 @@ local function createDynamicBox(x, y, z, sx, sy, sz, r, g, b, mass)
 end
 
 --------------------------------------------------------------------
--- Ground plane: large flat stone floor (40x0.5x40)
+-- Ground plane: large flat stone floor (60x0.5x60)
+-- Bright tan color contrasts with the blue-grey fog (Bug 2)
 --------------------------------------------------------------------
-local ground = createStaticBox(0, -0.5, 0,  20, 0.5, 20,  0.4, 0.42, 0.38)
+local ground = createStaticBox(0, -0.5, 0,  30, 0.5, 30,  0.55, 0.50, 0.40)
+
+--------------------------------------------------------------------
+-- Edge border walls: low walls at ground perimeter for spatial reference (Bug 2)
+--------------------------------------------------------------------
+-- North edge
+createStaticBox(0, 0.25, 30,  30, 0.25, 0.3,  0.35, 0.32, 0.28)
+-- South edge
+createStaticBox(0, 0.25, -30, 30, 0.25, 0.3,  0.35, 0.32, 0.28)
+-- East edge
+createStaticBox(30, 0.25, 0,  0.3, 0.25, 30,  0.35, 0.32, 0.28)
+-- West edge
+createStaticBox(-30, 0.25, 0, 0.3, 0.25, 30,  0.35, 0.32, 0.28)
 
 --------------------------------------------------------------------
 -- Perimeter walls (4 segments with gaps for entrance/exit)
@@ -562,7 +579,7 @@ end
 --------------------------------------------------------------------
 Player.create(0, 1.5, -17, cesiumMesh)
 Camera.setPosition(0, 1.5, -17)
-Camera.setYawPitch(0, 25)
+Camera.setYawPitch(0, 35)  -- Pitch down to see the ground on spawn (Bug 2)
 
 if HUD then
     HUD.showPrompt("The Courtyard -- Find the Ancient Artifact", 4.0)
@@ -682,5 +699,5 @@ ffe.log("[Level1]   1. Push 2 stone blocks onto the golden pressure plates")
 ffe.log("[Level1]   2. Break the crumbling wall to find the artifact")
 ffe.log("[Level1]   3. Collect the Ancient Artifact")
 ffe.log("[Level1]   4. Defeat or avoid the 2 guardians")
-ffe.log("[Level1] Controls: WASD move, SPACE jump, LMB attack, Right-click drag to orbit camera")
+ffe.log("[Level1] Controls: WASD move, SPACE jump, Mouse look, LMB attack, E interact, ESC pause")
 ffe.log("[Level1] Gamepad: L-Stick move, R-Stick camera, A jump, X attack, Y interact")

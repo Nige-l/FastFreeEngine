@@ -113,13 +113,16 @@ function HUD.draw(playerHealth, maxHealth, artifactCount, totalArtifacts, levelN
         ffe.drawText(promptText, px, py, 2, 1, 1, 0.7, alpha)
     end
 
-    -- Controls hint (bottom bar)
+    -- Controls hint (bottom bar) -- scale to fit screen width (Bug 5)
     ffe.drawRect(0, sh - 28, sw, 28, 0, 0, 0, 0.4)
-    local controlsText = "WASD: move | SPACE: jump | MOUSE: look | LMB: attack | E: interact | P: pause | ESC: quit"
+    local controlsText = "WASD: Move | Mouse: Look | LMB: Attack | SPACE: Jump | E: Interact | ESC: Pause"
     if ffe.isGamepadConnected and ffe.isGamepadConnected(0) then
-        controlsText = "L-Stick: move | R-Stick: look | A: jump | X: attack | Y: interact | START: pause"
+        controlsText = "L-Stick: Move | R-Stick: Look | A: Jump | X: Attack | Y: Interact | START: Pause"
     end
-    ffe.drawText(controlsText, 12, sh - 22, 2, 0.4, 0.5, 0.6, 0.8)
+    -- Scale controls text to fit within screen width (8px per char at scale 1)
+    local ctrlScale = math.max(1, math.min(2, math.floor((sw - 24) / (#controlsText * 8))))
+    local ctrlX = math.max(4, math.floor((sw - #controlsText * 8 * ctrlScale) / 2))
+    ffe.drawText(controlsText, ctrlX, sh - 22, ctrlScale, 0.4, 0.5, 0.6, 0.8)
 end
 
 --------------------------------------------------------------------

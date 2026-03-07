@@ -51,6 +51,7 @@ add_executable(ffe_tests_scripting
     scripting/test_scene_load_binding.cpp
     scripting/test_networking_bindings.cpp
     scripting/test_pbr_bindings.cpp
+    scripting/test_mouse_bindings.cpp
 )
 
 target_link_libraries(ffe_tests_scripting

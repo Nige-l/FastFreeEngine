@@ -860,6 +860,9 @@ void ScriptEngine::registerEcsBindings() {
     // ffe.isKeyReleased(keyCode) -> bool
     // ffe.getMouseX()            -> number (f32)
     // ffe.getMouseY()            -> number (f32)
+    // ffe.getMouseDeltaX()       -> number (f64)
+    // ffe.getMouseDeltaY()       -> number (f64)
+    // ffe.setCursorCaptured(bool) -> void
     // ----------------------------------------------------------------
 
     lua_pushcfunction(L, [](lua_State* state) -> int {
@@ -909,6 +912,25 @@ void ScriptEngine::registerEcsBindings() {
         return 1;
     });
     lua_setfield(L, -2, "getMouseY");
+
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushnumber(state, static_cast<lua_Number>(ffe::mouseDeltaX()));
+        return 1;
+    });
+    lua_setfield(L, -2, "getMouseDeltaX");
+
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushnumber(state, static_cast<lua_Number>(ffe::mouseDeltaY()));
+        return 1;
+    });
+    lua_setfield(L, -2, "getMouseDeltaY");
+
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const bool captured = lua_toboolean(state, 1) != 0;
+        ffe::setCursorCaptured(captured);
+        return 0;
+    });
+    lua_setfield(L, -2, "setCursorCaptured");
 
     // ----------------------------------------------------------------
     // Key code constants — match Key enum values in input.h (= GLFW_KEY_*).

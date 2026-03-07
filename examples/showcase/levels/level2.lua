@@ -32,10 +32,14 @@ local sfxHit     = ffe.loadSound("audio/sfx_hit.wav")
 local sfxGate    = ffe.loadSound("audio/sfx_gate.wav")
 local musicHandle = ffe.loadMusic("audio/BattleMusic.mp3")
 
--- Start background music (dark/intense atmosphere for the temple)
-if musicHandle then
+-- Start background music (with fallback logging, Bug 4)
+if musicHandle and musicHandle ~= 0 then
     ffe.playMusic(musicHandle, true)
     ffe.setMusicVolume(0.3)
+    ffe.log("[Level2] Music playing: audio/BattleMusic.mp3")
+else
+    ffe.log("[Level2] WARNING: Could not load music (handle=" .. tostring(musicHandle) .. ")")
+    ffe.log("[Level2] Expected file at: assets/audio/BattleMusic.mp3")
 end
 
 --------------------------------------------------------------------
@@ -110,20 +114,27 @@ end
 -- The temple is a cross-shaped layout with a central area and
 -- 4 bridge arms extending over the lava pit.
 --------------------------------------------------------------------
--- Central platform (12x0.5x12)
-createStaticBox(0, -0.5, 0, 6, 0.5, 6, 0.25, 0.23, 0.22)
+-- Central platform (larger 16x0.5x16 for better visibility, Bug 2)
+createStaticBox(0, -0.5, 0, 8, 0.5, 8, 0.30, 0.27, 0.25)
 
--- South platform (entrance area, 10x0.5x8)
-createStaticBox(0, -0.5, -15, 5, 0.5, 4, 0.25, 0.23, 0.22)
+-- South platform (entrance area, wider 12x0.5x10)
+createStaticBox(0, -0.5, -15, 6, 0.5, 5, 0.30, 0.27, 0.25)
 
--- North platform (exit area, 8x0.5x6)
-createStaticBox(0, -0.5, 15, 4, 0.5, 3, 0.25, 0.23, 0.22)
+-- North platform (exit area, wider 10x0.5x8)
+createStaticBox(0, -0.5, 15, 5, 0.5, 4, 0.30, 0.27, 0.25)
 
--- East platform (crystal alcove, 6x0.5x6)
-createStaticBox(13, -0.5, 0, 3, 0.5, 3, 0.25, 0.23, 0.22)
+-- East platform (crystal alcove, wider 8x0.5x8)
+createStaticBox(13, -0.5, 0, 4, 0.5, 4, 0.30, 0.27, 0.25)
 
--- West platform (crystal alcove, 6x0.5x6)
-createStaticBox(-13, -0.5, 0, 3, 0.5, 3, 0.25, 0.23, 0.22)
+-- West platform (crystal alcove, wider 8x0.5x8)
+createStaticBox(-13, -0.5, 0, 4, 0.5, 4, 0.30, 0.27, 0.25)
+
+-- Platform edge markers: glowing border strips for spatial reference (Bug 2)
+-- Central platform edges
+createVisualBox(0, 0.02, 8,  8, 0.02, 0.15, 0.4, 0.25, 0.15, 1.0)
+createVisualBox(0, 0.02, -8, 8, 0.02, 0.15, 0.4, 0.25, 0.15, 1.0)
+createVisualBox(8, 0.02, 0,  0.15, 0.02, 8,  0.4, 0.25, 0.15, 1.0)
+createVisualBox(-8, 0.02, 0, 0.15, 0.02, 8,  0.4, 0.25, 0.15, 1.0)
 
 --------------------------------------------------------------------
 -- LAVA PIT: Red-orange glowing flat plane below floor level
@@ -721,7 +732,7 @@ end)
 --------------------------------------------------------------------
 Player.create(0, 1.5, -17, cubeMesh)
 Camera.setPosition(0, 1.5, -17)
-Camera.setYawPitch(0, 15)  -- lower pitch for enclosed underground space
+Camera.setYawPitch(0, 30)  -- Pitch down to see the floor on spawn (Bug 2)
 
 if HUD then
     HUD.showPrompt("The Temple -- Activate the crystals to open the portal", 5.0)
@@ -904,5 +915,5 @@ ffe.log("[Level2]   2. Cross the timed bridges to reach the crystal alcoves")
 ffe.log("[Level2]   3. Defeat or avoid the temple guardians and the boss")
 ffe.log("[Level2]   4. Collect the Temple Artifact from the central altar (bonus)")
 ffe.log("[Level2]   5. Enter the portal once the crystals are activated")
-ffe.log("[Level2] Controls: WASD move, SPACE jump, LMB attack, E interact, Right-click drag camera")
+ffe.log("[Level2] Controls: WASD move, SPACE jump, Mouse look, LMB attack, E interact, ESC pause")
 ffe.log("[Level2] Gamepad: L-Stick move, R-Stick camera, A jump, X attack, Y interact")
