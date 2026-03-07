@@ -6,9 +6,9 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 96 |
+| Last session | 97 |
 | Total tests | 1336 (Clang-18, zero warnings) |
-| Total Lua bindings | ~206 |
+| Total Lua bindings | ~207 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
 | Phase 2 (3D Foundation) | COMPLETE |
 | Phase 3 (Standalone Editor) | MVP COMPLETE (6 milestones, Sessions 51-56) |
@@ -45,11 +45,11 @@
 
 | Session | Summary |
 |---------|---------|
+| 97 | Software Renderer Detection — isSoftwareRenderer() RHI API + Lua binding, showcase/3d_demo skip post-processing on software renderer, brighter fallback colors, retaken screenshots. 1336 tests. |
 | 96 | Physics Sync Fix + Demo Polish — setTransform3D syncs to Jolt body (fixes fall-through-ground), 3 new tests, showcase demo polish (player animation, AI color tracking, HUD crosshair/counters, music, guardian animations), README screenshots, Phase 9 marked complete. 1336 tests. |
 | 95 | Water Rendering + Engine Fixes — water system (reflection FBO, waves, fresnel, 8 bindings), clip plane fix (post-processing black screen), terrain entity creation, unindexed mesh support (fox.glb), process reform. 1333 tests (+51). |
 | 94 | Docs & Process — README/website update (Phase 8-9, terrain, Vulkan, post-processing), screenshot pipeline (Xvfb + Mesa llvmpipe, 8 demos captured), process reform (game-dev-tester→demo author, api-designer owns docs), architecture-map binding fixes. 1282 tests (no new tests — docs only). |
 | 93 | Showcase Visual Overhaul — heightmap terrain (Levels 1 & 3), HDR bloom + ACES tone mapping, SSAO, FXAA, per-level atmospheric lighting and fog, terrain-aware gameplay, Python heightmap generator. 1282 tests (no new tests — showcase-only). |
-| 92 | Phase 9 M3: Terrain LOD + Frustum Culling — 3-level LOD per chunk (full/half/quarter), distance-based selection, reusable frustum culling (Griess-Hartmann, p-vertex AABB), 1 Lua binding, 13 new tests. 1282 tests (FAST). |
 
 ## Phase 8 — Vulkan Backend (COMPLETE, Sessions 85-89)
 

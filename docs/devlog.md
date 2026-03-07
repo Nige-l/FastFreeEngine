@@ -3,6 +3,53 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 97: Software Renderer Detection + Screenshot Fixes
+
+### Summary
+
+Session 97 added `isSoftwareRenderer()` to the RHI layer (OpenGL checks GL_RENDERER for llvmpipe/swrast/softpipe, Vulkan stub returns false) with a corresponding `ffe.isSoftwareRenderer()` Lua binding. All showcase levels and 3d_demo now detect software rendering and skip post-processing/shadows, using brighter ambient, fog, and background colors as fallback. Retaken 4 showcase screenshots with visible backgrounds. Updated .context.md files for renderer and scripting.
+
+### Delivered
+
+- **isSoftwareRenderer() RHI API** -- checks GL_RENDERER string for software renderer keywords (llvmpipe, swrast, softpipe, software, mesa x11)
+- **ffe.isSoftwareRenderer() Lua binding** -- exposes software renderer detection to game scripts
+- **Showcase rendering fixes** -- levels 1-3 + test_level skip post-processing/shadows on software renderer, use brighter ambient/fog/background
+- **3D Demo fix** -- same software renderer detection and fallback
+- **4 updated screenshots** -- showcase_level1/2/3.png retaken with visible backgrounds
+- **.context.md updates** -- renderer and scripting docs updated with isSoftwareRenderer documentation
+
+### Files Modified (15)
+
+- `engine/renderer/rhi.h` (isSoftwareRenderer virtual method)
+- `engine/renderer/opengl/rhi_opengl.cpp` (GL_RENDERER string check implementation)
+- `engine/renderer/vulkan/rhi_vulkan.cpp` (stub returning false)
+- `engine/renderer/.context.md` (isSoftwareRenderer docs)
+- `engine/scripting/script_engine.cpp` (ffe.isSoftwareRenderer binding)
+- `engine/scripting/.context.md` (binding docs)
+- `examples/showcase/levels/level1.lua` (software renderer fallback)
+- `examples/showcase/levels/level2.lua` (software renderer fallback)
+- `examples/showcase/levels/level3.lua` (software renderer fallback)
+- `examples/showcase/levels/test_level.lua` (software renderer fallback)
+- `examples/3d_demo/game.lua` (software renderer fallback)
+- `docs/screenshots/showcase_level1.png` (retaken)
+- `docs/screenshots/showcase_level2.png` (retaken)
+- `docs/screenshots/showcase_level3.png` (retaken)
+- `docs/screenshots/showcase_menu.png` (unchanged size)
+
+### Reviews
+
+- Skipped (demo/screenshot polish session, no new tests or architectural changes)
+
+### Build
+
+- No build this session (Lua-only changes + RHI addition verified by existing test suite)
+
+### game-dev-tester
+
+- Skipped (no new API paradigm — single binding addition in existing pattern)
+
+---
+
 ## 2026-03-07 — Session 96: Physics Sync Fix + Demo Polish
 
 ### Summary
