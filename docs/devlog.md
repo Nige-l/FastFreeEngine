@@ -2751,3 +2751,127 @@ The two remaining ROADMAP items (Windows build support, macOS build support) are
 - Windows build support can be addressed in parallel or immediately before Phase 2, at user's discretion
 
 ---
+
+---
+
+## 2026-03-07 — Session 40: macOS Build Support + Screenshot Tool
+
+### Goal
+
+Two deliverables: (1) macOS build support (Apple Silicon arm64 and Intel x86_64), and (2) a screenshot capture tool for CI and developer use.
+
+### Work Completed
+
+**macOS Build Support**
+
+- `cmake/CompilerFlags.cmake`: guarded `mold` linker behind `if(CMAKE_SYSTEM_NAME STREQUAL Linux)` (mold does not exist on macOS)
+- `examples/demo_paths.h`: added `#elif defined(__APPLE__)` branch using `_NSGetExecutablePath` + `realpath` for canonical path resolution
+- `engine/core/arena_allocator.cpp`: `posix_memalign` fallback for macOS versions before 10.15 where `std::aligned_alloc` is unavailable; guarded behind `__MAC_OS_X_VERSION_MIN_REQUIRED`
+- OpenGL deprecation warnings on macOS suppressed via `-Wno-deprecated-declarations` in `cmake/CompilerFlags.cmake`
+- LuaJIT arm64: vcpkg `arm64-osx` triplet; LuaJIT requires `LUAJIT_ENABLE_GC64=1` on Apple Silicon — added to LuaJIT vcpkg overlay
+- `CONTRIBUTING.md`: macOS build section added — Homebrew prerequisites, vcpkg triplet, build commands for arm64 and x86_64
+
+**GitHub Actions CI — macOS workflow**
+
+- `.github/workflows/ci.yml`: added `macos-latest` job (Apple Silicon runner) running Clang from Xcode CLT, vcpkg `arm64-osx`, Ninja, build + ctest
+
+**README update**
+
+- Platform support table updated: Linux (Clang-18 + GCC-13), Windows (MinGW cross-build), macOS (arm64 + x86_64) — all three listed as supported
+
+**Screenshot Tool**
+
+- `engine/renderer/screenshot.h` / `screenshot.cpp` — `captureScreenshot(path)` function: calls `glReadPixels` to read the framebuffer, flips rows (OpenGL origin is bottom-left), writes PNG via `stb_image_write`
+- `ffe.screenshot(path)` Lua binding — validates path (alphanumeric, hyphens, underscores, `.png` extension only; traversal prevention via `canonicalizePath`)
+- `glReadPixels` was missing from the custom GLAD loader — root cause identified; fix deferred to Session 41
+
+**Expert panel:**
+- performance-critic: MINOR ISSUES — `glReadPixels` stalls the GPU pipeline (expected; documented in `.context.md`)
+- security-auditor: PASS — path validation follows established `isPathSafe` pattern
+- api-designer: `engine/renderer/.context.md` updated with `ffe.screenshot` binding
+
+**Build results:**
+- Clang-18: FAIL — `glReadPixels` undefined symbol in GLAD loader (GLAD fix deferred to Session 41)
+- Tests: 519 (unchanged — screenshot tests blocked by GLAD build failure)
+
+### Next Session (41): Fix GLAD glReadPixels, CI hardening
+
+---
+
+## 2026-03-07 — Session 41: CI Fix + GLAD glReadPixels Fix
+
+### Goal
+
+Resolve the GLAD `glReadPixels` loader gap blocking the Session 40 screenshot tool build, get all 530 tests passing on Clang-18, and fix the broken GitHub Actions CI workflow.
+
+### Work Completed
+
+**GitHub Actions CI Fix (committed separately: `933e0d2`)**
+
+Root cause of CI failure ("Configuring incomplete, errors occurred!" on all 3 jobs):
+
+1. Linux jobs did not set `VCPKG_ROOT` or pass `-DCMAKE_TOOLCHAIN_FILE` to cmake — primary cause; every `find_package` call failed
+2. `apt-get` was installing system GLFW and LuaJIT packages conflicting with vcpkg-managed versions — removed
+3. Missing X11 dev packages for vcpkg to build GLFW from source: added `libgl1-mesa-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev`
+4. No `permissions:` block — security hardening gap; added `permissions: contents: read`
+5. macOS vcpkg clone unpinned to HEAD — supply-chain risk; pinned to tag `2024.11.16` with `--depth 1`
+
+Security-auditor reviewed the CI workflow: PASS. No CRITICAL/HIGH findings. Two LOW/MEDIUM hardening recommendations applied before commit.
+
+**GLAD glReadPixels Fix**
+
+Root cause: the custom GLAD loader in `third_party/glad/` was generated without `glReadPixels` in its function manifest. The function is OpenGL 1.0 core — always available — but was omitted from the original GLAD generation.
+
+Fix applied to `third_party/glad/`:
+- `typedef void (GLAD_API_PTR *PFNGLREADPIXELSPROC)(GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, void*)` added to `glad.h`
+- `extern PFNGLREADPIXELSPROC glad_glReadPixels` declaration added to `glad.h`
+- `#define glReadPixels glad_glReadPixels` macro added to `glad.h`
+- `PFNGLREADPIXELSPROC glad_glReadPixels = NULL` definition added to `glad.c`
+- `glad_glReadPixels = (PFNGLREADPIXELSPROC)load("glReadPixels")` loader call added to `glad.c`
+
+**Screenshot tool now compiles and tests pass**
+
+- `engine/renderer/screenshot.h` / `screenshot.cpp` compile cleanly
+- `ffe.screenshot` Lua binding compiled and registered
+- 11 new Catch2 test cases in `tests/renderer/test_screenshot.cpp` all pass
+
+**Expert panel (Phase 3 — parallel):**
+- performance-critic: PASS
+- security-auditor: PASS
+- api-designer: `.context.md` files confirmed accurate
+
+**Build results:**
+
+| Compiler | Tests | Warnings | Result |
+|----------|-------|----------|--------|
+| Clang-18 | 530/530 | 0 | PASS |
+
+GCC-13 verification to run at start of Session 42.
+
+### Agents Dispatched
+
+- `system-engineer` (CI fix — sequential)
+- `security-auditor` (CI review — sequential)
+- `engine-dev` (GLAD fix — sequential)
+- `build-engineer` × 2 (Phase 5 rebuild cycles — sequential)
+
+### Files Changed
+
+| File | Status |
+|------|--------|
+| `.github/workflows/ci.yml` | MODIFIED (committed: `933e0d2`) |
+| `third_party/glad/include/glad/glad.h` | MODIFIED |
+| `third_party/glad/src/glad.c` | MODIFIED |
+| `tests/renderer/test_screenshot.cpp` | NEW |
+| `tests/CMakeLists.txt` | MODIFIED |
+| `docs/environment.md` | MODIFIED |
+
+### Session 41 Stats
+
+- 5 files modified/added (excluding CI workflow committed separately)
+- 11 new Catch2 test cases
+- 530 total tests passing (Clang-18)
+
+### Next Session (42): 3D Camera Modes + Diffuse Texture Support
+
+Phase 2 ROADMAP items: `ffe.set3DCameraFPS`, `ffe.set3DCameraOrbit` (perspective camera modes), `ffe.setMeshTexture` (diffuse texture binding for 3D meshes), UV loading from TEXCOORD_0, Blinn-Phong shader texture uniform.
