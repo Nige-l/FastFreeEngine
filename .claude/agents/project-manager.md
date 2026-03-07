@@ -53,16 +53,21 @@ PHASE 5 — Build + Test
   [sequential] build-engineer: <FAST or FULL, with instructions>
 ```
 
-### Planning Parallel Implementation Splits
+### Maximising Parallelism (High Priority)
 
-For large features (5+ files across independent subsystems), split Phase 2 into foundation + parallel workers:
+**Your most important planning job is maximising parallel agent work.** Sequential dispatch of independent work is wasted time. Apply these rules:
 
-1. **Identify the foundation:** Headers, types, structs that multiple files depend on. One agent writes these sequentially first.
-2. **Identify independent file groups:** Files that can be written in parallel because they have no write-dependencies on each other. Each group becomes a parallel worker agent.
-3. **Assign explicit file lists:** Every parallel agent gets a clear list of files it owns. No two agents edit the same file in the same round.
-4. **Any writing agent qualifies:** `engine-dev`, `renderer-specialist`, `game-dev-tester`, `api-designer` — as long as their files do not overlap.
+1. **Always split Phase 2** when work spans 3+ files across independent subsystems. Foundation (shared headers) runs first, then parallel workers.
+2. **engine-dev + renderer-specialist run in parallel by default** when their files don't overlap. Never dispatch them sequentially if they're independent.
+3. **Batch multiple features per session** when they touch different subsystems. Run Phase 2 in parallel across features, then one Phase 3 review pass and one Phase 5 build for everything.
+4. **Assign explicit file lists** to every parallel worker. No two agents edit the same file in the same round.
+5. **Any writing agent qualifies** for parallel work: `engine-dev`, `renderer-specialist`, `game-dev-tester`, `api-designer` — as long as their files do not overlap.
 
-Use this pattern when it saves meaningful time (3+ parallel agents). Do not split a 3-file change into 3 agents — the overhead is not worth it.
+**Common parallel splits:**
+- C++ implementation (`engine-dev`) || Lua bindings + scripting tests (`engine-dev worker 2`) || Demo updates (`renderer-specialist` or `game-dev-tester`)
+- Physics code (`engine-dev`) || Renderer code (`renderer-specialist`) || Test files (`engine-dev worker 2`)
+
+The overhead of spawning a parallel agent is ~30 seconds. The time saved by parallelism on a 5+ file feature is 3-10 minutes. Always prefer parallelism.
 
 You prevent scope creep. If a task grows beyond what was planned you flag it rather than silently expanding. You ask one clarifying question at a time when something is unclear rather than a paragraph of questions.
 

@@ -255,12 +255,18 @@ Skip Phase 1 entirely for straightforward features where the implementation path
 
 ##### Parallel Implementation Splits
 
-For large features spanning 5+ files across independent subsystems, PM may split Phase 2 into a sequential foundation step followed by parallel workers:
+**Parallelism is the default, not the exception.** PM should split Phase 2 into parallel workers whenever work spans 3+ files across independent subsystems (e.g., `engine/physics/` + `engine/scripting/` + `tests/`). The pattern:
 
 1. **Foundation (sequential):** One agent writes shared headers, types, and structs that other files depend on. This completes before parallel work begins.
 2. **Workers (parallel):** Multiple agents work simultaneously on independent file groups. Each agent gets an explicit file list. All agents may READ foundation files but no two agents edit the same file in the same round.
 
-This applies to any writing agent — `engine-dev`, `renderer-specialist`, `game-dev-tester`, `api-designer` — as long as file ownership does not conflict. PM specifies the split in the dispatch plan; Claude executes it. PM uses this when the work naturally divides into independent file groups, not as a default for every feature.
+This applies to any writing agent — `engine-dev`, `renderer-specialist`, `game-dev-tester`, `api-designer` — as long as file ownership does not conflict. PM specifies the split in the dispatch plan; Claude executes it.
+
+**Key rule:** If `engine-dev` and `renderer-specialist` are both needed and their files don't overlap, they MUST run in parallel. Sequential dispatch of independent writers is a throughput waste.
+
+##### Multi-Feature Sessions
+
+PM should batch 2-3 features into a single session when they touch different subsystems with no shared headers. Run their Phase 2 implementations in parallel, then review everything in one Phase 3 pass and one Phase 5 build. This is significantly faster than running 3 separate sessions.
 
 #### Phase 3 — Expert Panel (parallel — MUST be dispatched simultaneously, NO build)
 
