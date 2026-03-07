@@ -3,6 +3,46 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-34 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 48: 3D Physics Foundation (Jolt)
+
+### Summary
+
+Session 48 delivered the 3D physics foundation using Jolt Physics (MIT licensed, already in vcpkg). The integration provides rigid body creation/destruction with box, sphere, and capsule shapes, three motion types (static, kinematic, dynamic), and an ECS sync system that writes Jolt positions/rotations back to Transform3D each frame. Pre-allocated 10 MB TempAllocator and single-thread JobSystem keep it within LEGACY tier budget.
+
+### Features Implemented
+
+- **Jolt Physics integration** — pre-allocated 10 MB TempAllocator, 1-thread JobSystem
+- **Rigid body API** — create/destroy bodies with box/sphere/capsule shapes
+- **Motion types** — static, kinematic, dynamic
+- **ECS sync system** (priority 60) — Jolt positions/rotations -> Transform3D each frame
+- **Physics step** in Application::tick() before ECS systems
+- **NaN/Inf guards** on all float parameters
+- **8 new Lua bindings**: `ffe.createPhysicsBody`, `ffe.destroyPhysicsBody`, `ffe.applyForce`, `ffe.applyImpulse`, `ffe.setLinearVelocity`, `ffe.getLinearVelocity`, `ffe.setGravity`, `ffe.getGravity`
+- **23 new tests** (15 unit + 8 Lua binding tests)
+
+### Build Notes
+
+- GCC-13 internal compiler error on `SkeletonData{}` aggregate init in assignment context — worked around with `SkeletonData()` (value-init instead of brace-init) in mesh_loader.cpp
+- FULL build: 711 tests passing on both Clang-18 and GCC-13, zero warnings
+
+### Reviews
+
+- **performance-critic:** PASS
+- **api-designer:** PASS (updated .context.md)
+- **security-auditor:** not needed (no external input parsing)
+- **game-dev-tester:** SKIPPED — foundation API, gameplay layer comes in Session 49
+
+### Metrics
+
+- **711 tests** passing (Clang-18 + GCC-13, zero warnings)
+- **8 new Lua bindings** (~110 total)
+
+### Next Session (49)
+
+Complete 3D physics gameplay layer: collision callbacks, raycasting, character controller, constraints/joints, full Lua bindings, 3D demo integration. Close out Phase 2.
+
+---
+
 ## 2026-03-07 — Session 47: 3D Positional Audio
 
 ### Summary

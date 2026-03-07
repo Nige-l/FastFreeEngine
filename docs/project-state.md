@@ -6,9 +6,9 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 47 |
-| Total tests | 686 (Clang-18 passing, zero warnings) |
-| Total Lua bindings | ~102 |
+| Last session | 48 |
+| Total tests | 711 (Clang-18 + GCC-13 passing, zero warnings) |
+| Total Lua bindings | ~110 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
 | Phase 2 (3D Foundation) | IN PROGRESS (see current phase section below) |
 | Windows build | DONE (MinGW-w64 cross-compilation) |
@@ -32,6 +32,7 @@
 | Scene Mgmt | Stable | destroyAllEntities, cancelAllTimers, loadScene |
 | Input | Stable | keyboard+mouse+gamepad, pressed/held/released, action bindings |
 | Audio | Stable | miniaudio, WAV/OGG, playSound/playMusic, streaming, headless, 3D positional (playSound3D, listener sync) |
+| Physics (3D) | In Progress | Jolt Physics, rigid bodies (box/sphere/capsule), static/kinematic/dynamic, ECS sync, 8 Lua bindings |
 | Collision | Stable | Spatial hash, AABB/Circle, layer/mask, CollisionEvent |
 | Scripting | Stable | LuaJIT sandbox, 1M instruction budget, ffe.* API |
 | Save/Load | Stable | JSON on disk, path security, atomic writes |
@@ -56,11 +57,11 @@
 
 | Session | Summary |
 |---------|---------|
+| 48 | 3D physics foundation — Jolt integration, rigid bodies, ECS sync, 8 Lua bindings, 711 tests |
 | 47 | 3D positional audio (spatial voices, listener sync, 4 Lua bindings), 686 tests |
 | 46 | Skeletal animation (bone hierarchy, GPU skinning, 8 Lua bindings), 1.37 GB static array fix, 664 tests |
 | 45 | Skybox / cubemap environment rendering, 3 new Lua bindings, security hardening, 627 tests |
 | 44 | Point lights (4 max) + materials system (specular, normal maps), 8 new Lua bindings, 618 tests |
-| 43 | Shadow mapping (depth FBO, PCF 3x3, 4 Lua bindings), CI improvements (paths-ignore, concurrency), 568 tests |
 
 ## Current Phase: Phase 2 — 3D Foundation (IN PROGRESS)
 
@@ -83,9 +84,9 @@
 ### Remaining
 - [x] Skeletal animation (bone hierarchy, GPU skinning, 8 Lua bindings)
 - [x] 3D positional audio (spatial voices, listener sync, 4 Lua bindings)
-- [ ] 3D physics integration (Bullet, Jolt, or similar)
+- [~] 3D physics integration (Jolt) — foundation done, gameplay layer (collisions, raycasting, character controller, constraints) in Session 49
 
-### Next Session (48) — PM to select from remaining items above
+### Next Session (49) — Complete 3D physics gameplay layer, close out Phase 2
 
 ## Build Commands
 
