@@ -20,14 +20,21 @@ local currentLevel = 0              -- 0 = not loaded yet
 local totalLevels  = 3
 local artifactCount    = 0
 local totalArtifacts   = 1          -- per level
+local levelCompleteTimer = 0
 
 --------------------------------------------------------------------
 -- Level registry — maps level number to its loader script path
 --------------------------------------------------------------------
 local LEVELS = {
-    [1] = "levels/test_level.lua",
-    -- [2] = "levels/level2_courtyard.lua",  -- M2
-    -- [3] = "levels/level3_temple.lua",     -- M3
+    [1] = "levels/level1.lua",
+    -- [2] = "levels/level2.lua",   -- M3: The Temple
+    -- [3] = "levels/level3.lua",   -- M4: The Summit
+}
+
+local LEVEL_NAMES = {
+    [1] = "The Courtyard",
+    [2] = "The Temple",
+    [3] = "The Summit",
 }
 
 --------------------------------------------------------------------
@@ -76,6 +83,23 @@ local function loadLevel(levelNum)
         return
     end
 
+    -- Clean up previous level (if any)
+    if currentLevel > 0 then
+        if Player then Player.cleanup() end
+        if AI then AI.reset() end
+        ffe.cancelAllTimers()
+        ffe.destroyAllEntities()
+        -- Reset lighting to defaults
+        ffe.disableFog()
+        ffe.disableShadows()
+        ffe.removePointLight(0)
+        ffe.removePointLight(1)
+        ffe.removePointLight(2)
+        ffe.removePointLight(3)
+        ffe.unloadSkybox()
+        ffe.stopMusic()
+    end
+
     -- Reset per-level state
     artifactCount  = 0
     totalArtifacts = 1
@@ -95,6 +119,7 @@ function collectArtifact()
         .. "/" .. tostring(totalArtifacts))
     if artifactCount >= totalArtifacts then
         gameState = STATE_LEVEL_COMPLETE
+        levelCompleteTimer = 0
         ffe.log("[Showcase] Level complete!")
     end
 end
@@ -160,9 +185,11 @@ function update(entityId, dt)
         -- Draw pause overlay only, no updates
 
     elseif gameState == STATE_LEVEL_COMPLETE then
-        -- Advance to next level on ENTER
-        if ffe.isKeyPressed(ffe.KEY_ENTER) then
+        levelCompleteTimer = (levelCompleteTimer or 0) + dt
+        -- Advance to next level on ENTER (after a brief delay)
+        if ffe.isKeyPressed(ffe.KEY_ENTER) and levelCompleteTimer > 1.0 then
             if currentLevel < totalLevels and LEVELS[currentLevel + 1] then
+                levelCompleteTimer = 0
                 loadLevel(currentLevel + 1)
             else
                 ffe.log("[Showcase] All levels complete! Congratulations!")
@@ -185,7 +212,10 @@ function update(entityId, dt)
         local hp    = Player and Player.getHealth() or 0
         local maxHp = 100
         local lvlName = "Level " .. tostring(currentLevel)
-        HUD.draw(hp, maxHp, artifactCount, totalArtifacts, lvlName)
+        if LEVEL_NAMES[currentLevel] then
+            lvlName = lvlName .. " - " .. LEVEL_NAMES[currentLevel]
+        end
+        HUD.draw(hp, maxHp, artifactCount, totalArtifacts, lvlName, dt)
     end
 
     -- FPS display (top-right)
@@ -197,9 +227,15 @@ function update(entityId, dt)
         ffe.drawRect(0, sh / 2 - 30, sw, 60, 0, 0, 0, 0.7)
         ffe.drawText("PAUSED  -  Press P to resume", sw / 2 - 220, sh / 2 - 10, 3, 1, 1, 1, 1)
     elseif gameState == STATE_LEVEL_COMPLETE then
-        ffe.drawRect(0, sh / 2 - 50, sw, 100, 0, 0, 0, 0.7)
-        ffe.drawText("LEVEL COMPLETE!", sw / 2 - 150, sh / 2 - 30, 4, 0.2, 1, 0.4, 1)
-        ffe.drawText("Press ENTER to continue", sw / 2 - 180, sh / 2 + 10, 3, 0.8, 0.8, 0.8, 1)
+        ffe.drawRect(0, sh / 2 - 60, sw, 120, 0, 0, 0, 0.7)
+        local completeName = LEVEL_NAMES[currentLevel] or ("Level " .. tostring(currentLevel))
+        ffe.drawText(completeName .. " COMPLETE!", sw / 2 - 200, sh / 2 - 40, 4, 0.2, 1, 0.4, 1)
+        if currentLevel < totalLevels and LEVELS[currentLevel + 1] then
+            ffe.drawText("Press ENTER to continue", sw / 2 - 180, sh / 2 + 10, 3, 0.8, 0.8, 0.8, 1)
+        else
+            ffe.drawText("CONGRATULATIONS! You have completed", sw / 2 - 280, sh / 2, 3, 1, 0.9, 0.3, 1)
+            ffe.drawText("Echoes of the Ancients!", sw / 2 - 180, sh / 2 + 26, 3, 0.9, 0.75, 0.4, 1)
+        end
     elseif gameState == STATE_GAME_OVER then
         ffe.drawRect(0, sh / 2 - 50, sw, 100, 0, 0, 0, 0.7)
         ffe.drawText("GAME OVER", sw / 2 - 100, sh / 2 - 30, 4, 1, 0.2, 0.2, 1)
@@ -217,6 +253,7 @@ end
 function shutdown()
     ffe.log("[Showcase] Shutdown")
     if Player then Player.cleanup() end
+    ffe.stopMusic()
     ffe.disableFog()
     ffe.disableShadows()
     ffe.removePointLight(0)

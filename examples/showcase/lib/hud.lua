@@ -30,16 +30,26 @@ local PROMPT_OFFSET_Y = 100  -- pixels above bottom of screen
 --------------------------------------------------------------------
 -- Interaction prompt state
 --------------------------------------------------------------------
-local promptText    = nil
-local promptTimer   = 0
+local promptText     = nil
+local promptTimer    = 0
+local promptDuration = 0
 
 --------------------------------------------------------------------
 -- HUD.draw(playerHealth, maxHealth, artifactCount, totalArtifacts, levelName)
 -- Call once per frame from the main update loop.
 --------------------------------------------------------------------
-function HUD.draw(playerHealth, maxHealth, artifactCount, totalArtifacts, levelName)
+function HUD.draw(playerHealth, maxHealth, artifactCount, totalArtifacts, levelName, dt)
     local sw = ffe.getScreenWidth()
     local sh = ffe.getScreenHeight()
+
+    -- Tick prompt timer (dt may be nil on first call)
+    if promptTimer > 0 and dt then
+        promptTimer = promptTimer - dt
+        if promptTimer <= 0 then
+            promptText  = nil
+            promptTimer = 0
+        end
+    end
 
     playerHealth  = playerHealth or 0
     maxHealth     = maxHealth or 100
@@ -89,9 +99,12 @@ function HUD.draw(playerHealth, maxHealth, artifactCount, totalArtifacts, levelN
     -- Level name
     ffe.drawText(levelName, LEVEL_X, LEVEL_Y, 2, 0.7, 0.8, 0.9, 0.9)
 
-    -- Interaction prompt (bottom center, fades after timeout)
+    -- Interaction prompt (bottom center, fades during last 0.5s)
     if promptText and promptTimer > 0 then
-        local alpha = math.min(1.0, promptTimer * 2)  -- fade out
+        local alpha = 1.0
+        if promptTimer < 0.5 then
+            alpha = promptTimer / 0.5  -- fade out over last 0.5s
+        end
         local textLen = #promptText * 16  -- approximate width at scale 2
         local px = (sw - textLen) / 2
         local py = sh - PROMPT_OFFSET_Y
@@ -111,16 +124,9 @@ end
 -- Shows a temporary interaction prompt at the bottom of the screen.
 --------------------------------------------------------------------
 function HUD.showPrompt(text, duration)
-    promptText  = text
-    promptTimer = duration or 2.0
-
-    -- Set up a timer to decay the prompt
-    ffe.after(duration or 2.0, function()
-        if promptText == text then
-            promptText  = nil
-            promptTimer = 0
-        end
-    end)
+    promptText     = text
+    promptTimer    = duration or 2.0
+    promptDuration = duration or 2.0
 end
 
 --------------------------------------------------------------------
