@@ -120,13 +120,18 @@ TEST_CASE("exportGame creates output directory structure", "[editor][exporter]")
     }
 
     BuildConfig config{};
-    std::strncpy(config.projectName, "TestGame", sizeof(config.projectName));
-    std::strncpy(config.entryScene, sceneFile.c_str(), sizeof(config.entryScene));
+    std::strncpy(config.projectName, "TestGame", sizeof(config.projectName) - 1);
+    config.projectName[sizeof(config.projectName) - 1] = '\0';
+    std::strncpy(config.entryScene, sceneFile.c_str(), sizeof(config.entryScene) - 1);
+    config.entryScene[sizeof(config.entryScene) - 1] = '\0';
     const std::string outDir = (tmp.path / "output").string() + "/";
-    std::strncpy(config.outputDir, outDir.c_str(), sizeof(config.outputDir));
-    std::strncpy(config.assetDirs[0], assetDir.c_str(), sizeof(config.assetDirs[0]));
+    std::strncpy(config.outputDir, outDir.c_str(), sizeof(config.outputDir) - 1);
+    config.outputDir[sizeof(config.outputDir) - 1] = '\0';
+    std::strncpy(config.assetDirs[0], assetDir.c_str(), sizeof(config.assetDirs[0]) - 1);
+    config.assetDirs[0][sizeof(config.assetDirs[0]) - 1] = '\0';
     config.assetDirCount = 1;
-    std::strncpy(config.scriptDirs[0], scriptDir.c_str(), sizeof(config.scriptDirs[0]));
+    std::strncpy(config.scriptDirs[0], scriptDir.c_str(), sizeof(config.scriptDirs[0]) - 1);
+    config.scriptDirs[0][sizeof(config.scriptDirs[0]) - 1] = '\0';
     config.scriptDirCount = 1;
 
     const auto result = exportGame(config, fakeRuntime.string());
@@ -154,10 +159,13 @@ TEST_CASE("exportGame generates main.lua with entry scene reference", "[editor][
     }
 
     BuildConfig config{};
-    std::strncpy(config.projectName, "MyGame", sizeof(config.projectName));
-    std::strncpy(config.entryScene, "level1.json", sizeof(config.entryScene));
+    std::strncpy(config.projectName, "MyGame", sizeof(config.projectName) - 1);
+    config.projectName[sizeof(config.projectName) - 1] = '\0';
+    std::strncpy(config.entryScene, "level1.json", sizeof(config.entryScene) - 1);
+    config.entryScene[sizeof(config.entryScene) - 1] = '\0';
     const std::string outDir = (tmp.path / "output").string() + "/";
-    std::strncpy(config.outputDir, outDir.c_str(), sizeof(config.outputDir));
+    std::strncpy(config.outputDir, outDir.c_str(), sizeof(config.outputDir) - 1);
+    config.outputDir[sizeof(config.outputDir) - 1] = '\0';
     config.assetDirCount = 0;
     config.scriptDirCount = 0;
 

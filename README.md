@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-1005 tests | Zero warnings | Clang-18 + GCC-13 | ~169 Lua bindings | 6 demo games
+1228 tests | Zero warnings | Clang-18 + GCC-13 | ~190 Lua bindings | 6 demo games
 
 ---
 
@@ -88,7 +88,7 @@ All subsystems below are implemented and working together in six demo games incl
 ### Core Engine
 
 - **ECS** -- Entity Component System built on EnTT with a thin `World` wrapper and function-pointer system dispatch. No virtual calls in hot paths.
-- **Lua Scripting** -- Sandboxed LuaJIT with instruction budget (1M ops), blocked globals, and ~169 `ffe.*` API bindings across all subsystems.
+- **Lua Scripting** -- Sandboxed LuaJIT with instruction budget (1M ops), blocked globals, and ~190 `ffe.*` API bindings across all subsystems.
 - **Arena Allocator** -- Linear bump allocator with cache-line alignment and per-frame reset. Zero heap allocations in hot paths.
 - **Input System** -- State-based keyboard, mouse, and gamepad input (pressed/held/released) with action mapping (64 actions, 4 bindings each). Up to 4 controllers. Xbox controller supported.
 - **Timers** -- `ffe.after()` and `ffe.every()` with cancel support. 256 max concurrent timers, fixed-size array.
@@ -98,7 +98,7 @@ All subsystems below are implemented and working together in six demo games incl
 
 ### 2D Rendering
 
-- **Sprite Rendering** -- OpenGL 3.3 backend with batched draw calls (2048 sprites per batch), packed 64-bit sort keys, and render queue.
+- **Sprite Rendering** -- OpenGL 3.3 backend with batched draw calls (2048 sprites per batch), packed 64-bit sort keys, and render queue. Runtime texture atlas with shelf packing for automatic sprite batching.
 - **Sprite Animation** -- Grid-based atlas animation with configurable frame count, columns, frame duration, and looping.
 - **Tilemap** -- Tilemap component with `setTile`/`getTile`, supporting maps up to 1024x1024.
 - **Particle System** -- ParticleEmitter with 128 inline particle pool, gravity, color interpolation, and size interpolation.
@@ -109,12 +109,17 @@ All subsystems below are implemented and working together in six demo games incl
 
 ### 3D Rendering
 
-- **Mesh Rendering** -- glTF (.glb) mesh loading via cgltf. Blinn-Phong lighting with directional and point lights (up to 4).
+- **PBR Materials** -- Cook-Torrance BRDF with metallic-roughness workflow and image-based lighting (IBL). Full Lua bindings.
+- **Mesh Rendering** -- glTF (.glb) mesh loading via cgltf. Blinn-Phong and PBR lighting with directional and point lights (up to 4).
+- **Post-Processing Pipeline** -- HDR rendering with bloom (threshold + blur), tone mapping (Reinhard and ACES), and gamma correction. Configurable via Lua.
+- **GPU Instancing** -- Automatic mesh batching for repeated meshes (1024 instances per batch). Instanced shadow rendering.
+- **Anti-Aliasing** -- MSAA (multisample FBO, configurable sample count) and FXAA 3.11 post-process. Both can be combined.
+- **SSAO** -- Screen-space ambient occlusion with hemisphere sampling for improved depth perception. Configurable radius and bias.
 - **Materials** -- Diffuse, specular, and normal map support with configurable shininess.
-- **Shadow Mapping** -- Depth FBO with PCF 3x3 filtering. Configurable bias and shadow area.
+- **Shadow Mapping** -- Depth FBO with PCF 3x3 filtering. Configurable bias and shadow area. Instanced shadow pass for GPU-instanced meshes.
 - **Skybox** -- Cubemap environment rendering (6-face loading).
-- **Linear Fog** -- Distance-based fog with configurable color, near, and far distances.
-- **Skeletal Animation** -- Bone hierarchy with GPU skinning (64 max bones). Play/stop/speed control from Lua.
+- **Linear Fog** -- Distance-based fog with configurable color, near, and far distances. Lua bindings.
+- **Skeletal Animation** -- Bone hierarchy with GPU skinning (64 max bones). Crossfade blending, interpolation modes, root motion. Play/stop/speed control from Lua.
 - **3D Camera** -- FPS (yaw/pitch) and orbit (target/radius) camera modes with Lua bindings.
 
 ### 3D Physics
@@ -265,7 +270,7 @@ cmake --build build-mingw
 
 ### Running Tests
 
-1005 Catch2 tests covering core, renderer (2D and 3D), scripting, audio, physics, networking, and more:
+1228 Catch2 tests covering core, renderer (2D and 3D), scripting, audio, physics, networking, and more:
 
 ```bash
 ctest --test-dir build --output-on-failure --parallel $(nproc)
@@ -394,15 +399,16 @@ A 2D multiplayer arena demonstrating client-side prediction, server reconciliati
 ```
 engine/
   core/         ECS, types, arena allocator, logging, input, timers, application loop
-  renderer/     OpenGL 3.3 backend, sprite batching, textures, sprite animation,
-                3D mesh, lighting, shadows, skybox, fog, skeletal animation, camera
+  renderer/     OpenGL 3.3 backend, sprite batching (+ runtime atlas), textures,
+                3D mesh, PBR, post-processing (HDR/bloom/tone mapping), GPU instancing,
+                MSAA/FXAA, SSAO, shadows, skybox, fog, skeletal animation, camera
   audio/        miniaudio integration, WAV/OGG/MP3, SFX + streaming music, 3D spatial audio
   physics/      2D collision (spatial hash, AABB/circle) + 3D physics (Jolt, rigid bodies, raycasting)
-  scripting/    Lua sandbox, ~169 ffe.* API bindings, instruction budget
+  scripting/    Lua sandbox, ~190 ffe.* API bindings, instruction budget
   networking/   ENet transport, replication, server/client, prediction, lobby, lag compensation
   editor/       Standalone editor application (ImGui, hierarchy, inspector, viewport, gizmos)
 
-tests/          1005 Catch2 tests (core, renderer, scripting, audio, physics, networking)
+tests/          1228 Catch2 tests (core, renderer, scripting, audio, physics, networking)
 examples/       Demo games (showcase, lua_demo, pong, breakout, 3d_demo, net_demo, hello_sprites, headless_test)
 assets/
   textures/     PNG textures and spritesheets
@@ -493,7 +499,7 @@ FastFreeEngine is licensed under the [MIT License](LICENSE). Free and open sourc
 
 ## Status
 
-**Active development.** All six phases are complete. Phase 7 (Rendering Pipeline Modernization) is next.
+**Active development.** All seven phases are complete.
 
 | Phase | Status |
 |-------|--------|
@@ -503,21 +509,13 @@ FastFreeEngine is licensed under the [MIT License](LICENSE). Free and open sourc
 | Phase 4 -- Networking / Multiplayer | COMPLETE |
 | Phase 5 -- Website / Learning Platform | COMPLETE |
 | Phase 6 -- Showcase Game ("Echoes of the Ancients") | COMPLETE |
-| Phase 7 -- Rendering Pipeline Modernization | NEXT |
+| Phase 7 -- Rendering Pipeline Modernization | COMPLETE |
 
-### Phase 7: Rendering Pipeline Modernization
-
-The next phase focuses on bringing the renderer up to modern standards while maintaining LEGACY tier compatibility:
-
-- **PBR Materials** -- Physically-based rendering with metallic-roughness workflow
-- **Post-Processing Pipeline** -- Bloom, tone mapping (HDR), and configurable effect chain
-- **GPU Instancing** -- Batched draw calls for repeated meshes (vegetation, props, crowds)
-- **SSAO** -- Screen-space ambient occlusion for improved depth perception
-- **Anti-Aliasing** -- MSAA and/or FXAA for clean edges on all tiers
+Phase 7 delivered PBR materials (Cook-Torrance BRDF, metallic-roughness, IBL), a full post-processing pipeline (HDR, bloom, tone mapping with Reinhard/ACES, gamma correction), GPU instancing (1024/batch with instanced shadows), anti-aliasing (MSAA + FXAA 3.11), SSAO (hemisphere sampling), skeletal animation enhancements (crossfade blending, interpolation modes, root motion), runtime sprite texture atlas (shelf packing), and linear fog with Lua bindings.
 
 ### Planned Future Phases
 
-FFE has an ambitious roadmap beyond Phase 7. Planned work includes:
+FFE has an ambitious roadmap ahead. Planned work includes:
 
 - **Vulkan Renderer** -- A modern Vulkan backend alongside the existing OpenGL 3.3, enabling STANDARD and MODERN tier features (compute shaders, GPU-driven rendering, ray tracing on MODERN tier)
 - **Terrain System** -- Heightmap-based terrain with LOD, texture splatting, and vegetation placement for open-world games
@@ -527,7 +525,7 @@ FFE has an ambitious roadmap beyond Phase 7. Planned work includes:
 - **Plugin/Extension System** -- C++ and Lua plugin API for community extensions, custom renderers, and tool integrations
 - **AI Tooling** -- LLM integration panel in the editor, AI-assisted level design, code generation from natural language
 
-1005 tests pass on both compilers with zero warnings. The engine supports full 2D and 3D game development with multiplayer networking, a standalone editor, 3D physics, skeletal animation, shadow mapping, and more -- demonstrated across six playable demos including the flagship "Echoes of the Ancients" showcase.
+1228 tests pass on both compilers with zero warnings. The engine supports full 2D and 3D game development with PBR rendering, post-processing, GPU instancing, MSAA/FXAA, SSAO, multiplayer networking, a standalone editor, 3D physics, skeletal animation with crossfade blending, shadow mapping, and more -- demonstrated across six playable demos including the flagship "Echoes of the Ancients" showcase.
 
 See `docs/devlog.md` for the full session-by-session development history.
 
