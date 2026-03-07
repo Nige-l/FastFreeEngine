@@ -43,12 +43,20 @@ else
 end
 
 --------------------------------------------------------------------
--- Lighting: dark underground -- near-total darkness with point lights
+-- Post-processing: bloom for lava glow, SSAO for underground depth
 --------------------------------------------------------------------
--- Very dim directional light (faint overhead glow through cracks)
-ffe.setLightDirection(0.0, -1.0, 0.0)
-ffe.setLightColor(0.05, 0.04, 0.06)
-ffe.setAmbientColor(0.05, 0.04, 0.06)
+ffe.enablePostProcessing()
+ffe.enableBloom(1.0, 0.2)        -- subtle bloom, lava glow
+ffe.setToneMapping(2)             -- ACES filmic
+ffe.enableSSAO()                  -- adds depth to dark underground
+ffe.setAntiAliasing(2)            -- FXAA
+
+--------------------------------------------------------------------
+-- Lighting: dark underground with warm torch-lit feel
+--------------------------------------------------------------------
+ffe.setLightDirection(0, -1, 0.2)       -- overhead light
+ffe.setLightColor(0.8, 0.6, 0.4)       -- warm/orange (torch-lit feel)
+ffe.setAmbientColor(0.08, 0.05, 0.03)  -- very dark ambient
 
 -- Enable shadows (lower resolution for underground -- 512 is fine)
 ffe.enableShadows(512)

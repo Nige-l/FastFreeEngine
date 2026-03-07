@@ -95,6 +95,10 @@ local function loadLevel(levelNum)
         if Player then Player.cleanup() end
         if AI then AI.reset() end
         ffe.cancelAllTimers()
+        -- Unload terrain and disable post-processing BEFORE destroying entities
+        ffe.unloadTerrain()
+        ffe.disablePostProcessing()
+        ffe.disableSSAO()
         ffe.destroyAllEntities()
         -- Reset lighting to defaults
         ffe.disableFog()
@@ -155,6 +159,10 @@ local function cleanupToMenu()
         if Player then Player.cleanup() end
         if AI then AI.reset() end
         ffe.cancelAllTimers()
+        -- Unload terrain and disable post-processing BEFORE destroying entities
+        ffe.unloadTerrain()
+        ffe.disablePostProcessing()
+        ffe.disableSSAO()
         ffe.destroyAllEntities()
         ffe.disableFog()
         ffe.disableShadows()
@@ -574,6 +582,9 @@ function shutdown()
     ffe.log("[Showcase] Shutdown")
     ffe.setCursorCaptured(false)  -- Ensure cursor is released on exit
     if Player then Player.cleanup() end
+    ffe.unloadTerrain()
+    ffe.disablePostProcessing()
+    ffe.disableSSAO()
     ffe.stopMusic()
     ffe.disableFog()
     ffe.disableShadows()

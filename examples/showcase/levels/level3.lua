@@ -59,14 +59,20 @@ else
 end
 
 --------------------------------------------------------------------
--- Lighting: dramatic low-angle sunset
+-- Post-processing: full rendering stack for dramatic summit
 --------------------------------------------------------------------
--- Warm orange directional light from low angle (sunset feel)
-ffe.setLightDirection(0.8, 0.4, 0.1)
-ffe.setLightColor(1.0, 0.7, 0.3)
+ffe.enablePostProcessing()
+ffe.enableBloom(0.8, 0.3)
+ffe.setToneMapping(2)  -- ACES filmic
+ffe.enableSSAO()
+ffe.setAntiAliasing(2)  -- FXAA
 
--- Warm purple-pink ambient for twilight atmosphere
-ffe.setAmbientColor(0.2, 0.1, 0.15)
+--------------------------------------------------------------------
+-- Lighting: dramatic golden hour summit
+--------------------------------------------------------------------
+ffe.setLightDirection(-0.2, -0.6, 0.4)   -- low sun angle
+ffe.setLightColor(1.0, 0.8, 0.6)         -- golden hour
+ffe.setAmbientColor(0.12, 0.12, 0.2)     -- cold blue shadows
 
 -- Shadows: wide area for the outdoor summit
 ffe.enableShadows(1024)
@@ -74,12 +80,17 @@ ffe.setShadowBias(0.005)
 ffe.setShadowArea(40, 40, 0.1, 80)
 
 --------------------------------------------------------------------
--- Fog: cloud layer effect (warm orange-purple)
+-- Fog: thick atmospheric summit fog
 --------------------------------------------------------------------
-ffe.setFog(0.6, 0.35, 0.5, 10.0, 40.0)
+ffe.setFog(0.5, 0.55, 0.7, 15.0, 50.0)
 
--- Deep purple-blue background (void below the clouds)
-ffe.setBackgroundColor(0.15, 0.08, 0.2)
+-- Background matches fog color for seamless horizon
+ffe.setBackgroundColor(0.5, 0.55, 0.7)
+
+--------------------------------------------------------------------
+-- Terrain: dramatic summit heightmap with mountain ring
+--------------------------------------------------------------------
+ffe.loadTerrain("terrain/summit_height.png", 60, 60, 12)
 
 --------------------------------------------------------------------
 -- Skybox: unload any previous skybox; use fog + background for sky
@@ -130,16 +141,10 @@ local function createVisualBox(x, y, z, sx, sy, sz, r, g, b, a, rx, ry, rz)
 end
 
 --------------------------------------------------------------------
--- CENTRAL ARENA: Large circular-ish platform (12x1x12) at Y=0
--- The main battleground where the final artifact awaits.
+-- CENTRAL ARENA: terrain replaces the flat ground floor.
+-- Keep the inner ring and edge borders for spatial reference.
 --------------------------------------------------------------------
--- Main arena floor (60x1x60 -- thicker + brighter for visibility)
-createStaticBox(0, -0.5, 0, 30, 1.0, 30, 0.60, 0.48, 0.35)
-
--- Arena edge ring (decorative border boxes around the perimeter)
-createVisualBox(0, -0.3, 0, 30.5, 0.2, 30.5, 0.35, 0.25, 0.2, 1.0)
-
--- Arena inner ring (slightly raised center)
+-- Arena inner ring (slightly raised center, sits on terrain)
 createStaticBox(0, 0.05, 0, 3.5, 0.05, 3.5, 0.5, 0.4, 0.32)
 
 -- Edge border walls for spatial reference (Bug 2)
@@ -645,14 +650,16 @@ ffe.every(TICK_RATE, function()
     end
 
     -- ================================================================
-    -- Fall detection: respawn at central arena if player falls below clouds
+    -- Fall detection: respawn at central arena if player falls below terrain
     -- ================================================================
     if Player then
         local px, py, pz = Player.getPosition()
-        if py < -5 then
+        local groundY = ffe.getTerrainHeight(px, pz)
+        if py < groundY - 10 then
             Player.cleanup()
-            Player.create(0, 2.0, 0, cesiumMesh)
-            Camera.setPosition(0, 2.0, 0)
+            local spawnY = ffe.getTerrainHeight(0, 0) + 2.0
+            Player.create(0, spawnY, 0, cesiumMesh)
+            Camera.setPosition(0, spawnY, 0)
             if HUD then HUD.showPrompt("Lost in the clouds... regaining footing!", 2.0) end
         end
     end

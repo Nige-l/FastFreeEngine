@@ -57,11 +57,20 @@ else
 end
 
 --------------------------------------------------------------------
--- Lighting: warm golden-hour sun
+-- Post-processing: bloom, tone mapping, SSAO, FXAA
 --------------------------------------------------------------------
-ffe.setLightDirection(0.3, -0.7, 0.4)
-ffe.setLightColor(1.0, 0.92, 0.78)
-ffe.setAmbientColor(0.15, 0.15, 0.2)
+ffe.enablePostProcessing()
+ffe.enableBloom(0.8, 0.3)
+ffe.setToneMapping(2)  -- ACES filmic
+ffe.enableSSAO()
+ffe.setAntiAliasing(2)  -- FXAA
+
+--------------------------------------------------------------------
+-- Lighting: dramatic angled sunlight with cool ambient
+--------------------------------------------------------------------
+ffe.setLightDirection(0.3, -0.8, 0.5)
+ffe.setLightColor(1.0, 0.95, 0.85)       -- warm sunlight
+ffe.setAmbientColor(0.15, 0.18, 0.25)    -- cool ambient (blueish shadows)
 
 -- Enable shadows
 ffe.enableShadows(1024)
@@ -69,10 +78,15 @@ ffe.setShadowBias(0.005)
 ffe.setShadowArea(40, 40, 0.1, 80)
 
 --------------------------------------------------------------------
--- Fog: atmospheric outdoor haze
+-- Fog: soft blue-grey outdoor atmosphere
 --------------------------------------------------------------------
-ffe.setFog(0.55, 0.6, 0.7, 25.0, 80.0)
-ffe.setBackgroundColor(0.55, 0.6, 0.7)
+ffe.setFog(0.6, 0.65, 0.75, 20.0, 80.0)
+ffe.setBackgroundColor(0.6, 0.65, 0.75)
+
+--------------------------------------------------------------------
+-- Terrain: gently rolling courtyard heightmap
+--------------------------------------------------------------------
+ffe.loadTerrain("terrain/courtyard_height.png", 60, 60, 8)
 
 --------------------------------------------------------------------
 -- Helper: create a static box entity with mesh, color, and physics
@@ -123,11 +137,9 @@ local function createDynamicBox(x, y, z, sx, sy, sz, r, g, b, mass)
 end
 
 --------------------------------------------------------------------
--- Ground plane: large flat stone floor (60x1x60)
--- Bright tan/ochre color with strong contrast against blue-grey fog.
--- Positioned so the surface sits at y=0 (center at y=-0.5, halfY=0.5).
+-- Ground plane: replaced by terrain heightmap (see loadTerrain above)
+-- The terrain center is flat, so entities at Y=0 remain compatible.
 --------------------------------------------------------------------
-local ground = createStaticBox(0, -0.5, 0,  30, 1.0, 30,  0.65, 0.55, 0.35)
 
 --------------------------------------------------------------------
 -- Edge border walls: low walls at ground perimeter for spatial reference (Bug 2)
@@ -578,8 +590,9 @@ end
 --------------------------------------------------------------------
 -- Player spawn (south side of courtyard, at the entrance)
 --------------------------------------------------------------------
-Player.create(0, 1.5, -17, cesiumMesh)
-Camera.setPosition(0, 1.5, -17)
+local spawnTerrainY = ffe.getTerrainHeight(0, -17)
+Player.create(0, spawnTerrainY + 1.5, -17, cesiumMesh)
+Camera.setPosition(0, spawnTerrainY + 1.5, -17)
 Camera.setYawPitch(0, 35)  -- Pitch down to see the ground on spawn (Bug 2)
 
 if HUD then
@@ -681,11 +694,13 @@ ffe.every(TICK_RATE, function()
             end
         end
 
-        -- Fall-off detection: respawn if player falls below ground
-        if py < -5 then
+        -- Fall-off detection: respawn if player falls below terrain
+        local groundY = ffe.getTerrainHeight(px, pz)
+        if py < groundY - 10 then
             Player.cleanup()
-            Player.create(0, 1.5, -17, cesiumMesh)
-            Camera.setPosition(0, 1.5, -17)
+            local spawnY = ffe.getTerrainHeight(0, -17) + 1.5
+            Player.create(0, spawnY, -17, cesiumMesh)
+            Camera.setPosition(0, spawnY, -17)
             if HUD then HUD.showPrompt("Watch your step!", 2.0) end
         end
     end
