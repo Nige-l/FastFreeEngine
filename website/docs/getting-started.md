@@ -24,6 +24,7 @@ sudo apt-get install -y \
     libgl1-mesa-dev \
     libglfw3-dev libasound2-dev libpulse-dev \
     luajit libluajit-5.1-dev \
+    libvulkan-dev vulkan-tools \
     pkg-config curl unzip
 ```
 
@@ -35,6 +36,7 @@ sudo apt-get install -y \
     - **libgl1-mesa-dev, libglfw3-dev** -- OpenGL and window management
     - **libasound2-dev, libpulse-dev** -- audio support
     - **luajit, libluajit-5.1-dev** -- the Lua scripting runtime
+    - **libvulkan-dev, vulkan-tools** -- Vulkan rendering backend (optional, needed for STANDARD/MODERN tiers)
 
 ### Set Up vcpkg
 
@@ -244,14 +246,14 @@ The [Lua Quick-Start Tutorial](tutorials/first-2d-game.md) covers all of these i
 ### Tutorials
 
 - [**Lua Quick-Start Tutorial**](tutorials/first-2d-game.md) -- the complete reference for building 2D games, covering entities, sprites, input, audio, collision, animation, tilemaps, particles, save/load, and more
-- **3D Tutorial** -- loading meshes, setting up cameras, lights, and materials *(coming soon)*
-- **Multiplayer Tutorial** -- client-server networking, lobbies, and prediction *(coming soon)*
+- [**Your First 3D Scene**](tutorials/first-3d-game.md) -- loading meshes, setting up cameras, lights, and materials
+- [**Multiplayer Basics**](tutorials/multiplayer-basics.md) -- client-server networking, lobbies, and prediction
 
 ### API Reference
 
 Every engine subdirectory contains a `.context.md` file with the complete API documentation for that subsystem:
 
-- `engine/scripting/.context.md` -- full Lua API reference (~146 bindings)
+- `engine/scripting/.context.md` -- full Lua API reference (~198 bindings)
 - `engine/renderer/.context.md` -- rendering system, sprites, 3D meshes, shaders
 - `engine/audio/.context.md` -- sound and music playback
 - `engine/physics/.context.md` -- collision detection and physics
@@ -266,7 +268,7 @@ FFE is designed to work with AI coding assistants out of the box. Point your LLM
 
 ### The Editor
 
-FFE includes a debug editor overlay (press **F1** in any demo) that shows entity counts, system timings, and engine state. A full standalone editor application (scene editing, asset management, visual scripting) is planned for a future release.
+FFE includes a standalone editor application with an ImGui dockspace layout: scene hierarchy tree, entity inspector, FBO viewport with translate/rotate/scale gizmos, undo/redo, asset browser with drag-and-drop, play-in-editor (snapshot/restore), keyboard shortcuts, and a build pipeline for exporting games as standalone executables. Press **F1** in any demo to toggle the debug overlay.
 
 ### Community and Contributing
 

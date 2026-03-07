@@ -209,8 +209,9 @@ Each directory has a clear owner. Agents do not write to directories they do not
 | `engine/networking/` | `engine-dev` (future — multiplayer, client-server) |
 | `engine/scene/` | `engine-dev` (future — scene graph, serialisation) |
 | `editor/` | `engine-dev` (future — standalone editor application) |
-| `website/` | TBD (future — documentation and training site) |
-| `examples/` | `engine-dev` + `game-dev-tester` (engine-dev writes, game-dev-tester play-tests) |
+| `website/` | `api-designer` |
+| `README.md` | `api-designer` |
+| `examples/` | `game-dev-tester` (writes demo Lua code; engine-dev may update for binding renames only) |
 | `tests/` | `engine-dev` (note: `test-engineer` is dormant — available for release audits, not routine sessions) |
 | `docs/architecture/` | `architect` |
 | `docs/agents/` | `director` |
@@ -226,7 +227,7 @@ Each directory has a clear owner. Agents do not write to directories they do not
 
 - `performance-critic` — reads and reports, never fixes
 - `security-auditor` — reads and reports, never fixes
-- `game-dev-tester` — writes test games only, never modifies engine code
+- `game-dev-tester` — writes and maintains demo/example games, never modifies engine code
 - `build-engineer` — builds and runs tests only, never fixes code
 
 ---
@@ -248,9 +249,10 @@ Skip Phase 1 entirely for straightforward features where the implementation path
 
 #### Phase 2 — Implementation (write only, NO build)
 
-1. `engine-dev` (or `renderer-specialist`) implements the feature, Lua bindings, tests, and demo updates in **one pass**
-2. **engine-dev does NOT build or run tests** — that is `build-engineer`'s job in Phase 5
-3. engine-dev reports what files were written/modified and stops
+1. `engine-dev` (or `renderer-specialist`) implements the feature, Lua bindings, and tests in **one pass**
+2. If demo/example updates are needed, `game-dev-tester` writes the demo Lua code — either in parallel with engine-dev (when using existing bindings) or sequentially after (when new bindings are needed)
+3. **engine-dev does NOT build or run tests** — that is `build-engineer`'s job in Phase 5
+4. engine-dev reports what files were written/modified and stops
 
 `engine-dev` owns `tests/` and writes Catch2 tests alongside the implementation. There is no separate test-writing step.
 
@@ -276,7 +278,6 @@ All reviewers run in parallel with zero dependencies between them:
 - `performance-critic` (always)
 - `security-auditor` post-implementation review (only if the feature touches attack surface per Section 5)
 - `api-designer` (reviews public API, updates `.context.md`)
-- `game-dev-tester` demo validation (MANDATORY when any `examples/` files were created or modified — see Section 7 game-dev-tester rules)
 
 These are all read-only agents. **Sequential dispatch of Phase 3 agents is a process violation.** They have no dependencies on each other and must run simultaneously.
 
@@ -320,17 +321,21 @@ After Phase 5 passes: **commit** (see Git Commit Ownership below).
 - No other agent runs `git commit`, `git push`, or `git add`. If an agent needs something committed mid-session (e.g., a CI fix that must be pushed to test), PM does the commit.
 - `build-engineer` never commits. `system-engineer` never commits. `engine-dev` never commits.
 
-### game-dev-tester: Mandatory for Demos, Conditional for Features
+### game-dev-tester: Demo Author and API Exerciser
 
-`game-dev-tester` is invoked in two modes:
+`game-dev-tester` is the primary author of all demo and example game code under `examples/`. It writes Lua game scripts from the perspective of an indie game developer using FFE.
 
-**Mode 1 — Demo Validation (MANDATORY):** When a session creates or modifies any demo or example game (`examples/`), `game-dev-tester` must be dispatched to play-test the demo. This is not optional. game-dev-tester reads the Lua source, traces the game logic, identifies bugs, missing error handling, broken interactions, and UX issues. It reports a bug list with severity ratings. Any HIGH or CRITICAL bugs must be fixed before the session ends.
+**When PM dispatches game-dev-tester:**
 
-This mode exists because the user found 7 bugs on first run of the showcase game after 7 sessions of building it without play-testing. Demo quality is a direct reflection of engine quality. If game-dev-tester would have caught it, and it was not invoked, that is a process failure.
+- **Demo creation or update:** When a session requires new or modified demo/example games, game-dev-tester writes the Lua code in Phase 2. It runs in parallel with engine-dev when using existing bindings, or sequentially after engine-dev when new bindings are needed. game-dev-tester self-validates its own work by tracing game logic during writing — no separate review agent is needed for demo code.
+- **API validation (conditional):** When a new API paradigm is introduced or PM judges discoverability risk is high, game-dev-tester writes a small Lua game exercising the new API and reports friction points.
 
-**Mode 2 — API Validation (conditional):** When a new API paradigm is introduced (not just a new binding in an existing pattern), or PM judges that discoverability risk is high, game-dev-tester writes a small Lua game or component that exercises the new API. This mode is conditional — PM decides whether to invoke.
+**When game-dev-tester is NOT needed:**
 
-If `game-dev-tester` is not invoked in either mode, document the skip reason in the devlog. "No new API paradigm" is NOT a valid skip reason when demo files were changed.
+- Sessions that only touch engine internals with no demo changes
+- Sessions where demo changes are trivial (binding rename, constant update)
+
+If `game-dev-tester` is not invoked, PM documents the skip reason in the devlog.
 
 ### Build Cycle Rules
 
@@ -376,7 +381,7 @@ A feature is **not done** until every applicable item is satisfied:
 - [ ] Lua bindings exist where applicable
 - [ ] `api-designer` has reviewed the Lua bindings
 - [ ] A working Lua usage example exists
-- [ ] `game-dev-tester` has validated any demo/example changes (MANDATORY per Section 7), OR validated new API (if invoked), OR skip documented with valid reason in devlog
+- [ ] `game-dev-tester` has written demo/example code (if needed), OR validated new API (if invoked), OR skip documented with reason in devlog
 - [ ] A `.context.md` file exists in the system's directory, written for LLM consumption
 - [ ] Changes are committed with a clear [Conventional Commit](https://www.conventionalcommits.org/) message
 
@@ -442,7 +447,7 @@ Performance is how we deliver on this mission. By running well on old hardware, 
 | Is my code fast enough? | Ask `performance-critic` |
 | Is my code secure? | Ask `security-auditor` |
 | Is my API good? | Ask `api-designer`, then `game-dev-tester` |
-| Did I change examples/? | `game-dev-tester` MUST play-test the demo (mandatory, not conditional) |
+| Who writes demo/example Lua code? | `game-dev-tester` — primary author of all `examples/` content |
 | Can Claude write code directly? | **No** — invoke `project-manager` for a plan, then dispatch the agents PM specifies |
 | Can Claude decide which agents to invoke? | **No** — PM's plan specifies agents and order; Claude dispatches, never decides |
 | Can Claude reorder or skip agents in PM's plan? | **No** — follow PM's plan exactly unless the user explicitly overrides |

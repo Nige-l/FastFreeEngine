@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-1228 tests | Zero warnings | Clang-18 + GCC-13 | ~190 Lua bindings | 6 demo games
+1282 tests | Zero warnings | Clang-18 + GCC-13 | ~198 Lua bindings | 6 demo games
 
 ---
 
@@ -26,10 +26,12 @@ FFE is free and open source forever. MIT licensed. That is not up for debate.
 
 FFE's flagship demo is a **3-level 3D action-exploration game** showcasing the engine's full capabilities. Built entirely in Lua on top of the engine, it proves that FFE can ship real, playable games -- not just tech demos.
 
+![Echoes of the Ancients](docs/screenshots/showcase.png)
+
 **3 Levels:**
-- **The Courtyard** -- Outdoor ruins with push-block puzzles, guardian enemies, destructible walls, fog, directional shadows, and 4 point lights
+- **The Courtyard** -- Outdoor ruins on heightmap terrain with push-block puzzles, guardian enemies, destructible walls, fog, directional shadows, and 4 point lights
 - **The Temple** -- Underground temple with dark atmospheric lighting, lava pits, crystal sequence puzzles, timed disappearing bridges, and a boss guardian
-- **The Summit** -- Floating islands above the clouds, dramatic sunset skybox, timed platforms, and a final boss encounter
+- **The Summit** -- Mountainous terrain above the clouds, dramatic sunset skybox, timed platforms, and a final boss encounter
 
 **Game Features:**
 - Real 3D models (.glb) from Khronos glTF samples (damaged helmet, animated characters, fox, duck, and more)
@@ -38,7 +40,9 @@ FFE's flagship demo is a **3-level 3D action-exploration game** showcasing the e
 - Guardian enemies with patrol/chase AI state machines
 - Push-block puzzles, crystal sequence puzzles, timed platforms, pressure plates, destructible walls
 - Boss fights with increased HP and distinct behavior
-- Atmospheric lighting: directional shadows, up to 4 point lights, linear fog
+- **Heightmap terrain** in Levels 1 and 3 with splat-map texturing and terrain-aware gameplay
+- **Post-processing pipeline**: HDR bloom, ACES tone mapping, SSAO, FXAA
+- **Per-level atmospheric lighting and fog** with distinct mood per environment
 - Skybox environments, particle effects, and spatial audio
 - Original music tracks per level
 - Main menu with gamepad support and victory screen with completion stats
@@ -46,7 +50,7 @@ FFE's flagship demo is a **3-level 3D action-exploration game** showcasing the e
 - HUD with health bar, artifact count, and interaction prompts
 
 ```bash
-./build/examples/runtime/ffe_runtime examples/showcase/game.lua
+./build/examples/showcase/ffe_showcase
 ```
 
 The showcase exercises every major engine subsystem in a single cohesive experience and serves as a reference implementation for developers learning FFE.
@@ -88,7 +92,7 @@ All subsystems below are implemented and working together in six demo games incl
 ### Core Engine
 
 - **ECS** -- Entity Component System built on EnTT with a thin `World` wrapper and function-pointer system dispatch. No virtual calls in hot paths.
-- **Lua Scripting** -- Sandboxed LuaJIT with instruction budget (1M ops), blocked globals, and ~190 `ffe.*` API bindings across all subsystems.
+- **Lua Scripting** -- Sandboxed LuaJIT with instruction budget (1M ops), blocked globals, and ~198 `ffe.*` API bindings across all subsystems.
 - **Arena Allocator** -- Linear bump allocator with cache-line alignment and per-frame reset. Zero heap allocations in hot paths.
 - **Input System** -- State-based keyboard, mouse, and gamepad input (pressed/held/released) with action mapping (64 actions, 4 bindings each). Up to 4 controllers. Xbox controller supported.
 - **Timers** -- `ffe.after()` and `ffe.every()` with cancel support. 256 max concurrent timers, fixed-size array.
@@ -120,11 +124,20 @@ All subsystems below are implemented and working together in six demo games incl
 - **Skybox** -- Cubemap environment rendering (6-face loading).
 - **Linear Fog** -- Distance-based fog with configurable color, near, and far distances. Lua bindings.
 - **Skeletal Animation** -- Bone hierarchy with GPU skinning (64 max bones). Crossfade blending, interpolation modes, root motion. Play/stop/speed control from Lua.
+- **Terrain System** -- Heightmap terrain with chunked rendering (raw float + PNG loading), splat map texturing (4 RGBA layers), triplanar projection for steep surfaces, 3-level LOD (full/half/quarter resolution with distance-based selection), frustum culling, and bilinear height queries. Lua bindings for loading, texturing, and LOD configuration.
 - **3D Camera** -- FPS (yaw/pitch) and orbit (target/radius) camera modes with Lua bindings.
 
 ### 3D Physics
 
 - **Jolt Physics Integration** -- Rigid bodies, collision callbacks, and raycasting with entity-body mapping. 13 Lua bindings.
+
+### Vulkan Backend
+
+- **Compile-Time Selectable** -- Build with `-DFFE_BACKEND=Vulkan` to use the Vulkan renderer instead of OpenGL. Targets STANDARD and MODERN tiers.
+- **volk Function Loading** -- Dynamic Vulkan function dispatch without linking to the Vulkan loader.
+- **VMA Memory Management** -- Vulkan Memory Allocator for efficient buffer and image allocation.
+- **SPIR-V Shader Compilation** -- Build-time GLSL 450 to SPIR-V via glslc, embedded as constexpr arrays.
+- **Blinn-Phong Lighting** -- Directional lighting with depth buffer support, matching OpenGL visual parity.
 
 ### Audio
 
@@ -270,7 +283,7 @@ cmake --build build-mingw
 
 ### Running Tests
 
-1228 Catch2 tests covering core, renderer (2D and 3D), scripting, audio, physics, networking, and more:
+1282 Catch2 tests covering core, renderer (2D and 3D), scripting, audio, physics, networking, terrain, and more:
 
 ```bash
 ctest --test-dir build --output-on-failure --parallel $(nproc)
@@ -291,10 +304,12 @@ cmake -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++-18 -DFFE_TIER=MODERN
 
 ### Echoes of the Ancients (Showcase)
 
-The flagship 3-level 3D action-exploration game exercising every engine subsystem. Real CC0 3D models (Khronos glTF samples), atmospheric lighting, physics puzzles, combat, and original music.
+The flagship 3-level 3D action-exploration game exercising every engine subsystem. Real CC0 3D models (Khronos glTF samples), heightmap terrain, post-processing (HDR bloom, ACES tone mapping, SSAO, FXAA), atmospheric lighting, physics puzzles, combat, and original music.
+
+![Echoes of the Ancients Runtime](docs/screenshots/showcase_runtime.png)
 
 ```bash
-./build/examples/runtime/ffe_runtime examples/showcase/game.lua
+./build/examples/showcase/ffe_showcase
 ```
 
 - **WASD** to move, **Space** to jump, **Mouse** to orbit camera
@@ -307,6 +322,8 @@ The flagship 3-level 3D action-exploration game exercising every engine subsyste
 ### Collect the Stars (lua_demo)
 
 A complete 2D mini-game written entirely in Lua exercising every engine subsystem.
+
+![Collect Stars](docs/screenshots/lua_demo.png)
 
 ```bash
 ./build/examples/lua_demo/ffe_lua_demo
@@ -401,14 +418,16 @@ engine/
   core/         ECS, types, arena allocator, logging, input, timers, application loop
   renderer/     OpenGL 3.3 backend, sprite batching (+ runtime atlas), textures,
                 3D mesh, PBR, post-processing (HDR/bloom/tone mapping), GPU instancing,
-                MSAA/FXAA, SSAO, shadows, skybox, fog, skeletal animation, camera
+                MSAA/FXAA, SSAO, shadows, skybox, fog, skeletal animation, terrain, camera
+  renderer/opengl/  OpenGL 3.3 RHI implementation
+  renderer/vulkan/  Vulkan RHI implementation (compile-time selectable via FFE_BACKEND)
   audio/        miniaudio integration, WAV/OGG/MP3, SFX + streaming music, 3D spatial audio
   physics/      2D collision (spatial hash, AABB/circle) + 3D physics (Jolt, rigid bodies, raycasting)
-  scripting/    Lua sandbox, ~190 ffe.* API bindings, instruction budget
+  scripting/    Lua sandbox, ~198 ffe.* API bindings, instruction budget
   networking/   ENet transport, replication, server/client, prediction, lobby, lag compensation
   editor/       Standalone editor application (ImGui, hierarchy, inspector, viewport, gizmos)
 
-tests/          1228 Catch2 tests (core, renderer, scripting, audio, physics, networking)
+tests/          1282 Catch2 tests (core, renderer, scripting, audio, physics, networking, terrain)
 examples/       Demo games (showcase, lua_demo, pong, breakout, 3d_demo, net_demo, hello_sprites, headless_test)
 assets/
   textures/     PNG textures and spritesheets
@@ -499,7 +518,7 @@ FastFreeEngine is licensed under the [MIT License](LICENSE). Free and open sourc
 
 ## Status
 
-**Active development.** All seven phases are complete.
+**Active development.** Eight phases complete, Phase 9 in progress.
 
 | Phase | Status |
 |-------|--------|
@@ -510,22 +529,26 @@ FastFreeEngine is licensed under the [MIT License](LICENSE). Free and open sourc
 | Phase 5 -- Website / Learning Platform | COMPLETE |
 | Phase 6 -- Showcase Game ("Echoes of the Ancients") | COMPLETE |
 | Phase 7 -- Rendering Pipeline Modernization | COMPLETE |
+| Phase 8 -- Vulkan Backend | COMPLETE |
+| Phase 9 -- Terrain / Open World | IN PROGRESS |
 
-Phase 7 delivered PBR materials (Cook-Torrance BRDF, metallic-roughness, IBL), a full post-processing pipeline (HDR, bloom, tone mapping with Reinhard/ACES, gamma correction), GPU instancing (1024/batch with instanced shadows), anti-aliasing (MSAA + FXAA 3.11), SSAO (hemisphere sampling), skeletal animation enhancements (crossfade blending, interpolation modes, root motion), runtime sprite texture atlas (shelf packing), and linear fog with Lua bindings.
+Phase 8 delivered a compile-time selectable Vulkan renderer (`-DFFE_BACKEND=Vulkan`) with volk function loading, VMA memory management, build-time SPIR-V shader compilation, and Blinn-Phong lighting -- targeting STANDARD and MODERN hardware tiers.
 
-### Planned Future Phases
+Phase 9 (in progress) is delivering heightmap terrain with chunked rendering, splat map texturing (4 RGBA layers), triplanar projection, 3-level LOD, frustum culling, and bilinear height queries. World streaming is next.
+
+### Planned Future Work
 
 FFE has an ambitious roadmap ahead. Planned work includes:
 
-- **Vulkan Renderer** -- A modern Vulkan backend alongside the existing OpenGL 3.3, enabling STANDARD and MODERN tier features (compute shaders, GPU-driven rendering, ray tracing on MODERN tier)
-- **Terrain System** -- Heightmap-based terrain with LOD, texture splatting, and vegetation placement for open-world games
+- **World Streaming** -- Async chunk loading/unloading based on camera position (Phase 9 M4)
 - **Advanced Editor** -- Project wizard, preferences persistence, visual scripting, LLM integration panel, prefab system
 - **Cross-Platform Native Builds** -- Native Windows (MSVC), native macOS (Xcode), Linux packaging (AppImage/Flatpak)
 - **Asset Pipeline** -- Texture compression, mesh optimization, asset bundling, hot-reload during development
 - **Plugin/Extension System** -- C++ and Lua plugin API for community extensions, custom renderers, and tool integrations
 - **AI Tooling** -- LLM integration panel in the editor, AI-assisted level design, code generation from natural language
+- **Advanced Vulkan Features** -- Compute shaders, GPU-driven rendering, ray tracing on MODERN tier
 
-1228 tests pass on both compilers with zero warnings. The engine supports full 2D and 3D game development with PBR rendering, post-processing, GPU instancing, MSAA/FXAA, SSAO, multiplayer networking, a standalone editor, 3D physics, skeletal animation with crossfade blending, shadow mapping, and more -- demonstrated across six playable demos including the flagship "Echoes of the Ancients" showcase.
+1282 tests pass on both compilers with zero warnings. The engine supports full 2D and 3D game development with PBR rendering, post-processing, GPU instancing, MSAA/FXAA, SSAO, heightmap terrain, a Vulkan backend, multiplayer networking, a standalone editor, 3D physics, skeletal animation with crossfade blending, shadow mapping, and more -- demonstrated across six playable demos including the flagship "Echoes of the Ancients" showcase.
 
 See `docs/devlog.md` for the full session-by-session development history.
 

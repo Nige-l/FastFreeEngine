@@ -1977,3 +1977,338 @@ The asset root is **write-once**: `setAssetRoot()` cannot be called a second tim
 | MODERN | Yes |
 
 All loaded textures use RGBA8 format, which is supported on all tiers. The `NEAREST` vs `LINEAR` filter choice determines sampling quality. Pass a `TextureLoadParams` struct to `loadTexture` to select the filter and wrap mode — pixel art should use `NEAREST`, smooth art and photographs should use `LINEAR`.
+
+---
+
+## Terrain (`renderer/terrain.h`, `renderer/terrain_renderer.h`)
+
+### System Purpose
+
+The terrain subsystem renders large-scale outdoor environments from heightmap data. It supports chunked mesh generation with 3-level LOD, distance-based LOD selection, frustum culling, RGBA splat-map texturing with up to 4 texture layers, and triplanar projection for steep surfaces. Terrain meshes integrate with the existing Blinn-Phong lighting pipeline including shadows, point lights, and fog.
+
+### Lua Bindings
+
+| Binding | Signature | Description |
+|---------|-----------|-------------|
+| `ffe.loadTerrain` | `(path: string, width: number, depth: number, heightScale: number) -> integer` | Load terrain from a PNG heightmap. Returns terrain handle ID (0 on failure). Cold path only -- do not call per frame. |
+| `ffe.getTerrainHeight` | `(x: number, z: number) -> number` | Get bilinear-interpolated terrain height at a world position. Returns 0 if no terrain is loaded. Safe to call per frame. |
+| `ffe.unloadTerrain` | `() -> nothing` | Unload all terrains and free GPU resources. |
+| `ffe.setTerrainTexture` | `(textureId: integer) -> nothing` | Set the diffuse texture for the first active terrain. |
+| `ffe.setTerrainSplatMap` | `(textureId: integer) -> nothing` | Set the RGBA splat map texture for blending up to 4 terrain layers. |
+| `ffe.setTerrainLayer` | `(layerIndex: integer, textureId: integer, uvScale: number) -> nothing` | Set a texture layer (0-3) with its UV tiling scale. |
+| `ffe.setTerrainTriplanar` | `(enabled: boolean, threshold: number) -> nothing` | Enable/disable triplanar projection for steep surfaces. Threshold controls the blend cutoff. |
+| `ffe.setTerrainLodDistances` | `(lod1Distance: number, lod2Distance: number) -> nothing` | Set distance thresholds for LOD level transitions. |
+
+### Common Usage Pattern
+
+```lua
+-- Load a heightmap terrain
+local terrain = ffe.loadTerrain("terrain/heightmap.png", 512, 512, 50)
+
+-- Apply textures
+local grass = ffe.loadTexture("textures/grass.png")
+local rock = ffe.loadTexture("textures/rock.png")
+local splat = ffe.loadTexture("terrain/splatmap.png")
+
+ffe.setTerrainSplatMap(splat)
+ffe.setTerrainLayer(0, grass, 32.0)  -- R channel = grass
+ffe.setTerrainLayer(1, rock, 16.0)   -- G channel = rock
+ffe.setTerrainTriplanar(true, 0.7)   -- triplanar on steep slopes
+
+-- Query height for gameplay (e.g., keep player on terrain)
+function update(entityId, dt)
+    local t = {}
+    ffe.fillTransform3D(player, t)
+    t.y = ffe.getTerrainHeight(t.x, t.z) + 1.0  -- 1 unit above ground
+    ffe.setTransform3D(player, t.x, t.y, t.z, t.rx, t.ry, t.rz, t.sx, t.sy, t.sz)
+end
+```
+
+### Tier Support
+
+| Tier | Supported |
+|------|-----------|
+| RETRO | No |
+| LEGACY | Yes (primary target) |
+| STANDARD | Yes |
+| MODERN | Yes |
+
+---
+
+## Post-Processing (`renderer/post_process.h`)
+
+### System Purpose
+
+The post-processing subsystem provides HDR rendering with bloom, tone mapping (Reinhard and ACES), gamma correction, and integration points for FXAA and SSAO. All effects are controlled via the `PostProcessConfig` ECS singleton.
+
+### Lua Bindings
+
+| Binding | Signature | Description |
+|---------|-----------|-------------|
+| `ffe.enablePostProcessing` | `() -> nothing` | Ensure a PostProcessConfig exists in the ECS context. No-op if already present. |
+| `ffe.disablePostProcessing` | `() -> nothing` | Remove PostProcessConfig from ECS context. Renderer skips the post-processing pass. |
+| `ffe.enableBloom` | `(threshold: number, intensity: number) -> nothing` | Enable bloom with the given brightness threshold and intensity. |
+| `ffe.disableBloom` | `() -> nothing` | Disable the bloom effect. |
+| `ffe.setToneMapping` | `(mode: integer) -> nothing` | Set tone mapping mode: 0 = none, 1 = Reinhard, 2 = ACES. Enables gamma correction automatically. |
+| `ffe.setGammaCorrection` | `(enabled: boolean) -> nothing` | Enable or disable gamma correction independently. |
+
+### Common Usage Pattern
+
+```lua
+-- Enable HDR post-processing with bloom and ACES tone mapping
+ffe.enablePostProcessing()
+ffe.enableBloom(1.0, 0.8)       -- threshold 1.0, intensity 0.8
+ffe.setToneMapping(2)            -- ACES tone mapping
+
+-- Disable all post-processing
+ffe.disablePostProcessing()
+```
+
+### Tier Support
+
+| Tier | Supported |
+|------|-----------|
+| RETRO | No |
+| LEGACY | Yes (primary target) |
+| STANDARD | Yes |
+| MODERN | Yes |
+
+---
+
+## SSAO (`renderer/ssao.h`)
+
+### System Purpose
+
+Screen-space ambient occlusion darkens creases and corners in 3D scenes to add depth and visual realism. The implementation uses a hemisphere kernel with configurable radius, bias, and sample count, followed by a bilateral blur pass for smoothing.
+
+### Lua Bindings
+
+| Binding | Signature | Description |
+|---------|-----------|-------------|
+| `ffe.enableSSAO` | `(radius: number, bias: number, samples: integer) -> nothing` | Enable SSAO. Radius is view-space hemisphere size (default 0.5). Bias prevents self-occlusion (default 0.025). Samples: 16, 32, or 64 (default 32). |
+| `ffe.disableSSAO` | `() -> nothing` | Disable screen-space ambient occlusion. |
+
+### Common Usage Pattern
+
+```lua
+-- Enable SSAO with default settings
+ffe.enableSSAO(0.5, 0.025, 32)
+
+-- Higher quality (64 samples, wider radius)
+ffe.enableSSAO(1.0, 0.025, 64)
+
+-- Disable
+ffe.disableSSAO()
+```
+
+### Tier Support
+
+| Tier | Supported |
+|------|-----------|
+| RETRO | No |
+| LEGACY | Yes (primary target) |
+| STANDARD | Yes |
+| MODERN | Yes |
+
+---
+
+## Anti-Aliasing (FXAA / MSAA)
+
+### System Purpose
+
+FFE supports two anti-aliasing modes: MSAA (multisample, hardware-based) and FXAA (fast approximate, post-process shader). Both are controlled through the `PostProcessConfig` via a single mode selector.
+
+### Lua Bindings
+
+| Binding | Signature | Description |
+|---------|-----------|-------------|
+| `ffe.setAntiAliasing` | `(mode: integer) -> nothing` | Set AA mode: 0 = none, 1 = MSAA, 2 = FXAA. Creates PostProcessConfig if not present. |
+| `ffe.setMSAASamples` | `(count: integer) -> nothing` | Set MSAA sample count: 2, 4, or 8 (clamped). Takes effect immediately if AA mode is 1. |
+
+### Common Usage Pattern
+
+```lua
+-- Enable FXAA (post-process, no MSAA overhead)
+ffe.enablePostProcessing()
+ffe.setAntiAliasing(2)
+
+-- Enable MSAA at 4x
+ffe.enablePostProcessing()
+ffe.setAntiAliasing(1)
+ffe.setMSAASamples(4)
+
+-- Disable anti-aliasing
+ffe.setAntiAliasing(0)
+```
+
+### Tier Support
+
+| Tier | Supported |
+|------|-----------|
+| RETRO | No |
+| LEGACY | Yes |
+| STANDARD | Yes |
+| MODERN | Yes |
+
+---
+
+## GPU Instancing (`renderer/gpu_instancing.h`)
+
+### System Purpose
+
+GPU instancing renders many copies of the same mesh in a single draw call using per-instance transform data. This is ideal for foliage, props, debris, and any repeated geometry.
+
+### Lua Bindings
+
+| Binding | Signature | Description |
+|---------|-----------|-------------|
+| `ffe.getInstanceCount` | `(meshHandle: integer) -> integer` | Get the current instance count for a mesh. Useful for debugging instancing behaviour. |
+
+!!! note
+    Instancing is managed automatically by the renderer. Entities sharing the same `Mesh` component handle are batched into instanced draw calls. No explicit enable/disable binding is needed from Lua -- the renderer detects and batches automatically.
+
+### Tier Support
+
+| Tier | Supported |
+|------|-----------|
+| RETRO | No |
+| LEGACY | Yes |
+| STANDARD | Yes |
+| MODERN | Yes |
+
+---
+
+## PBR Materials (`renderer/pbr_material.h`)
+
+### System Purpose
+
+Physically-based rendering using a Cook-Torrance BRDF with metallic-roughness workflow. PBR materials replace or augment the default Blinn-Phong shading for entities that need physically accurate lighting.
+
+### Lua Bindings
+
+| Binding | Signature | Description |
+|---------|-----------|-------------|
+| `ffe.setPBRMaterial` | `(entityId: integer, params: table) -> nothing` | Create or update a PBRMaterial component. Table fields: `albedo={r,g,b}`, `metallic=number`, `roughness=number`, `ao=number`, `emissive={r,g,b}`. All optional with sensible defaults. |
+| `ffe.setPBRTexture` | `(entityId: integer, slot: string, textureHandle: integer) -> nothing` | Set a texture map on the PBRMaterial. Slots: `"albedo"`, `"metallic"`, `"roughness"`, `"ao"`, `"normal"`, `"emissive"`. |
+| `ffe.removePBRMaterial` | `(entityId: integer) -> nothing` | Remove PBRMaterial component. Entity falls back to Material3D / Blinn-Phong. |
+
+### Common Usage Pattern
+
+```lua
+-- Create a metallic sphere
+local sphere = ffe.createEntity3D(ffe.loadMesh("meshes/sphere.glb"))
+ffe.setPBRMaterial(sphere, {
+    albedo = {0.8, 0.2, 0.2},   -- red
+    metallic = 0.9,
+    roughness = 0.3,
+    ao = 1.0
+})
+
+-- Apply a texture to the albedo slot
+local tex = ffe.loadTexture("textures/metal_albedo.png")
+ffe.setPBRTexture(sphere, "albedo", tex)
+
+-- Remove PBR, revert to Blinn-Phong
+ffe.removePBRMaterial(sphere)
+```
+
+### Tier Support
+
+| Tier | Supported |
+|------|-----------|
+| RETRO | No |
+| LEGACY | Yes (primary target) |
+| STANDARD | Yes |
+| MODERN | Yes |
+
+---
+
+## Fog
+
+### System Purpose
+
+Distance-based linear fog that blends geometry colour toward a fog colour based on fragment distance from the camera. Integrated into the Blinn-Phong, PBR, and terrain shaders.
+
+### Lua Bindings
+
+| Binding | Signature | Description |
+|---------|-----------|-------------|
+| `ffe.setFog` | `(r: number, g: number, b: number, near: number, far: number) -> nothing` | Enable fog with the given colour and distance range. Near and far must be positive, and near must be less than far. |
+| `ffe.disableFog` | `() -> nothing` | Disable fog rendering. |
+
+### Common Usage Pattern
+
+```lua
+-- Atmospheric blue-grey fog
+ffe.setFog(0.6, 0.7, 0.8, 20.0, 200.0)
+
+-- Dense close-range fog for a cave level
+ffe.setFog(0.1, 0.1, 0.15, 5.0, 50.0)
+
+-- Disable fog
+ffe.disableFog()
+```
+
+### Tier Support
+
+| Tier | Supported |
+|------|-----------|
+| RETRO | No |
+| LEGACY | Yes |
+| STANDARD | Yes |
+| MODERN | Yes |
+
+---
+
+## 3D Skeletal Animation (`renderer/animation_system.h`)
+
+### System Purpose
+
+Skeletal animation plays back bone-based animations loaded from glTF/GLB files. The system computes bone matrices each frame and uploads them to the GPU for vertex skinning. Supports up to 64 bones per skeleton.
+
+### Lua Bindings
+
+| Binding | Signature | Description |
+|---------|-----------|-------------|
+| `ffe.playAnimation3D` | `(entityId: integer, animIndex: integer, loop: boolean) -> nothing` | Start playing animation clip at the given 0-based index. Loop defaults to true. Adds AnimationState component if not present. |
+| `ffe.stopAnimation3D` | `(entityId: integer) -> nothing` | Stop animation playback. Entity freezes at current pose. |
+| `ffe.setAnimationSpeed3D` | `(entityId: integer, speed: number) -> nothing` | Set playback speed multiplier. Negative values clamped to 0. |
+| `ffe.getAnimationProgress3D` | `(entityId: integer) -> number` | Returns time / duration as a float in [0.0, 1.0]. Returns 0.0 if no animation. |
+| `ffe.isAnimation3DPlaying` | `(entityId: integer) -> boolean` | Returns true if the entity's animation is currently playing. |
+| `ffe.getAnimationCount3D` | `(entityId: integer) -> integer` | Returns number of animation clips available for this entity's mesh. |
+
+### Common Usage Pattern
+
+```lua
+-- Load an animated character
+local mesh = ffe.loadMesh("meshes/character.glb")
+local character = ffe.createEntity3D(mesh)
+
+-- Check available animations
+local count = ffe.getAnimationCount3D(character)
+ffe.log("Character has " .. count .. " animations")
+
+-- Play the first animation (looping)
+ffe.playAnimation3D(character, 0, true)
+
+-- Slow-motion playback
+ffe.setAnimationSpeed3D(character, 0.5)
+
+-- Check progress
+function update(entityId, dt)
+    local progress = ffe.getAnimationProgress3D(character)
+    if not ffe.isAnimation3DPlaying(character) then
+        -- Animation finished (non-looping), play next
+        ffe.playAnimation3D(character, 1, false)
+    end
+end
+```
+
+### Tier Support
+
+| Tier | Supported |
+|------|-----------|
+| RETRO | No |
+| LEGACY | Yes (primary target, 64 max bones) |
+| STANDARD | Yes |
+| MODERN | Yes |

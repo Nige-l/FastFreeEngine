@@ -4,6 +4,29 @@ Games and demos built with FastFreeEngine. Everything on this page is open sourc
 
 ---
 
+## Flagship Showcase
+
+### Echoes of the Ancients
+
+A 3-level 3D action-exploration game that pushes every major FFE subsystem. Navigate ancient temples, solve environmental puzzles, defeat enemies in real-time combat, and explore atmospheric outdoor environments.
+
+**What it demonstrates:** Heightmap terrain with splat-map texturing, HDR bloom and ACES tone mapping, SSAO, FXAA, linear fog, per-level atmospheric lighting, PBR materials, skeletal animation, 3D physics (Jolt), combat system, puzzle mechanics, menu screens, and game flow (menus, gameplay, victory).
+
+**How to run:**
+
+```bash
+./build/examples/showcase/ffe_showcase
+```
+
+**Key technical features:**
+
+- 3 distinct levels with unique terrain, lighting, and fog configurations
+- Post-processing pipeline: bloom threshold extraction, Gaussian blur, ACES tone mapping, SSAO, FXAA
+- Heightmap terrain with bilinear height queries for gameplay (terrain-aware movement)
+- Python heightmap generator included (`examples/showcase/tools/`)
+
+---
+
 ## Official Demos
 
 These demos ship with the engine in the `examples/` directory. Each one exercises a different set of FFE subsystems.

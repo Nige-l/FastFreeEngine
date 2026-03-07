@@ -12,7 +12,7 @@ engine/
   renderer/opengl/  — OpenGL 3.3 RHI backend, GL debug utilities                               [renderer-specialist]
   audio/            — miniaudio backend, WAV/OGG, sound/music playback, headless mode           [engine-dev]
   physics/          — 2D collision: spatial hash, AABB/Circle, layer/mask, callbacks            [engine-dev]
-  scripting/        — LuaJIT sandbox, ffe.* Lua API (~194 bindings), timer system               [engine-dev + api-designer]
+  scripting/        — LuaJIT sandbox, ffe.* Lua API (~189 bindings), timer system               [engine-dev + api-designer]
   networking/       — ENet transport, replication, server/client, prediction, lobby, lag compensation, network system  [engine-dev]
   editor/           — Standalone editor (ImGui dockspace, hierarchy, inspector, viewport, gizmos, build pipeline)  [engine-dev]
 tests/
@@ -137,19 +137,19 @@ Cross-cutting: `core/platform.h` (path canonicalization) used by scripting + ren
 
 **3D Animation** (6): `playAnimation3D`, `stopAnimation3D`, `setAnimationSpeed3D`, `getAnimationProgress3D`, `isAnimation3DPlaying`, `getAnimationCount3D`
 
-**PBR** (4): `setPBRMaterial`, `getPBRMaterial`, `setEnvironmentMap`, `removeEnvironmentMap`
+**PBR** (3): `setPBRMaterial`, `setPBRTexture`, `removePBRMaterial`
 
 **Post-Processing** (6): `enablePostProcessing`, `disablePostProcessing`, `setBloomThreshold`, `setBloomIntensity`, `setToneMapping`, `setExposure`
 
-**GPU Instancing** (2): `enableInstancing`, `disableInstancing`
+**GPU Instancing** (1): `getInstanceCount`
 
-**Anti-Aliasing** (4): `enableMSAA`, `disableMSAA`, `enableFXAA`, `disableFXAA`
+**Anti-Aliasing** (2): `setAntiAliasing`, `setMSAASamples`
 
-**SSAO** (3): `enableSSAO`, `disableSSAO`, `setSSAORadius`
+**SSAO** (2): `enableSSAO`, `disableSSAO`
 
 **Terrain** (4): `loadTerrain`, `getTerrainHeight`, `unloadTerrain`, `setTerrainTexture`
 
-**Fog** (2): `enableFog`, `disableFog`
+**Fog** (2): `setFog`, `disableFog`
 
 **Screenshot** (1): `screenshot`
 

@@ -18,6 +18,7 @@ The following packages were installed via `apt-get`:
 - luajit, libluajit-5.1-dev
 - sox, libsox-fmt-all (audio asset generation)
 - xvfb, pkg-config, curl, wget, unzip
+- xdotool, scrot, imagemagick (2026-03-07: screenshot capture pipeline for headless demo screenshots)
 - libxinerama-dev, libxcursor-dev, xorg-dev, libglu1-mesa-dev (2026-03-06: required by vcpkg glfw3 build for imgui glfw-binding feature)
 - mingw-w64 (2026-03-06: MinGW-w64 cross-compilation toolchain for Windows builds)
 
@@ -36,8 +37,110 @@ The following packages were installed via `apt-get`:
 | luajit | LuaJIT 2.1.1703358377 |
 | pkg-config | 1.8.1 |
 | sox | SoX v14.4.2 |
+| xdotool | 3.20160805.1 |
+| scrot | 1.10 |
+| imagemagick | 6.9.12-98 Q16 |
 | x86_64-w64-mingw32-g++ | GCC 13-win32 (mingw-w64 11.0.1-3build1) |
 | x86_64-w64-mingw32-windres | GNU Binutils 2.41.90.20240122 |
+
+## Headless Screenshot Pipeline
+
+Autonomous screenshot capture of FFE demos running under Xvfb (virtual framebuffer). Used for
+documentation, website content, and visual regression checks.
+
+### Prerequisites
+
+All installed on this machine:
+- `xvfb` — virtual X11 framebuffer (no physical display required)
+- `mesa-utils` + `mesa-libgallium` — Mesa 25.2.8 with llvmpipe software renderer
+- `xdotool` — X11 input simulation (for sending keystrokes to demos)
+- `scrot` — screen capture utility (fallback method)
+- `imagemagick` — `convert` for xwd-to-PNG conversion and cropping
+
+### OpenGL Support Under Xvfb
+
+Mesa's llvmpipe software renderer provides **OpenGL 4.5 (Core Profile)** under Xvfb:
+```
+OpenGL vendor string: Mesa
+OpenGL renderer string: llvmpipe (LLVM 20.1.2, 256 bits)
+OpenGL core profile version string: 4.5 (Core Profile) Mesa 25.2.8
+```
+This exceeds the LEGACY tier requirement (OpenGL 3.3). All engine shaders (19 built-in shaders
+including Blinn-Phong, PBR, shadow mapping, SSAO, bloom, FXAA, skybox, skinned animation,
+instancing) compile and render correctly under llvmpipe.
+
+### Tools
+
+#### `tools/take_screenshot.sh`
+
+Captures a single screenshot of an FFE demo.
+
+```bash
+# Usage:
+./tools/take_screenshot.sh <demo_binary> <output_png> [wait_seconds] [lua_script]
+
+# Examples:
+./tools/take_screenshot.sh build/clang-release/examples/3d_demo/ffe_3d_demo docs/screenshots/3d_demo.png
+./tools/take_screenshot.sh build/clang-release/examples/runtime/ffe_runtime docs/screenshots/showcase.png 5 examples/showcase/game.lua
+```
+
+How it works:
+1. Starts Xvfb on an auto-selected display (scans :99 to :199 for a free slot)
+2. Launches the demo binary against that display
+3. Waits the specified time (default 3s) for the demo to initialize and render frames
+4. Captures the X root window via `xwd` + `convert` (crops to 1280x720, the engine default)
+5. Falls back to `scrot` if xwd fails
+6. Kills the demo and Xvfb, cleans up temp files
+
+Exit codes: 0=success, 1=bad args/tools, 2=demo failed to start, 3=capture failed.
+
+#### `tools/capture_all_screenshots.sh`
+
+Batch-captures screenshots of all FFE demos.
+
+```bash
+# Usage:
+./tools/capture_all_screenshots.sh [build_dir]
+
+# Default build dir: build/clang-release
+# Output: docs/screenshots/<demo_name>.png
+```
+
+Captures: 3d_demo, pong, breakout, showcase, showcase_runtime, hello_sprites, lua_demo,
+interactive_demo.
+
+### Demo Launch Compatibility
+
+All 8 demos launch and render under Xvfb with llvmpipe. Verified 2026-03-07:
+
+| Demo | Status | Notes |
+|------|--------|-------|
+| 3d_demo | OK | Cubes, shadows, point lights, physics. Missing skybox textures (non-fatal). |
+| pong | OK | Title screen with paddles, center line. |
+| breakout | OK | Rainbow brick wall, paddle, ball. |
+| showcase | OK | "Echoes of the Ancients" menu screen at 60 FPS. |
+| showcase_runtime | OK | Same as showcase, launched via ffe_runtime. |
+| hello_sprites | OK | Basic sprite rendering. |
+| lua_demo | OK | Scripted demo. Missing audio assets (non-fatal). |
+| interactive_demo | OK | Feature showcase. |
+
+### Limitations
+
+1. **Software rendering only.** llvmpipe is CPU-based. FPS will be lower than hardware GPU.
+   Suitable for screenshots and visual checks, not performance benchmarks.
+2. **No window manager.** Xvfb has no WM, so window position is always (0,0). The crop to
+   1280x720 assumes the engine window starts at top-left. If the engine changes its default
+   window size, the crop dimensions in `take_screenshot.sh` need updating.
+3. **Missing assets.** Some demos reference assets that are not in the repo (skybox textures,
+   certain audio files). These produce non-fatal log errors; the demos render without them.
+4. **No GPU-specific shader features.** Any shader that requires hardware-specific extensions
+   beyond OpenGL 4.5 core will not work. All current FFE shaders (OpenGL 3.3 LEGACY tier) work.
+5. **`ffe.screenshot()` Lua binding.** The engine's built-in screenshot function (`ffe.screenshot("file.png")`)
+   captures the GL framebuffer directly and saves to `screenshots/` relative to CWD. This is
+   higher quality than the xwd capture method (captures the actual rendered frame, not the X
+   window). To use it, inject a Lua script that calls `ffe.screenshot()` after a delay. The
+   current tooling uses xwd capture as the default because it does not require modifying game
+   scripts.
 
 ## vcpkg
 
@@ -172,6 +275,35 @@ mold is not available on macOS. `cmake/CompilerFlags.cmake` guards the `find_pro
 block with `if(UNIX AND NOT APPLE)` — Apple's ld64 linker is used automatically on macOS builds.
 
 ## Change Log
+
+### 2026-03-07: Headless screenshot capture pipeline
+
+**What changed:**
+
+Installed three new packages via `apt-get`:
+- `xdotool` 3.20160805.1 — X11 input simulation
+- `scrot` 1.10 — screen capture utility
+- `imagemagick` 6.9.12-98 Q16 — image conversion and cropping (`convert`, `identify`)
+
+Created two shell scripts:
+- `tools/take_screenshot.sh` — captures a single demo screenshot under Xvfb
+- `tools/capture_all_screenshots.sh` — batch captures all 8 demos to `docs/screenshots/`
+
+Created output directory: `docs/screenshots/`
+
+**Why:**
+- Enable autonomous screenshot capture of FFE demos in this headless environment (no physical display)
+- Provide documentation-quality images for the website, README, and visual verification
+- All demos run correctly under Mesa llvmpipe (OpenGL 4.5) via Xvfb
+
+**Verification:**
+- `which xdotool scrot convert` — all three on PATH
+- `xvfb-run -a glxinfo | grep "OpenGL core profile version"` — confirms OpenGL 4.5 Core Profile
+- `tools/take_screenshot.sh` tested on ffe_3d_demo: produced 1280x720 PNG (171KB) with correct
+  rendered content (cubes, shadows, point lights, HUD text visible)
+- `tools/capture_all_screenshots.sh` captured all 8 demos: 8 passed, 0 failed, 0 skipped
+- Visual verification of 3d_demo, pong, breakout, and showcase screenshots confirmed correct
+  rendering under llvmpipe
 
 ### 2026-03-07: Disable macOS CI job (LuaJIT arm64-osx build failure)
 

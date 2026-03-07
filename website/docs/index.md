@@ -37,15 +37,23 @@ end
 
 ## What FFE Gives You
 
-**2D and 3D Rendering** -- Sprite batching, 3D mesh loading (glTF), Blinn-Phong lighting, shadow mapping, skybox environments. All on OpenGL 3.3.
+**2D and 3D Rendering** -- Sprite batching, 3D mesh loading (glTF), Blinn-Phong and PBR (Cook-Torrance) lighting, shadow mapping, skybox environments, skeletal animation, and heightmap terrain with LOD and splat-map texturing.
 
-**Lua Scripting** -- Sandboxed LuaJIT with 85+ bindings covering input, entities, audio, physics, collisions, cameras, and more. Write game logic without touching C++.
+**Post-Processing** -- HDR bloom, ACES/Reinhard tone mapping, screen-space ambient occlusion (SSAO), FXAA anti-aliasing, fog, and gamma correction. All configurable from Lua.
+
+**GPU Instancing** -- Draw thousands of identical meshes in a single draw call. Automatic batching with per-instance transforms.
+
+**Vulkan Backend** -- OpenGL 3.3 is the default (LEGACY tier), but a Vulkan rendering backend is available for STANDARD and MODERN tiers with SPIR-V shaders and VMA memory management.
+
+**Lua Scripting** -- Sandboxed LuaJIT with ~198 bindings covering input, entities, audio, physics, collisions, cameras, terrain, post-processing, networking, and more. Write game logic without touching C++.
 
 **Audio** -- WAV and OGG playback via miniaudio. One-shot sound effects, streaming music, and 3D spatial audio.
 
 **Physics** -- 2D collision detection with spatial hash broadphase. 3D rigid body physics via Jolt with collision callbacks and raycasting.
 
-**Editor Overlay** -- Dear ImGui debug overlay with entity inspector, system timings, and engine state. Toggle with F1.
+**Standalone Editor** -- Dear ImGui dockspace editor with scene hierarchy, entity inspector, viewport with gizmos, undo/redo, asset browser, play-in-editor, and a build pipeline for game export.
+
+**Multiplayer Networking** -- ENet-based client-server architecture with replication, client-side prediction, server reconciliation, lobby/matchmaking, and lag compensation.
 
 **AI-Native Documentation** -- Every subsystem ships a `.context.md` file. Point your AI coding assistant at the project and get correct, idiomatic game code generated immediately.
 
@@ -62,7 +70,7 @@ FFE exists to unlock creativity and get young people into engineering. The mains
 - **Performance is accessibility.** Running well on old hardware means more people can build and play games.
 - **Designed to be learned from.** The engine is not just a tool -- it is a teaching platform. Every subsystem is documented for both humans and AI assistants.
 - **No hidden costs.** MIT licensed. No per-seat fees, no revenue share, no surprise license changes.
-- **Ship real games.** FFE is not a toy engine. It supports 2D and 3D rendering, with multiplayer networking and a standalone editor in development. The goal is everything needed to build and ship a complete game.
+- **Ship real games.** FFE is not a toy engine. It supports 2D and 3D rendering, multiplayer networking, a standalone editor with a build pipeline, terrain, post-processing, PBR materials, and skeletal animation. 1282 tests verify it all works. The goal is everything needed to build and ship a complete game.
 
 ---
 
