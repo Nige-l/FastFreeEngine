@@ -115,8 +115,11 @@ function HUD.draw(playerHealth, maxHealth, artifactCount, totalArtifacts, levelN
 
     -- Controls hint (bottom bar)
     ffe.drawRect(0, sh - 28, sw, 28, 0, 0, 0, 0.4)
-    ffe.drawText("WASD: move | SPACE: jump | MOUSE: look | LMB: attack | E: interact | P: pause | ESC: quit",
-                 12, sh - 22, 2, 0.4, 0.5, 0.6, 0.8)
+    local controlsText = "WASD: move | SPACE: jump | MOUSE: look | LMB: attack | E: interact | P: pause | ESC: quit"
+    if ffe.isGamepadConnected and ffe.isGamepadConnected(0) then
+        controlsText = "L-Stick: move | R-Stick: look | A: jump | X: attack | Y: interact | START: pause"
+    end
+    ffe.drawText(controlsText, 12, sh - 22, 2, 0.4, 0.5, 0.6, 0.8)
 end
 
 --------------------------------------------------------------------

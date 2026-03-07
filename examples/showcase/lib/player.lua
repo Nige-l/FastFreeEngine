@@ -133,10 +133,15 @@ function Player.update(dt)
         moveZ = moveZ - rgtZ
     end
 
-    -- Gamepad input: left stick for movement
+    -- Gamepad input: left stick for movement (with dead-zone)
     if ffe.isGamepadConnected(0) then
         local lx = ffe.getGamepadAxis(0, ffe.GAMEPAD_AXIS_LEFT_X)
         local ly = ffe.getGamepadAxis(0, ffe.GAMEPAD_AXIS_LEFT_Y)
+
+        -- Dead-zone: ignore stick values below 0.15 to avoid drift
+        local DEAD_ZONE = 0.15
+        if math.abs(lx) < DEAD_ZONE then lx = 0 end
+        if math.abs(ly) < DEAD_ZONE then ly = 0 end
 
         -- Left stick: X = strafe, Y = forward/back (inverted: -Y is forward)
         moveX = moveX + (fwdX * (-ly) + rgtX * lx)

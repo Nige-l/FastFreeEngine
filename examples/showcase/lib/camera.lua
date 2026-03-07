@@ -86,10 +86,16 @@ function Camera.update(dt)
         pitch = pitch + 45 * dt
     end
 
-    -- Gamepad: right stick for camera orbit
+    -- Gamepad: right stick for camera orbit (with dead-zone)
     if ffe.isGamepadConnected(0) then
         local rx = ffe.getGamepadAxis(0, ffe.GAMEPAD_AXIS_RIGHT_X)
         local ry = ffe.getGamepadAxis(0, ffe.GAMEPAD_AXIS_RIGHT_Y)
+
+        -- Dead-zone: ignore stick values below 0.15 to avoid drift
+        local DEAD_ZONE = 0.15
+        if math.abs(rx) < DEAD_ZONE then rx = 0 end
+        if math.abs(ry) < DEAD_ZONE then ry = 0 end
+
         yaw   = yaw   + rx * GAMEPAD_SENSITIVITY * dt
         pitch = pitch + ry * GAMEPAD_SENSITIVITY * dt
     end
