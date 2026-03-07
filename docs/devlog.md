@@ -3,6 +3,56 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 83: Phase 7 M7 — Sprite Batching 2.0
+
+### Summary
+
+Session 83 completed Sprite Batching 2.0 (Phase 7 M7): runtime texture atlas with shelf-packing algorithm (2048x2048 default, 512px max sprite dimension, 1px padding between sprites). Atlas pages are created lazily on first texture use — sprites are packed into the atlas and UVs are remapped automatically. The sprite batch integrates transparently: existing Lua code works without changes, draw calls are reduced by batching sprites sharing an atlas page into a single draw. RHI additions: getTextureWidth/Height, updateTextureSubImage, readTexturePixels. 1 new Lua binding: `ffe.getAtlasUtilization()`. Backward compatible — zero Lua API changes required. 24 new tests (20 atlas + 4 misc). Performance-critic: MINOR ISSUES (non-blocking — O(n) atlas lookup per sprite acceptable at typical scales). api-designer: PASS (.context.md updated). game-dev-tester: SKIPPED (no examples/ changes, atlas is transparent). FAST build: 1228 tests, zero warnings.
+
+### Planned
+
+- Phase 7 M7: Sprite Batching 2.0 — texture atlas support, draw call reduction
+
+### Delivered
+
+- **Runtime Texture Atlas** -- shelf-packing algorithm, 2048x2048 default atlas size, 512px max sprite dimension, 1px padding
+- **Lazy Atlas Packing** -- textures packed on first use, UV coordinates remapped automatically
+- **Atlas Page Batching** -- sprites sharing an atlas page batched into single draw call
+- **RHI Additions** -- getTextureWidth/Height, updateTextureSubImage, readTexturePixels
+- **1 Lua Binding** -- `ffe.getAtlasUtilization()`
+- **Backward Compatible** -- zero changes to existing Lua game code
+- **24 New Tests** -- 20 texture atlas + 4 misc
+
+### Files Changed
+
+- `engine/renderer/texture_atlas.h` (NEW -- TextureAtlas class, shelf-packing)
+- `engine/renderer/texture_atlas.cpp` (NEW -- atlas implementation)
+- `engine/renderer/sprite_batch.h` (MODIFIED -- atlas integration)
+- `engine/renderer/sprite_batch.cpp` (MODIFIED -- lazy packing, UV remapping, page batching)
+- `engine/renderer/rhi.h` (MODIFIED -- new RHI methods)
+- `engine/renderer/opengl/rhi_opengl.cpp` (MODIFIED -- OpenGL implementations of new RHI methods)
+- `engine/renderer/CMakeLists.txt` (MODIFIED -- texture_atlas.cpp)
+- `engine/renderer/.context.md` (MODIFIED -- atlas API documentation)
+- `engine/scripting/script_engine.cpp` (MODIFIED -- getAtlasUtilization binding)
+- `engine/scripting/.context.md` (MODIFIED -- binding docs)
+- `engine/core/application.cpp` (MODIFIED -- atlas initialization)
+- `third_party/glad/include/glad/glad.h` (MODIFIED -- new GL functions)
+- `third_party/glad/src/glad.c` (MODIFIED -- GL function loaders)
+- `tests/renderer/test_texture_atlas.cpp` (NEW -- 20 atlas tests)
+- `tests/CMakeLists.txt` (MODIFIED -- new test file)
+
+### Reviews
+
+- performance-critic: MINOR ISSUES (non-blocking — O(n) atlas lookup per sprite, acceptable at typical scales)
+- api-designer: PASS (.context.md updated)
+- game-dev-tester: SKIPPED (no examples/ changes, atlas is transparent)
+
+### Next Session (84)
+
+Phase 7 M8: Phase Close — FULL build (Clang-18 + GCC-13), README update, architecture-map update, documentation sweep.
+
+---
+
 ## 2026-03-07 — Session 82: Phase 7 M6 — SSAO (Screen-Space Ambient Occlusion)
 
 ### Summary

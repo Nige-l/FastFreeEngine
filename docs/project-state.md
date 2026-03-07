@@ -6,9 +6,9 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 82 |
-| Total tests | 1204 (FAST build: Clang-18, zero warnings) |
-| Total Lua bindings | ~187 |
+| Last session | 83 |
+| Total tests | 1228 (FAST build: Clang-18, zero warnings) |
+| Total Lua bindings | ~188 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
 | Phase 2 (3D Foundation) | COMPLETE |
 | Phase 3 (Standalone Editor) | MVP COMPLETE (6 milestones, Sessions 51-56) |
@@ -42,11 +42,11 @@
 
 | Session | Summary |
 |---------|---------|
+| 83 | Phase 7 M7: Sprite Batching 2.0 — runtime texture atlas (shelf packing, 2048x2048), UV remapping, atlas page batching, 1 Lua binding. 24 new tests. 1228 tests (FAST). |
 | 82 | Phase 7 M6: SSAO — 32-sample hemisphere, half-res, 4x4 box blur, GLSL 330 (LEGACY compatible). SSAOConfig singleton, 3 Lua bindings. 36 new tests. 1204 tests (FAST). |
 | 81 | Phase 7 M5: Skeletal Animation Completion — crossfade blending, STEP/LINEAR/CUBIC_SPLINE interpolation modes, root motion extraction. 3 Lua bindings, 31 new tests. 1168 tests (FAST). |
 | 80 | Phase 7 M4: Anti-Aliasing — MSAA (multisample FBO, configurable 2x/4x/8x, glBlitFramebuffer resolve) + FXAA 3.11 post-process. 2 Lua bindings, 22 new tests. 1137 tests (FAST). |
 | 79 | Phase 7 M3: GPU Instancing — automatic batching by MeshHandle (2+ non-skinned), glDrawElementsInstanced, 1024/batch, instanced shadow pass, ffe.getInstanceCount. 21 new tests. 1115 tests (FAST). |
-| 78 | Phase 7 M2: Post-processing pipeline — HDR FBO, bloom (half-res ping-pong), tone mapping (Reinhard/ACES), gamma correction. 6 Lua bindings, 42 new tests. 1094 tests (FAST). |
 
 ## Phase 7 — Rendering Pipeline Modernisation (IN PROGRESS)
 
@@ -60,7 +60,7 @@
 - [x] M4 (Session 80): Anti-Aliasing -- MSAA (multisample HDR FBO, configurable 2x/4x/8x, glBlitFramebuffer resolve) + FXAA 3.11 (Timothy Lottes, post-process edge detection + sub-pixel AA). 2 Lua bindings, 22 tests.
 - [x] M5 (Session 81): Skeletal Animation Completion -- crossfade blending (per-bone lerp/slerp), STEP/LINEAR/CUBIC_SPLINE interpolation modes (glTF sampler parsing), root motion extraction (XZ delta, RootMotionDelta component). 3 Lua bindings, 31 tests.
 - [x] M6 (Session 82): SSAO -- 32-sample hemisphere (configurable 16/32/64), half-resolution, 4x4 box blur, depth texture for sampling. GLSL 330 core (LEGACY compatible -- originally planned STANDARD+ only). Normal reconstruction via dFdx/dFdy (no G-buffer). AO multiply in HDR space before tone mapping. SSAOConfig ECS singleton. 3 Lua bindings (enableSSAO, disableSSAO, setSSAOIntensity), 36 tests.
-- [ ] M7 (Session 83): Sprite Batching 2.0 -- texture atlas support, draw call reduction, z-ordering
+- [x] M7 (Session 83): Sprite Batching 2.0 -- runtime texture atlas (shelf packing, 2048x2048 default, 512px max sprite, 1px padding), lazy atlas packing on first texture use, UV remapping, atlas page batching. RHI additions: getTextureWidth/Height, updateTextureSubImage, readTexturePixels. Backward compatible (zero Lua API changes). 1 Lua binding (getAtlasUtilization), 24 tests (20 atlas + 4 misc).
 - [ ] M8 (Session 84): Phase Close -- FULL build, profiling, documentation sweep
 
 ## Build Commands
