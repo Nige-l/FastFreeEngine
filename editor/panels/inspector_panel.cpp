@@ -24,25 +24,87 @@ void InspectorPanel::draw(World& world, const EntityId selectedEntity, CommandHi
     ImGui::Text("Entity #%u", selectedEntity);
     ImGui::Separator();
 
-    // Draw each component section if the entity has it
+    // Draw each component section if the entity has it.
+    // Each section has a collapsible header with a remove ("X") button.
+    // Removal is deferred to after drawing so we don't invalidate mid-frame.
+    bool removeNameRequested       = false;
+    bool removeTransformRequested  = false;
+    bool removeTransform3DRequested = false;
+    bool removeSpriteRequested     = false;
+    bool removeMaterial3DRequested = false;
+
     if (world.hasComponent<Name>(selectedEntity)) {
         drawNameComponent(world, selectedEntity, history);
+        // Remove button for Name
+        ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 20.0f);
+        ImGui::PushID("RemoveName");
+        if (ImGui::SmallButton("X")) {
+            removeNameRequested = true;
+        }
+        ImGui::PopID();
     }
     if (world.hasComponent<Transform>(selectedEntity)) {
         drawTransformComponent(world, selectedEntity, history);
+        ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 20.0f);
+        ImGui::PushID("RemoveTransform");
+        if (ImGui::SmallButton("X")) {
+            removeTransformRequested = true;
+        }
+        ImGui::PopID();
     }
     if (world.hasComponent<Transform3D>(selectedEntity)) {
         drawTransform3DComponent(world, selectedEntity, history);
+        ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 20.0f);
+        ImGui::PushID("RemoveTransform3D");
+        if (ImGui::SmallButton("X")) {
+            removeTransform3DRequested = true;
+        }
+        ImGui::PopID();
     }
     if (world.hasComponent<Sprite>(selectedEntity)) {
         drawSpriteComponent(world, selectedEntity);
+        ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 20.0f);
+        ImGui::PushID("RemoveSprite");
+        if (ImGui::SmallButton("X")) {
+            removeSpriteRequested = true;
+        }
+        ImGui::PopID();
     }
     if (world.hasComponent<Material3D>(selectedEntity)) {
         drawMaterial3DComponent(world, selectedEntity);
+        ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 20.0f);
+        ImGui::PushID("RemoveMaterial3D");
+        if (ImGui::SmallButton("X")) {
+            removeMaterial3DRequested = true;
+        }
+        ImGui::PopID();
+    }
+
+    // Process deferred removals through the undo system
+    const auto entity = static_cast<entt::entity>(selectedEntity);
+    if (removeNameRequested) {
+        history.executeCommand(
+            std::make_unique<RemoveComponentCommand<Name>>(world, entity));
+    }
+    if (removeTransformRequested) {
+        history.executeCommand(
+            std::make_unique<RemoveComponentCommand<Transform>>(world, entity));
+    }
+    if (removeTransform3DRequested) {
+        history.executeCommand(
+            std::make_unique<RemoveComponentCommand<Transform3D>>(world, entity));
+    }
+    if (removeSpriteRequested) {
+        history.executeCommand(
+            std::make_unique<RemoveComponentCommand<Sprite>>(world, entity));
+    }
+    if (removeMaterial3DRequested) {
+        history.executeCommand(
+            std::make_unique<RemoveComponentCommand<Material3D>>(world, entity));
     }
 
     ImGui::Separator();
-    drawAddComponentButton(world, selectedEntity);
+    drawAddComponentButton(world, selectedEntity, history);
 
     ImGui::End();
 }
@@ -250,25 +312,43 @@ void InspectorPanel::drawMaterial3DComponent(World& world, const EntityId entity
     ImGui::Text("Specular: (%.2f, %.2f, %.2f)", m.specularColor.r, m.specularColor.g, m.specularColor.b);
 }
 
-void InspectorPanel::drawAddComponentButton(World& world, const EntityId entity) {
+void InspectorPanel::drawAddComponentButton(World& world, const EntityId entity,
+                                              CommandHistory& history) {
     if (ImGui::Button("Add Component")) {
         ImGui::OpenPopup("AddComponentPopup");
     }
 
+    const auto ent = static_cast<entt::entity>(entity);
+
     if (ImGui::BeginPopup("AddComponentPopup")) {
         if (!world.hasComponent<Name>(entity)) {
             if (ImGui::MenuItem("Name")) {
-                world.addComponent<Name>(entity);
+                history.executeCommand(
+                    std::make_unique<AddComponentCommand<Name>>(world, ent));
             }
         }
         if (!world.hasComponent<Transform>(entity)) {
             if (ImGui::MenuItem("Transform")) {
-                world.addComponent<Transform>(entity);
+                history.executeCommand(
+                    std::make_unique<AddComponentCommand<Transform>>(world, ent));
             }
         }
         if (!world.hasComponent<Transform3D>(entity)) {
             if (ImGui::MenuItem("Transform3D")) {
-                world.addComponent<Transform3D>(entity);
+                history.executeCommand(
+                    std::make_unique<AddComponentCommand<Transform3D>>(world, ent));
+            }
+        }
+        if (!world.hasComponent<Sprite>(entity)) {
+            if (ImGui::MenuItem("Sprite")) {
+                history.executeCommand(
+                    std::make_unique<AddComponentCommand<Sprite>>(world, ent));
+            }
+        }
+        if (!world.hasComponent<Material3D>(entity)) {
+            if (ImGui::MenuItem("Material3D")) {
+                history.executeCommand(
+                    std::make_unique<AddComponentCommand<Material3D>>(world, ent));
             }
         }
         ImGui::EndPopup();

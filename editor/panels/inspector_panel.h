@@ -10,7 +10,9 @@ namespace ffe::editor {
 // Displays collapsible headers for each component type.
 // Transform and Transform3D fields are editable (DragFloat) with full undo support.
 // Sprite and Material3D fields are display-only for now.
-// "Add Component" button provides a dropdown to add Transform, Transform3D, or Name.
+// "Add Component" button provides a dropdown to add missing component types.
+// Each component header has a remove button ("X") that pushes a
+// RemoveComponentCommand through CommandHistory.
 //
 // Undo integration: each field edit captures old/new component values on
 // focus-loss / enter (IsItemDeactivatedAfterEdit) and pushes a
@@ -29,7 +31,11 @@ private:
     void drawTransform3DComponent(World& world, EntityId entity, CommandHistory& history);
     void drawSpriteComponent(World& world, EntityId entity);
     void drawMaterial3DComponent(World& world, EntityId entity);
-    void drawAddComponentButton(World& world, EntityId entity);
+    void drawAddComponentButton(World& world, EntityId entity, CommandHistory& history);
+
+    // Returns true if the user clicked the remove ("X") button on a component
+    // header. The caller should push a RemoveComponentCommand if true.
+    bool drawComponentHeaderWithRemove(const char* label);
 
     // Snapshot of the component being edited, captured when a widget gains focus.
     // Used to create undo commands with the pre-edit value.

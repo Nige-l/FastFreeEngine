@@ -1,6 +1,8 @@
 #pragma once
 
 #include "core/types.h"
+#include "commands/command_history.h"
+#include "input/shortcut_manager.h"
 #include "panels/file_dialog.h"
 #include "panels/viewport_panel.h"
 #include "play_mode.h"
@@ -42,6 +44,12 @@ private:
     // Play-in-editor
     ffe::editor::PlayMode m_playMode;
 
+    // Undo / redo
+    ffe::editor::CommandHistory m_commandHistory;
+
+    // Keyboard shortcuts
+    ffe::editor::ShortcutManager m_shortcuts;
+
     // Panels
     ViewportPanel m_viewport;
     ffe::editor::FileDialog m_fileDialog;
@@ -53,9 +61,8 @@ private:
     std::string m_currentScenePath;
     ffe::editor::FileDialogMode m_pendingDialogMode = ffe::editor::FileDialogMode::OPEN;
 
-    // Selected entity (for future inspector panel)
-    u32  m_selectedEntity = 0;
-    bool m_hasSelection = false;
+    // Selected entity
+    EntityId m_selectedEntity = NULL_ENTITY;
 };
 
 } // namespace ffe::editor_app

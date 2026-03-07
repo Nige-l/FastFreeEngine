@@ -170,6 +170,14 @@ const ApplicationConfig& Application::config() const {
     return m_config;
 }
 
+const renderer::Camera& Application::camera3d() const {
+    return m_camera3d;
+}
+
+const renderer::Camera& Application::camera2d() const {
+    return m_camera;
+}
+
 GLFWwindow* Application::window() const {
     return m_window;
 }

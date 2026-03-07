@@ -83,6 +83,10 @@ public:
     ArenaAllocator& frameAllocator();
     const ApplicationConfig& config() const;
 
+    // Camera access (editor needs view/projection for gizmo rendering)
+    const renderer::Camera& camera3d() const;
+    const renderer::Camera& camera2d() const;
+
 private:
     Result startup();
     Result initSubsystemsInternal(); // Shared init logic (no window creation)

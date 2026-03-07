@@ -11,6 +11,9 @@ add_executable(ffe_editor_app
     panels/file_dialog.cpp
     panels/viewport_panel.cpp
     rendering/editor_framebuffer.cpp
+    gizmos/gizmo_renderer.cpp
+    gizmos/gizmo_system.cpp
+    input/shortcut_manager.cpp
 )
 
 target_include_directories(ffe_editor_app PRIVATE

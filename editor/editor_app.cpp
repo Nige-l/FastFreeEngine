@@ -1,6 +1,7 @@
 #include "editor_app.h"
 #include "core/application.h"
 #include "scene/scene_serialiser.h"
+#include "commands/entity_commands.h"
 
 #include <glad/glad.h>
 #define GLFW_INCLUDE_NONE
@@ -9,6 +10,8 @@
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
+
+#include <memory>
 
 namespace ffe::editor_app {
 
@@ -81,6 +84,9 @@ bool EditorApp::init() {
     // 6. Initialize the viewport panel FBO (default 800x600, resizes with panel)
     m_viewport.init(800, 600);
 
+    // 7. Register default keyboard shortcuts
+    m_shortcuts.registerDefaults();
+
     return true;
 }
 
@@ -96,6 +102,43 @@ void EditorApp::run() {
         // Tick the engine when in play mode (fixed 60 fps timestep)
         if (m_app && m_playMode.state() == ffe::editor::PlayState::PLAYING) {
             m_app->tickOnce(1.0f / 60.0f);
+        }
+
+        // Process keyboard shortcuts (before panel rendering so actions take
+        // effect in the same frame).
+        m_shortcuts.update();
+
+        if (m_shortcuts.triggered("undo")) {
+            m_commandHistory.undo();
+        }
+        if (m_shortcuts.triggered("redo")) {
+            m_commandHistory.redo();
+        }
+        if (m_shortcuts.triggered("save")) {
+            if (!m_currentScenePath.empty() && m_app) {
+                ffe::scene::saveScene(m_app->world(), m_currentScenePath);
+            } else if (m_app) {
+                m_pendingDialogMode = ffe::editor::FileDialogMode::SAVE;
+                m_fileDialog.open(ffe::editor::FileDialogMode::SAVE, ".");
+            }
+        }
+        if (m_shortcuts.triggered("delete_entity")) {
+            if (m_app && m_selectedEntity != NULL_ENTITY &&
+                m_app->world().isValid(m_selectedEntity)) {
+                auto cmd = std::make_unique<ffe::editor::DestroyEntityCommand>(
+                    m_app->world(), m_selectedEntity);
+                m_commandHistory.executeCommand(std::move(cmd));
+                m_selectedEntity = NULL_ENTITY;
+            }
+        }
+        if (m_shortcuts.triggered("gizmo_translate")) {
+            m_viewport.gizmoSystem().setMode(ffe::editor::GizmoMode::TRANSLATE);
+        }
+        if (m_shortcuts.triggered("gizmo_rotate")) {
+            m_viewport.gizmoSystem().setMode(ffe::editor::GizmoMode::ROTATE);
+        }
+        if (m_shortcuts.triggered("gizmo_scale")) {
+            m_viewport.gizmoSystem().setMode(ffe::editor::GizmoMode::SCALE);
         }
 
         // Render editor UI
@@ -148,7 +191,7 @@ void EditorApp::renderMenuBar() {
                 m_pendingDialogMode = ffe::editor::FileDialogMode::OPEN;
                 m_fileDialog.open(ffe::editor::FileDialogMode::OPEN, ".");
             }
-            if (ImGui::MenuItem("Save Scene")) {
+            if (ImGui::MenuItem("Save Scene", "Ctrl+S")) {
                 if (!m_currentScenePath.empty() && m_app) {
                     ffe::scene::saveScene(m_app->world(), m_currentScenePath);
                 } else {
@@ -167,6 +210,16 @@ void EditorApp::renderMenuBar() {
             ImGui::EndMenu();
         }
 
+        if (ImGui::BeginMenu("Edit")) {
+            if (ImGui::MenuItem("Undo", "Ctrl+Z", false, m_commandHistory.canUndo())) {
+                m_commandHistory.undo();
+            }
+            if (ImGui::MenuItem("Redo", "Ctrl+Y", false, m_commandHistory.canRedo())) {
+                m_commandHistory.redo();
+            }
+            ImGui::EndMenu();
+        }
+
         if (ImGui::BeginMenu("View")) {
             ImGui::MenuItem("Viewport", nullptr, &m_showViewport);
             ImGui::EndMenu();
@@ -178,7 +231,7 @@ void EditorApp::renderMenuBar() {
 
 void EditorApp::renderPanels() {
     if (m_showViewport && m_app) {
-        m_viewport.render(*m_app, m_playMode);
+        m_viewport.render(*m_app, m_playMode, m_selectedEntity, m_commandHistory);
     }
 
     // File dialog
