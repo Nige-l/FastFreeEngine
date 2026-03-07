@@ -30,7 +30,7 @@ void ShortcutManager::update() {
         if (b.alt   != altHeld)   continue;
 
         // Check that the key was pressed this frame (not just held)
-        if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(b.key), false)) {
+        if (ImGui::IsKeyPressed(b.key, false)) {
             m_triggered[i] = true;
         }
     }

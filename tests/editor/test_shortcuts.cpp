@@ -29,22 +29,22 @@ TEST_CASE("ShortcutManager registerDefaults populates bindings", "[editor][short
 
 TEST_CASE("ShortcutManager addBinding increments count", "[editor][shortcuts]") {
     ShortcutManager mgr;
-    mgr.addBinding("test_action", 65, true, false, false);
+    mgr.addBinding("test_action", ImGuiKey_A, true, false, false);
     CHECK(mgr.bindingCount() == 1);
 
-    mgr.addBinding("another_action", 66, false, false, false);
+    mgr.addBinding("another_action", ImGuiKey_B, false, false, false);
     CHECK(mgr.bindingCount() == 2);
 }
 
 TEST_CASE("ShortcutManager addBinding respects MAX_BINDINGS", "[editor][shortcuts]") {
     ShortcutManager mgr;
     for (int i = 0; i < 32; ++i) {
-        mgr.addBinding("action", 65 + i, false, false, false);
+        mgr.addBinding("action", static_cast<ImGuiKey>(ImGuiKey_A + i), false, false, false);
     }
     CHECK(mgr.bindingCount() == 32);
 
     // 33rd binding should be silently dropped
-    mgr.addBinding("overflow", 100, false, false, false);
+    mgr.addBinding("overflow", ImGuiKey_Space, false, false, false);
     CHECK(mgr.bindingCount() == 32);
 }
 

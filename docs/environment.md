@@ -68,9 +68,11 @@ The following libraries are declared in `vcpkg.json`:
 Custom overlay ports live in `cmake/vcpkg-overlays/ports/`. They are loaded via the
 `VCPKG_OVERLAY_PORTS` cache variable set before `project()` in `CMakeLists.txt`.
 
-### luajit overlay (added 2026-03-07)
+### luajit overlay (added 2026-03-07, updated 2026-03-07)
 
 Patches the upstream vcpkg luajit port to support Windows/MinGW cross-compilation from Linux.
+For all other targets (macOS, Linux, iOS native builds), the overlay behaves identically to
+the upstream vcpkg luajit port.
 
 **Root cause of the patch:** The upstream `luajit:x64-linux` host package builds `buildvm-x64`
 with `TARGET_SYS=Linux` (ELF output only). When cross-compiling for Windows, `buildvm -m peobj`
@@ -86,6 +88,9 @@ fails with "no PE object support for this target".
   (working around a vcpkg bug where `vcpkg_build_make OPTIONS` are not passed to `install`).
 - Renames the installed `luajit` binary to `luajit.exe` before `vcpkg_copy_tools` so vcpkg's
   tool validator finds it.
+- Windows-specific DLL naming (`FILE_A`, `FILE_SO`, `INSTALL_ANAME`, `INSTALL_SONAME`) in the
+  configure script is guarded by `TARGET_SYS=Windows`, not by `EXECUTABLE_SUFFIX`, ensuring
+  these values never activate on macOS/Linux/iOS builds.
 
 **Files:** `cmake/vcpkg-overlays/ports/luajit/portfile.cmake`, `configure`, `vcpkg.json`,
 `luajit.pc`, `Makefile.nmake`, `msvcbuild.patch`, `003-do-not-set-macosx-deployment-target.patch`.
@@ -589,3 +594,71 @@ the macOS toolchain.
 - No engine source files were modified.
 - Linux CI jobs are unchanged.
 - Full verification deferred to CI run after commit/push.
+
+### 2026-03-07: Fix LuaJIT overlay port for macOS arm64 native builds
+
+**What changed:**
+
+Files: `cmake/vcpkg-overlays/ports/luajit/portfile.cmake`, `cmake/vcpkg-overlays/ports/luajit/configure`
+
+**portfile.cmake:**
+
+1. Changed `make_options` initialization from empty (`vcpkg_list(SET make_options)`) to include
+   `EXECUTABLE_SUFFIX` by default (`vcpkg_list(SET make_options "EXECUTABLE_SUFFIX=${VCPKG_TARGET_EXECUTABLE_SUFFIX}")`),
+   matching the upstream vcpkg luajit port exactly. Previously each platform branch added
+   `EXECUTABLE_SUFFIX` individually, which diverged from upstream for no reason.
+2. Removed redundant `EXECUTABLE_SUFFIX` from the macOS, iOS, and Linux `make_options` branches
+   since it is now in the initializer (matching upstream).
+
+**configure (Makefile.vcpkg generator):**
+
+1. Separated Windows-specific DLL/import library naming (`FILE_A`, `FILE_SO`, `INSTALL_ANAME`,
+   `INSTALL_SONAME`) from the `EXECUTABLE_SUFFIX` guard into its own `ifeq (${LUAJIT_TARGET_SYS},Windows)`
+   block. Previously these Windows-only values were inside the `ifneq (${LUAJIT_EXECUTABLE_SUFFIX},)`
+   block, meaning they would incorrectly activate on any platform with a non-empty executable suffix.
+2. Removed `$(BUILD_OPTIONS)` from the `install` make target, matching upstream behaviour. The
+   overlay had added `$(BUILD_OPTIONS)` to `install`, which passes `CC`, `CFLAGS`, `LDFLAGS`,
+   etc. to the install step. On macOS, this could cause the install target to behave differently
+   from upstream (e.g., re-invoking the compiler during installation). Upstream does not pass
+   build options to install.
+
+**Root cause of the macOS CI LuaJIT build failure:**
+
+The overlay port diverged from upstream in two ways that affected non-Windows targets:
+
+1. The `configure` script's `install` target received `$(BUILD_OPTIONS)` that upstream does not
+   pass. On macOS arm64, this caused the LuaJIT install step to behave differently from upstream.
+2. The `configure` script's `EXECUTABLE_SUFFIX` block included Windows-specific DLL naming that
+   should only activate for Windows builds.
+
+**Why this does not affect Windows cross-builds:**
+
+The Windows cross-compilation path is unchanged. The PE buildvm rebuild logic, the `TARGET_SYS=Windows`
+and `EXECUTABLE_SUFFIX=.exe` configure options, and the post-install `.exe` rename all remain
+identical. The Windows DLL naming in the configure script is now guarded by `TARGET_SYS=Windows`
+instead of `EXECUTABLE_SUFFIX`, which is more precise and still activates for all Windows builds.
+
+**Verification:**
+- `diff` confirms the overlay portfile.cmake now differs from upstream ONLY in the cross-compilation
+  sections (Windows PE buildvm rebuild, Windows cross-build options, `.exe` rename).
+- For native macOS/Linux/iOS builds, the overlay is functionally identical to upstream.
+- No engine source files were modified.
+- Full verification deferred to CI run after commit/push.
+
+### 2026-03-07: Editor launch diagnosis (local machine)
+
+**Symptom:** Editor binary crashes immediately on launch.
+
+**Environment status:** NOT an environment issue. All shared libraries resolve, DISPLAY is set,
+OpenGL 4.6 is available (AMD Radeon RX Vega, 8GB VRAM, direct rendering).
+
+**Actual error:** ImGui assertion failure in `imgui.cpp:8787`:
+```
+Assertion `IsNamedKey(key) && "Support for user key indices was dropped in favor of ImGuiKey.
+Please update backend & user code."' failed.
+```
+
+**Root cause:** CODE BUG. The engine's ImGui integration passes raw integer key indices to
+`ImGui::GetKeyData()` instead of named `ImGuiKey` enum values. ImGui 1.91.9 dropped support
+for legacy integer key indices. This requires a code fix by engine-dev in the editor's input
+handling code. No environment changes needed.

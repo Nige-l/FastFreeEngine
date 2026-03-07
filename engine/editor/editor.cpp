@@ -2,6 +2,7 @@
 
 #include "editor/editor.h"
 #include "core/ecs.h"
+#include "core/input.h"
 #include "core/logging.h"
 #include "core/types.h"
 #include "renderer/render_system.h"
@@ -28,9 +29,22 @@ void EditorOverlay::init(GLFWwindow* window) {
     // Dark theme
     ImGui::StyleColorsDark();
 
-    // Install GLFW backend with callback chaining (true = install callbacks)
-    ImGui_ImplGlfw_InitForOpenGL(window, true);
+    // Pass false for install_callbacks: FFE's input system (initInput) installs
+    // its own GLFW callbacks and forwards events to ImGui via the
+    // InputEventForwarder mechanism. Installing ImGui's callbacks here
+    // would create a double-forwarding loop.
+    ImGui_ImplGlfw_InitForOpenGL(window, false);
     ImGui_ImplOpenGL3_Init("#version 330");
+
+    // Register the event forwarder so FFE's GLFW callbacks chain into ImGui.
+    // This ensures ImGui receives key/mouse/scroll events even though FFE
+    // overwrites GLFW callbacks in initInput().
+    ffe::InputEventForwarder forwarder;
+    forwarder.keyCallback         = ImGui_ImplGlfw_KeyCallback;
+    forwarder.mouseButtonCallback = ImGui_ImplGlfw_MouseButtonCallback;
+    forwarder.cursorPosCallback   = ImGui_ImplGlfw_CursorPosCallback;
+    forwarder.scrollCallback      = ImGui_ImplGlfw_ScrollCallback;
+    ffe::setInputEventForwarder(forwarder);
 
     m_initialised = true;
 }
@@ -39,6 +53,9 @@ void EditorOverlay::shutdown() {
     if (!m_initialised) {
         return;
     }
+
+    // Clear the event forwarder before shutting down ImGui to avoid dangling calls.
+    ffe::setInputEventForwarder({});
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();

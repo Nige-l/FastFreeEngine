@@ -1,5 +1,6 @@
 #include "editor_app.h"
 #include "core/application.h"
+#include "core/input.h"
 #include "scene/scene_serialiser.h"
 #include "commands/entity_commands.h"
 
@@ -63,8 +64,20 @@ bool EditorApp::init() {
 
     ImGui::StyleColorsDark();
 
-    ImGui_ImplGlfw_InitForOpenGL(m_window, true);
+    // Pass false for install_callbacks: FFE's input system installs its own
+    // GLFW callbacks (in initSubsystems -> initInput) and forwards events to
+    // ImGui via the InputEventForwarder mechanism. Installing ImGui's
+    // callbacks here would create a double-forwarding loop.
+    ImGui_ImplGlfw_InitForOpenGL(m_window, false);
     ImGui_ImplOpenGL3_Init("#version 330");
+
+    // Register the event forwarder so FFE's GLFW callbacks chain into ImGui.
+    ffe::InputEventForwarder forwarder;
+    forwarder.keyCallback         = ImGui_ImplGlfw_KeyCallback;
+    forwarder.mouseButtonCallback = ImGui_ImplGlfw_MouseButtonCallback;
+    forwarder.cursorPosCallback   = ImGui_ImplGlfw_CursorPosCallback;
+    forwarder.scrollCallback      = ImGui_ImplGlfw_ScrollCallback;
+    ffe::setInputEventForwarder(forwarder);
 
     // 5. Initialize the engine in editor-hosted mode
     ApplicationConfig config;
@@ -166,7 +179,9 @@ void EditorApp::shutdown() {
     // 0. Destroy viewport FBO (needs GL context alive)
     m_viewport.shutdown();
 
-    // 1. Shutdown ImGui backends (must happen while the GL context + window are alive)
+    // 1. Clear event forwarder and shutdown ImGui backends (must happen while
+    //    the GL context + window are alive)
+    ffe::setInputEventForwarder({});
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();

@@ -12,7 +12,7 @@ engine/
   renderer/opengl/  — OpenGL 3.3 RHI backend, GL debug utilities                               [renderer-specialist]
   audio/            — miniaudio backend, WAV/OGG, sound/music playback, headless mode           [engine-dev]
   physics/          — 2D collision: spatial hash, AABB/Circle, layer/mask, callbacks            [engine-dev]
-  scripting/        — LuaJIT sandbox, ffe.* Lua API (~146 bindings), timer system               [engine-dev + api-designer]
+  scripting/        — LuaJIT sandbox, ffe.* Lua API (~167 bindings), timer system               [engine-dev + api-designer]
   networking/       — ENet transport, replication, server/client, prediction, lobby, lag compensation, network system  [engine-dev]
   editor/           — Debug overlay (HUD text, FPS) — future standalone editor                  [engine-dev]
 tests/

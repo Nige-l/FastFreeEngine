@@ -4,11 +4,15 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
+991 tests | Zero warnings | Clang-18 + GCC-13 | ~167 Lua bindings | 5 demo games
+
 ---
 
 ## What is FFE?
 
-FastFreeEngine exists to unlock creativity. A student with a ten-year-old laptop should be able to build a game that runs beautifully and share it with the world. A kid who discovers FFE because they want to make games should come out the other side understanding systems programming, graphics, and architecture -- because the engine was designed to be learned from, not just used.
+FastFreeEngine is a complete game development platform -- engine, editor, networking, and learning resources -- built so that anyone can make games, regardless of their hardware budget.
+
+A student with a ten-year-old laptop should be able to build a game that runs beautifully and share it with the world. A kid who discovers FFE because they want to make games should come out the other side understanding systems programming, graphics, and architecture -- because the engine was designed to be learned from, not just used.
 
 FFE targets indie developers, students, hobbyists, and anyone working with older or lower-end hardware. The engine guarantees 60 fps on its declared minimum tier, or the feature does not ship. Every performance decision is an accessibility decision.
 
@@ -48,26 +52,90 @@ See the [full tutorial](docs/tutorial.md) for audio, collisions, sprites, and mo
 
 ## Features
 
-All subsystems below are implemented and working together in four demo games: "Collect the Stars", "Pong", "Breakout", and a 3D Demo.
+All subsystems below are implemented and working together in five demo games: "Collect the Stars", "Pong", "Breakout", "3D Demo", and "Net Arena" (multiplayer).
+
+### Core Engine
 
 - **ECS** -- Entity Component System built on EnTT with a thin `World` wrapper and function-pointer system dispatch. No virtual calls in hot paths.
-- **2D Sprite Rendering** -- OpenGL 3.3 backend with batched draw calls (2048 sprites per batch), packed 64-bit sort keys, and render queue.
-- **Sprite Animation** -- Grid-based atlas animation with configurable frame count, columns, frame duration, and looping.
-- **Lua Scripting** -- Sandboxed LuaJIT with instruction budget (1M ops), blocked globals, and a rich `ffe.*` API for input, transforms, entities, audio, textures, collisions, and shutdown.
-- **Audio** -- WAV and OGG support via miniaudio. One-shot SFX playback and streaming background music with volume control. Lock-free ring buffer for decoded audio.
-- **2D Collision Detection** -- Spatial hash broadphase with AABB and circle colliders. Lua collision callbacks for game logic.
-- **Input System** -- State-based keyboard and mouse input (pressed/held/released/up) with action mapping (64 actions, 4 bindings each).
-- **Editor Overlay** -- Dear ImGui debug overlay toggled with F1. Displays entity inspector, system timings, and engine state.
+- **Lua Scripting** -- Sandboxed LuaJIT with instruction budget (1M ops), blocked globals, and ~167 `ffe.*` API bindings across all subsystems.
 - **Arena Allocator** -- Linear bump allocator with cache-line alignment and per-frame reset. Zero heap allocations in hot paths.
-- **Logging** -- printf-style logging with compile-time macro filtering and minimal lock scope.
-- **Bitmap Text Rendering** -- Built-in 8x8 pixel font with screen-space HUD text. `ffe.drawText()` from Lua with position, scale, and color. No external font files needed.
-- **Texture Loading** -- stb_image-based loader with path traversal prevention, write-once asset root, and configurable filter/wrap modes (LINEAR or NEAREST for pixel art).
-- **3D Mesh Rendering** -- glTF (.glb) mesh loading via cgltf. Blinn-Phong lighting with directional and point lights (up to 4). Materials system with diffuse, specular, and normal maps. Shadow mapping with PCF 3x3 filtering. Skybox / cubemap environment rendering.
-- **3D Camera** -- FPS (yaw/pitch) and orbit (target/radius) camera modes with Lua bindings.
-- **Gamepad Input** -- GLFW gamepad support for up to 4 controllers with button and axis state tracking.
-- **TTF Font Rendering** -- stb_truetype-based TrueType font loading with atlas generation. Up to 8 fonts loaded simultaneously.
+- **Input System** -- State-based keyboard, mouse, and gamepad input (pressed/held/released) with action mapping (64 actions, 4 bindings each). Up to 4 controllers.
+- **Timers** -- `ffe.after()` and `ffe.every()` with cancel support. 256 max concurrent timers, fixed-size array.
 - **Save/Load** -- JSON-based game state persistence with security hardening (path traversal prevention, size limits, atomic writes).
-- **Screenshot** -- In-engine screenshot capture to PNG via glReadPixels.
+- **Scene Management** -- `destroyAllEntities`, `cancelAllTimers`, `loadScene` for clean scene transitions.
+- **Logging** -- printf-style logging with compile-time macro filtering and minimal lock scope.
+
+### 2D Rendering
+
+- **Sprite Rendering** -- OpenGL 3.3 backend with batched draw calls (2048 sprites per batch), packed 64-bit sort keys, and render queue.
+- **Sprite Animation** -- Grid-based atlas animation with configurable frame count, columns, frame duration, and looping.
+- **Tilemap** -- Tilemap component with `setTile`/`getTile`, supporting maps up to 1024x1024.
+- **Particle System** -- ParticleEmitter with 128 inline particle pool, gravity, color interpolation, and size interpolation.
+- **Bitmap Text** -- Built-in 8x8 pixel font with `ffe.drawText()`. No external font files needed.
+- **TTF Fonts** -- stb_truetype-based TrueType font loading with atlas generation. Up to 8 fonts simultaneously.
+- **Texture Loading** -- stb_image-based loader with path traversal prevention, write-once asset root, and configurable filter/wrap modes (LINEAR or NEAREST for pixel art).
+- **2D Collision** -- Spatial hash broadphase with AABB and circle colliders, layer/mask filtering, and Lua collision callbacks.
+
+### 3D Rendering
+
+- **Mesh Rendering** -- glTF (.glb) mesh loading via cgltf. Blinn-Phong lighting with directional and point lights (up to 4).
+- **Materials** -- Diffuse, specular, and normal map support with configurable shininess.
+- **Shadow Mapping** -- Depth FBO with PCF 3x3 filtering. Configurable bias and shadow area.
+- **Skybox** -- Cubemap environment rendering (6-face loading).
+- **Skeletal Animation** -- Bone hierarchy with GPU skinning (64 max bones). Play/stop/speed control from Lua.
+- **3D Camera** -- FPS (yaw/pitch) and orbit (target/radius) camera modes with Lua bindings.
+
+### 3D Physics
+
+- **Jolt Physics Integration** -- Rigid bodies, collision callbacks, and raycasting with entity-body mapping. 13 Lua bindings.
+
+### Audio
+
+- **Sound Playback** -- WAV and OGG support via miniaudio. One-shot SFX and streaming background music with volume control.
+- **3D Positional Audio** -- Spatial voices with listener sync (`playSound3D`).
+- **Headless Mode** -- Audio subsystem works in headless mode for CI and testing.
+
+### Standalone Editor
+
+A graphical application for building games with FFE, similar to Unity or Unreal Editor:
+
+- **Scene Hierarchy** -- Tree view with parent/child relationships and drag reorder.
+- **Entity Inspector** -- Create, modify, and delete entities and components with full undo/redo.
+- **Undo/Redo** -- Comprehensive command system covering entity, component, inspector fields, add/remove, and reparent operations.
+- **Scene View** -- 2D and 3D viewport with FBO rendering.
+- **Play-in-Editor** -- Snapshot/restore with Play/Pause/Resume/Stop controls.
+- **Viewport Gizmos** -- Translate, rotate, and scale with axis constraints and undo integration.
+- **Asset Browser** -- Directory traversal, file type indicators, and drag-and-drop to inspector for texture/mesh assignment.
+- **Scene Serialisation** -- Save/load scene files (JSON) with entity count limits and NaN rejection.
+- **Build Pipeline** -- Export games with runtime binary and `ffe.loadSceneJSON` for standalone distribution.
+- **Keyboard Shortcuts** -- ShortcutManager with 7 default bindings (Ctrl+Z, Ctrl+S, etc.).
+- **File Dialogs** -- Open/Save Scene dialogs with security boundary enforcement.
+
+### Multiplayer Networking
+
+Built-in client-server multiplayer for both 2D and 3D games:
+
+- **Network Transport** -- ENet wrapper with ServerTransport/ClientTransport and function-pointer callbacks.
+- **Packet System** -- PacketReader/Writer with bounds checking, NaN/Inf rejection, and 1200-byte MTU limit.
+- **Client-Server Architecture** -- Authoritative server with snapshot broadcast and client interpolation.
+- **ECS State Replication** -- ReplicationRegistry supporting 32 component types with snapshot serialization and slerp interpolation.
+- **Client-Side Prediction** -- 64-slot ring buffer with configurable reconciliation threshold.
+- **Server Reconciliation** -- Server input processing with per-connection queue and validation.
+- **Lobby/Matchmaking** -- Create, join, leave, ready, and start game with max player enforcement and duplicate rejection.
+- **Lag Compensation** -- 64-frame history with ray-vs-sphere hit check and server-side rewind window.
+- **Network Security** -- Packet validation, per-connection rate limiting (100 pkt/s, 64KB/s).
+- **30 Lua Bindings** -- Full networking API accessible from game scripts.
+
+### Scene Graph
+
+- **Parent/Child Relationships** -- `setParent`, `removeParent`, `getChildren`, `isAncestor` with circular parenting prevention.
+- **Root Entity Queries** -- `isRoot`, `getRootEntities` for hierarchy traversal.
+
+### Utilities
+
+- **Screenshot** -- In-engine screenshot capture to PNG via `ffe.screenshot()`.
+- **Camera Shake** -- `ffe.cameraShake()` for screen effects.
+- **Clear Color** -- `ffe.setBackgroundColor()` for viewport background.
 
 ---
 
@@ -90,7 +158,9 @@ Every FFE system declares which hardware tiers it supports. No feature may silen
 
 ### Prerequisites
 
-**Linux (Ubuntu 22.04+)** is the development platform. Install the required packages:
+**Linux (Ubuntu 22.04+)** is the primary development platform. Windows (MinGW cross-compile) and macOS (arm64) are also supported.
+
+Install the required packages on Linux:
 
 ```bash
 sudo apt-get install \
@@ -150,12 +220,23 @@ cmake -B build-gcc -G Ninja \
 cmake --build build-gcc
 ```
 
-### Running Tests
-
-738 Catch2 tests covering core, renderer (2D and 3D), scripting, audio, physics, and texture loading:
+**Windows (MinGW cross-compile from Linux):**
 
 ```bash
-ctest --test-dir build --output-on-failure
+cmake -B build-mingw -G Ninja \
+    -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64-x86_64.cmake \
+    -DCMAKE_BUILD_TYPE=Debug \
+    -DFFE_TIER=LEGACY
+
+cmake --build build-mingw
+```
+
+### Running Tests
+
+991 Catch2 tests covering core, renderer (2D and 3D), scripting, audio, physics, networking, and more:
+
+```bash
+ctest --test-dir build --output-on-failure --parallel $(nproc)
 ```
 
 ### Selecting a Hardware Tier
@@ -173,7 +254,7 @@ cmake -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++-18 -DFFE_TIER=MODERN
 
 ### Collect the Stars (lua_demo)
 
-The flagship demo -- a complete mini-game written entirely in Lua exercising every engine subsystem.
+The flagship 2D demo -- a complete mini-game written entirely in Lua exercising every engine subsystem.
 
 ```bash
 ./build/examples/lua_demo/ffe_lua_demo
@@ -231,6 +312,21 @@ A 3D scene demonstrating mesh loading, Blinn-Phong lighting with directional and
 - Two point lights (warm orange + cool blue)
 - Orbit camera with mouse control
 
+### Net Arena (Multiplayer)
+
+A 2D multiplayer arena demonstrating client-side prediction, server reconciliation, and networked gameplay.
+
+```bash
+# Start the server
+./build/examples/net_demo/ffe_net_demo --server
+
+# Connect a client (in another terminal)
+./build/examples/net_demo/ffe_net_demo --client
+```
+
+- Client-side prediction with server reconciliation
+- Networked entity replication and interpolation
+
 ### Other Demos
 
 ```bash
@@ -250,24 +346,52 @@ A 3D scene demonstrating mesh loading, Blinn-Phong lighting with directional and
 
 ```
 engine/
-  core/         ECS, types, arena allocator, logging, input, application loop
-  renderer/     OpenGL 3.3 backend, sprite batching, textures, sprite animation, 3D mesh, lighting, shadows, skybox
+  core/         ECS, types, arena allocator, logging, input, timers, application loop
+  renderer/     OpenGL 3.3 backend, sprite batching, textures, sprite animation,
+                3D mesh, lighting, shadows, skybox, skeletal animation, camera
   audio/        miniaudio integration, WAV/OGG, SFX + streaming music, 3D spatial audio
-  physics/      2D collision + 3D physics (Jolt), spatial hash, AABB/circle colliders, rigid bodies, raycasting
-  scripting/    Lua sandbox, ffe.* API bindings, instruction budget
-  editor/       Dear ImGui overlay, entity inspector
+  physics/      2D collision (spatial hash, AABB/circle) + 3D physics (Jolt, rigid bodies, raycasting)
+  scripting/    Lua sandbox, ~167 ffe.* API bindings, instruction budget
+  networking/   ENet transport, replication, server/client, prediction, lobby, lag compensation
+  editor/       Standalone editor application (ImGui, hierarchy, inspector, viewport, gizmos)
 
-tests/          738 Catch2 tests (core, renderer, scripting, audio, physics)
-examples/       Demo games (lua_demo, pong, breakout, hello_sprites, interactive_demo, headless_test)
+tests/          991 Catch2 tests (core, renderer, scripting, audio, physics, networking)
+examples/       Demo games (lua_demo, pong, breakout, 3d_demo, net_demo, hello_sprites, headless_test)
 assets/
   textures/     PNG textures and spritesheets
   audio/        WAV sound effects and OGG music tracks
 docs/
   architecture/ ADR design documents for each subsystem
   devlog.md     Session-by-session development history
+website/        MkDocs documentation site (tutorials, deep dives, learning track)
+cmake/
+  toolchains/   MinGW cross-compile toolchain
+.github/
+  workflows/    CI: Linux Clang-18, Linux GCC-13, macOS arm64
 ```
 
 Every engine subdirectory contains a `.context.md` file with API documentation, usage patterns, and anti-patterns -- written for both humans and AI assistants.
+
+---
+
+## Documentation
+
+FFE ships a documentation website built with MkDocs and the Material theme, including:
+
+- **Getting Started** -- Install, build, and run your first game in 15 minutes
+- **Tutorials** -- Step-by-step guides for your first 2D game, first 3D scene, and multiplayer basics
+- **How It Works** -- Deep dives into ECS internals, renderer architecture, and networking
+- **API Reference** -- Auto-generated from `.context.md` files across all subsystems
+- **Build Your Own Engine** -- A learning track teaching engine development concepts (first installment: "Build an ECS from Scratch")
+- **Community Showcase** -- All five official demo games with descriptions and screenshots
+
+Build and serve the docs locally:
+
+```bash
+cd website
+pip install mkdocs-material
+mkdocs serve
+```
 
 ---
 
@@ -279,12 +403,13 @@ Managed via vcpkg (see `vcpkg.json`):
 |------------|---------|
 | [EnTT](https://github.com/skypjack/entt) | Entity Component System |
 | [GLM](https://github.com/g-truc/glm) | Math library |
-| [Dear ImGui](https://github.com/ocornut/imgui) | Editor overlay (with GLFW + OpenGL3 bindings) |
+| [Dear ImGui](https://github.com/ocornut/imgui) | Editor UI (with GLFW + OpenGL3 bindings) |
 | [sol2](https://github.com/ThePhD/sol2) | Lua C++ bindings |
 | [Tracy](https://github.com/wolfpld/tracy) | Frame profiler |
 | [Catch2](https://github.com/catchorg/Catch2) | Test framework |
-| [nlohmann-json](https://github.com/nlohmann/json) | JSON parsing |
+| [nlohmann-json](https://github.com/nlohmann/json) | JSON parsing (scenes, save/load, networking) |
 | [Jolt Physics](https://github.com/jrouwe/JoltPhysics) | 3D physics engine |
+| [ENet](https://github.com/lsalzman/enet) | UDP networking (multiplayer transport) |
 
 System packages:
 
@@ -294,9 +419,21 @@ System packages:
 | GLFW | Window and input management |
 | glad | OpenGL function loading (vendored in `third_party/`) |
 | stb_image | Texture loading (vendored in `third_party/`) |
+| stb_image_write | Screenshot PNG encoding (vendored in `third_party/`) |
 | [stb_truetype](https://github.com/nothings/stb) | TTF font rendering (vendored in `third_party/`) |
 | [cgltf](https://github.com/jkuhlmann/cgltf) | glTF mesh loading (vendored in `third_party/`) |
 | miniaudio | Audio playback (vendored in `third_party/`) |
+
+---
+
+## Cross-Platform Support
+
+| Platform | Compiler | Status |
+|----------|----------|--------|
+| Linux | Clang-18 | Primary -- full CI |
+| Linux | GCC-13 | Secondary -- full CI |
+| macOS | Apple Clang (arm64) | CI verified |
+| Windows | MinGW-w64 (cross-compile) | Builds from Linux |
 
 ---
 
@@ -308,7 +445,19 @@ FastFreeEngine is licensed under the [MIT License](LICENSE). Free and open sourc
 
 ## Status
 
-Active development. Phase 2 (3D Foundation) is COMPLETE. The engine supports 2D and 3D rendering, point lights, materials (specular/normal maps), skeletal animation, shadow mapping, skybox environment rendering, 3D physics (Jolt -- collision callbacks, raycasting), 3D spatial audio, scripting, and an editor overlay -- demonstrated in four playable demos including a 3D scene. Phase 3 (Standalone Editor) is next. See `docs/devlog.md` for the full session-by-session development history.
+**All five phases of the FFE roadmap are complete.** Active development continues with maintenance, community growth, and backlog items.
+
+| Phase | Status |
+|-------|--------|
+| Phase 1 -- 2D Foundation (Linux) | COMPLETE |
+| Phase 2 -- 3D Foundation | COMPLETE |
+| Phase 3 -- Standalone Editor | MVP COMPLETE |
+| Phase 4 -- Networking / Multiplayer | COMPLETE |
+| Phase 5 -- Website / Learning Platform | COMPLETE |
+
+The engine supports full 2D and 3D game development with multiplayer networking, a standalone editor, 3D physics, skeletal animation, shadow mapping, and more -- demonstrated across five playable demos. 991 tests pass on both compilers with zero warnings.
+
+See `docs/devlog.md` for the full session-by-session development history.
 
 **Getting started?** Read the [Quick-Start Tutorial](docs/tutorial.md) to build your first game in Lua.
 

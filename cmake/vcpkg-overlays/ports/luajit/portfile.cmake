@@ -122,7 +122,8 @@ else()
                 "EXECUTABLE_SUFFIX=${VCPKG_TARGET_EXECUTABLE_SUFFIX}"
             )
         else()
-            # Non-Windows cross-compile: use pre-built tools from host package (upstream behaviour)
+            # Non-Windows cross-compile (e.g., arm64-osx from x64-linux):
+            # use pre-built tools from host package (upstream behaviour)
             list(APPEND options
                 "LJARCH=${VCPKG_TARGET_ARCHITECTURE}"
                 "BUILDVM_X=${CURRENT_HOST_INSTALLED_DIR}/manual-tools/${PORT}/buildvm-${VCPKG_TARGET_ARCHITECTURE}${VCPKG_HOST_EXECUTABLE_SUFFIX}"
@@ -135,21 +136,22 @@ else()
     endif()
 
     # make_options: passed to vcpkg_install_make OPTIONS (build step only, NOT install).
-    # For Windows cross-build, TARGET_SYS/EXECUTABLE_SUFFIX are already in COMMON_OPTIONS
-    # via configure OPTIONS above. For native builds we add them here.
-    vcpkg_list(SET make_options)
+    # Matches upstream: EXECUTABLE_SUFFIX is always included here.
+    # For Windows cross-build, TARGET_SYS/EXECUTABLE_SUFFIX are ALSO in COMMON_OPTIONS
+    # via configure OPTIONS above (to reach the install target).
+    vcpkg_list(SET make_options "EXECUTABLE_SUFFIX=${VCPKG_TARGET_EXECUTABLE_SUFFIX}")
     set(strip_options "") # cf. src/Makefile
     if(VCPKG_TARGET_IS_OSX)
-        vcpkg_list(APPEND make_options "EXECUTABLE_SUFFIX=${VCPKG_TARGET_EXECUTABLE_SUFFIX}" "TARGET_SYS=Darwin")
+        vcpkg_list(APPEND make_options "TARGET_SYS=Darwin")
         set(strip_options " -x")
     elseif(VCPKG_TARGET_IS_IOS)
-        vcpkg_list(APPEND make_options "EXECUTABLE_SUFFIX=${VCPKG_TARGET_EXECUTABLE_SUFFIX}" "TARGET_SYS=iOS")
+        vcpkg_list(APPEND make_options "TARGET_SYS=iOS")
         set(strip_options " -x")
     elseif(VCPKG_TARGET_IS_LINUX)
-        vcpkg_list(APPEND make_options "EXECUTABLE_SUFFIX=${VCPKG_TARGET_EXECUTABLE_SUFFIX}" "TARGET_SYS=Linux")
+        vcpkg_list(APPEND make_options "TARGET_SYS=Linux")
     elseif(VCPKG_TARGET_IS_WINDOWS AND NOT VCPKG_CROSSCOMPILING)
         # Native Windows build (MSVC already handled above; this is native MinGW on Windows).
-        vcpkg_list(APPEND make_options "EXECUTABLE_SUFFIX=${VCPKG_TARGET_EXECUTABLE_SUFFIX}" "TARGET_SYS=Windows")
+        vcpkg_list(APPEND make_options "TARGET_SYS=Windows")
         set(strip_options " --strip-unneeded")
     elseif(VCPKG_TARGET_IS_WINDOWS AND VCPKG_CROSSCOMPILING)
         # Cross-build for Windows: TARGET_SYS/EXECUTABLE_SUFFIX already in configure OPTIONS.

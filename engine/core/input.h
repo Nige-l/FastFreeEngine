@@ -117,6 +117,27 @@ enum class GamepadAxis : i32 {
 inline constexpr i32 MAX_ACTIONS = 64;
 inline constexpr i32 MAX_BINDINGS_PER_ACTION = 4;
 
+// --- Input Event Forwarding --------------------------------------------------
+// Allows the editor (ImGui) to receive GLFW events without ffe_core linking
+// against imgui. The editor registers callback function pointers; FFE's GLFW
+// callbacks invoke them before processing input internally.
+
+using GlfwKeyCallbackFn         = void(*)(GLFWwindow*, int key, int scancode, int action, int mods);
+using GlfwMouseButtonCallbackFn = void(*)(GLFWwindow*, int button, int action, int mods);
+using GlfwCursorPosCallbackFn   = void(*)(GLFWwindow*, double x, double y);
+using GlfwScrollCallbackFn      = void(*)(GLFWwindow*, double xoffset, double yoffset);
+
+struct InputEventForwarder {
+    GlfwKeyCallbackFn         keyCallback         = nullptr;
+    GlfwMouseButtonCallbackFn mouseButtonCallback  = nullptr;
+    GlfwCursorPosCallbackFn   cursorPosCallback    = nullptr;
+    GlfwScrollCallbackFn      scrollCallback       = nullptr;
+};
+
+// Register an event forwarder. Call before initInput() or at any time —
+// callbacks are invoked if the forwarder is non-null when a GLFW event fires.
+void setInputEventForwarder(const InputEventForwarder& forwarder);
+
 // --- Lifecycle ---------------------------------------------------------------
 
 // Initialize the input system. Call after GLFW window creation.

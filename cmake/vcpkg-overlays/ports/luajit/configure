@@ -53,25 +53,29 @@ BUILD_OPTIONS += 'CFLAGS=${CPPFLAGS} ${CFLAGS}'
 BUILD_OPTIONS += 'LDFLAGS=${LDFLAGS}'
 BUILD_OPTIONS += 'LIBS=${LIBS}'
 
-# TARGET_SYS, EXECUTABLE_SUFFIX, FILE_T, and the Windows library variables must be in
-# COMMON_OPTIONS so they are passed to BOTH the build and install make invocations.
-# vcpkg_build_make only passes OPTIONS to 'all', NOT to 'install' (vcpkg behaviour),
-# so we bake them into COMMON_OPTIONS here.
-#
-# FILE_T:      top-level Makefile hard-codes luajit; Windows builds produce luajit.exe.
-# INSTALL_DEP: dependency check target must match the actual binary filename.
-# FILE_A:      MinGW produces libluajit-5.1.dll.a (import library) — not libluajit.a.
-# FILE_SO:     MinGW produces lua51.dll — not libluajit.so.
-# INSTALL_ANAME: destination filename for the import library in lib/.
-# INSTALL_SONAME: destination filename for the DLL in lib/ (Windows: copy to bin/ instead).
+# TARGET_SYS must be in COMMON_OPTIONS so it is passed to BOTH the build and install
+# make invocations. vcpkg_build_make only passes OPTIONS to 'all', NOT to 'install'
+# (vcpkg behaviour), so we bake it into COMMON_OPTIONS here.
 ifneq (${LUAJIT_TARGET_SYS},)
 COMMON_OPTIONS += 'TARGET_SYS=${LUAJIT_TARGET_SYS}'
 endif
+
+# EXECUTABLE_SUFFIX and related file-naming overrides.
+# The Windows-specific library names (FILE_A, FILE_SO, etc.) are only needed when
+# TARGET_SYS=Windows. They must NOT activate on macOS/Linux just because
+# EXECUTABLE_SUFFIX happens to be set.
 ifneq (${LUAJIT_EXECUTABLE_SUFFIX},)
 COMMON_OPTIONS += 'EXECUTABLE_SUFFIX=${LUAJIT_EXECUTABLE_SUFFIX}'
 COMMON_OPTIONS += 'FILE_T=luajit${LUAJIT_EXECUTABLE_SUFFIX}'
 COMMON_OPTIONS += 'INSTALL_DEP=src/luajit${LUAJIT_EXECUTABLE_SUFFIX}'
-# Windows dynamic library filenames differ from POSIX naming
+endif
+
+# Windows-specific: MinGW produces different library filenames from POSIX.
+# FILE_A:      MinGW produces libluajit-5.1.dll.a (import library) — not libluajit.a.
+# FILE_SO:     MinGW produces lua51.dll — not libluajit.so.
+# INSTALL_ANAME: destination filename for the import library in lib/.
+# INSTALL_SONAME: destination filename for the DLL in lib/ (Windows: copy to bin/ instead).
+ifeq (${LUAJIT_TARGET_SYS},Windows)
 COMMON_OPTIONS += 'FILE_A=libluajit-5.1.dll.a'
 COMMON_OPTIONS += 'FILE_SO=lua51.dll'
 COMMON_OPTIONS += 'INSTALL_ANAME=libluajit-5.1.dll.a'
@@ -116,7 +120,7 @@ all:
 	done
 
 install:
-	\$(MAKE) install \$(COMMON_OPTIONS) \$(BUILD_OPTIONS)
+	\$(MAKE) install \$(COMMON_OPTIONS)
 ifeq (${LJARCH},)
 	mkdir -p "\$\${DESTDIR}\$(BUILDVM_PREFIX)"
 	install -m 0755 "src/host/minilua\$(EXECUTABLE_SUFFIX)" "\$\${DESTDIR}\$(BUILDVM_PREFIX)/minilua\$(EXECUTABLE_SUFFIX)"

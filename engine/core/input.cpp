@@ -107,10 +107,23 @@ struct GamepadState {
 static GamepadState g_gamepads[MAX_GAMEPADS] = {};
 static f32 g_gamepadDeadzone = 0.15f;
 
+// --- Input event forwarder (set by editor to forward events to ImGui) --------
+
+static InputEventForwarder g_eventForwarder = {};
+
+void setInputEventForwarder(const InputEventForwarder& forwarder) {
+    g_eventForwarder = forwarder;
+}
+
 // --- GLFW callbacks ----------------------------------------------------------
 
-static void glfwKeyCallback(GLFWwindow* /*window*/, const int key, const int /*scancode*/,
-                             const int action, const int /*mods*/) {
+static void glfwKeyCallback(GLFWwindow* window, const int key, const int scancode,
+                             const int action, const int mods) {
+    // Forward to editor/ImGui if a forwarder is registered.
+    if (g_eventForwarder.keyCallback != nullptr) {
+        g_eventForwarder.keyCallback(window, key, scancode, action, mods);
+    }
+
     if (key < 0 || key >= MAX_KEYS) return;
     if (action == GLFW_PRESS) {
         if (g_pendingKeyCount < MAX_PENDING_KEY_EVENTS) {
@@ -124,8 +137,12 @@ static void glfwKeyCallback(GLFWwindow* /*window*/, const int key, const int /*s
     // GLFW_REPEAT is ignored -- held state is derived from current vs previous
 }
 
-static void glfwMouseButtonCallback(GLFWwindow* /*window*/, const int button,
-                                     const int action, const int /*mods*/) {
+static void glfwMouseButtonCallback(GLFWwindow* window, const int button,
+                                     const int action, const int mods) {
+    if (g_eventForwarder.mouseButtonCallback != nullptr) {
+        g_eventForwarder.mouseButtonCallback(window, button, action, mods);
+    }
+
     if (button < 0 || button >= MAX_MOUSE_BUTTONS) return;
     if (action == GLFW_PRESS) {
         if (g_pendingMouseButtonCount < MAX_PENDING_MOUSE_BUTTON_EVENTS) {
@@ -140,7 +157,11 @@ static void glfwMouseButtonCallback(GLFWwindow* /*window*/, const int button,
     }
 }
 
-static void glfwCursorPosCallback(GLFWwindow* /*window*/, const double xpos, const double ypos) {
+static void glfwCursorPosCallback(GLFWwindow* window, const double xpos, const double ypos) {
+    if (g_eventForwarder.cursorPosCallback != nullptr) {
+        g_eventForwarder.cursorPosCallback(window, xpos, ypos);
+    }
+
     if (g_mouse.firstMouseInput) {
         g_mouse.prevX = xpos;
         g_mouse.prevY = ypos;
@@ -150,7 +171,11 @@ static void glfwCursorPosCallback(GLFWwindow* /*window*/, const double xpos, con
     g_mouse.y = ypos;
 }
 
-static void glfwScrollCallback(GLFWwindow* /*window*/, const double xoffset, const double yoffset) {
+static void glfwScrollCallback(GLFWwindow* window, const double xoffset, const double yoffset) {
+    if (g_eventForwarder.scrollCallback != nullptr) {
+        g_eventForwarder.scrollCallback(window, xoffset, yoffset);
+    }
+
     if (!std::isfinite(xoffset) || !std::isfinite(yoffset)) return;
 
     g_pendingScrollX += xoffset;
@@ -188,6 +213,9 @@ void initInput(GLFWwindow* window) {
 }
 
 void shutdownInput() {
+    // Clear the event forwarder to avoid dangling calls after shutdown.
+    g_eventForwarder = {};
+
     if (g_window != nullptr) {
         glfwSetKeyCallback(g_window, nullptr);
         glfwSetMouseButtonCallback(g_window, nullptr);
