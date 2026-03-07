@@ -7,6 +7,7 @@ set(RENDERER_SOURCES
     render_queue.cpp
     camera.cpp
     sprite_batch.cpp
+    texture_atlas.cpp
     render_system.cpp
     shader_library.cpp
     texture_loader.cpp

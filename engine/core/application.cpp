@@ -9,6 +9,7 @@
 #include "renderer/post_process.h"
 #include "renderer/ssao.h"
 #include "renderer/text_renderer.h"
+#include "renderer/texture_atlas.h"
 #include "renderer/texture_loader.h"
 #include "physics/collider2d.h"
 #include "physics/collision_system.h"
@@ -302,6 +303,10 @@ Result Application::initSubsystemsInternal() {
     // 5c. Initialize sprite batch
     renderer::initSpriteBatch(m_spriteBatch,
         renderer::getShader(m_shaderLibrary, renderer::BuiltinShader::SPRITE));
+
+    // 5c2. Initialize texture atlas for sprite batching optimization.
+    // Default 2048x2048 atlas pages — fits most 2D sprite scenarios.
+    renderer::initAtlas(2048);
 
     // 5cc. Create a 1x1 white default texture for untextured sprites.
     // The sprite shader multiplies texel * color, so a white pixel lets color through.
@@ -614,6 +619,9 @@ void Application::shutdown() {
         rhi::destroyTexture(m_defaultWhiteTexture);
         m_defaultWhiteTexture = {};
     }
+
+    // 5c2. Shutdown texture atlas (before sprite batch — atlas textures must be freed first)
+    renderer::shutdownAtlas();
 
     // 5c. Shutdown sprite batch
     renderer::shutdownSpriteBatch(m_spriteBatch);

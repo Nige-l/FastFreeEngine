@@ -1,4 +1,5 @@
 #include "renderer/sprite_batch.h"
+#include "renderer/texture_atlas.h"
 #include "renderer/rhi.h"
 #include "core/logging.h"
 
@@ -76,6 +77,8 @@ void beginSpriteBatch(SpriteBatch& batch, rhi::SpriteVertex* vertexStaging) {
     batch.spriteCount   = 0;
     batch.drawCallCount = 0;
     batch.currentTexture = {};
+    batch.currentAtlasPage = -1;
+    batch.atlasBatchedCount = 0;
 
     // Bind the sprite shader once for the entire batch.
     // Set the texture sampler uniform once — it always points to unit 0.
@@ -84,13 +87,48 @@ void beginSpriteBatch(SpriteBatch& batch, rhi::SpriteVertex* vertexStaging) {
 }
 
 void addSprite(SpriteBatch& batch, const rhi::TextureHandle texture, const SpriteInstance& sprite) {
-    // If the texture changed or the batch is full, flush
-    if ((texture.id != batch.currentTexture.id && batch.spriteCount > 0) ||
+    // --- Atlas resolution ---
+    // Try to use the atlas for this texture. If the texture is in the atlas,
+    // we bind the atlas page texture instead and remap UVs.
+    // This is the key optimization: sprites using different source textures
+    // but sharing an atlas page avoid a texture-switch flush.
+    rhi::TextureHandle effectiveTexture = texture;
+    f32 finalUMin = sprite.uvMin.x;
+    f32 finalVMin = sprite.uvMin.y;
+    f32 finalUMax = sprite.uvMax.x;
+    f32 finalVMax = sprite.uvMax.y;
+    i32 atlasPage = -1;
+
+    // Lazily attempt to add the texture to the atlas on first use.
+    // addToAtlas returns the cached region immediately for already-packed textures
+    // (O(n) lookup where n = number of atlas entries, typically < 100).
+    // For textures too large or atlas full, it returns page == -1 (fallback to
+    // original per-texture batching — zero behavior change from before atlas).
+    const AtlasRegion region = addToAtlas(texture);
+    if (region.page >= 0) {
+        // Texture is in the atlas — use the atlas page texture
+        effectiveTexture = getAtlasPageTexture(region.page);
+        atlasPage = region.page;
+
+        // Remap the sprite's original UVs to atlas-space UVs
+        remapUVs(region,
+                 sprite.uvMin.x, sprite.uvMin.y, sprite.uvMax.x, sprite.uvMax.y,
+                 finalUMin, finalVMin, finalUMax, finalVMax);
+
+        batch.atlasBatchedCount++;
+    }
+
+    // --- Flush decision ---
+    // Flush if the effective texture changed or the batch is full.
+    // With atlas batching, sprites on the same atlas page share the same
+    // effective texture, so they batch together even if source textures differ.
+    if ((effectiveTexture.id != batch.currentTexture.id && batch.spriteCount > 0) ||
         batch.spriteCount >= MAX_SPRITES_PER_BATCH) {
         flushBatch(batch);
     }
 
-    batch.currentTexture = texture;
+    batch.currentTexture = effectiveTexture;
+    batch.currentAtlasPage = atlasPage;
 
     // Compute rotated quad corners
     const f32 hw = sprite.size.x * 0.5f;
@@ -122,15 +160,15 @@ void addSprite(SpriteBatch& batch, const rhi::TextureHandle texture, const Sprit
         v.a = sprite.color.a;
     }
 
-    // UVs: TL, TR, BR, BL
-    batch.vertices[base + 0].u = sprite.uvMin.x;
-    batch.vertices[base + 0].v = sprite.uvMin.y;
-    batch.vertices[base + 1].u = sprite.uvMax.x;
-    batch.vertices[base + 1].v = sprite.uvMin.y;
-    batch.vertices[base + 2].u = sprite.uvMax.x;
-    batch.vertices[base + 2].v = sprite.uvMax.y;
-    batch.vertices[base + 3].u = sprite.uvMin.x;
-    batch.vertices[base + 3].v = sprite.uvMax.y;
+    // UVs: TL, TR, BR, BL (using atlas-remapped UVs when applicable)
+    batch.vertices[base + 0].u = finalUMin;
+    batch.vertices[base + 0].v = finalVMin;
+    batch.vertices[base + 1].u = finalUMax;
+    batch.vertices[base + 1].v = finalVMin;
+    batch.vertices[base + 2].u = finalUMax;
+    batch.vertices[base + 2].v = finalVMax;
+    batch.vertices[base + 3].u = finalUMin;
+    batch.vertices[base + 3].v = finalVMax;
 
     batch.vertexCount += 4;
     batch.spriteCount++;

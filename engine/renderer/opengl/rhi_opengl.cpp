@@ -420,7 +420,19 @@ TextureHandle createTexture(const TextureDesc& desc) {
     }
 
     if (s_headless) {
-        return TextureHandle{s_headlessTextureNext++};
+        // In headless mode, still populate s_textures for dimension queries
+        // (used by the texture atlas for packing math). Skip all GL calls.
+        const u32 slot = s_headlessTextureNext++;
+        if (slot < MAX_TEXTURES) {
+            GlTexture& tex = s_textures[slot];
+            tex.glId   = 0;
+            tex.width  = desc.width;
+            tex.height = desc.height;
+            tex.fmt    = desc.format;
+            tex.alive  = true;
+            tex.vramBytes = 0;
+        }
+        return TextureHandle{slot};
     }
 
     const u32 slot = findFreeSlot(s_textures, s_nextTextureSlot);
@@ -519,11 +531,16 @@ void bindTexture(const TextureHandle handle, const u32 unitIndex) {
 }
 
 void destroyTexture(const TextureHandle handle) {
-    if (s_headless) return;
     if (handle.id == 0 || handle.id >= MAX_TEXTURES) return;
 
     GlTexture& tex = s_textures[handle.id];
     if (!tex.alive) return;
+
+    if (s_headless) {
+        // In headless mode, just clear the metadata (no GL resources to free)
+        tex = GlTexture{};
+        return;
+    }
 
     s_totalTextureVram -= tex.vramBytes;
     glDeleteTextures(1, &tex.glId);
@@ -532,6 +549,54 @@ void destroyTexture(const TextureHandle handle) {
 
 u32 textureVramUsed() {
     return s_totalTextureVram;
+}
+
+u32 getTextureWidth(const TextureHandle handle) {
+    if (handle.id == 0 || handle.id >= MAX_TEXTURES) return 0;
+    const GlTexture& tex = s_textures[handle.id];
+    if (!tex.alive) return 0;
+    return tex.width;
+}
+
+u32 getTextureHeight(const TextureHandle handle) {
+    if (handle.id == 0 || handle.id >= MAX_TEXTURES) return 0;
+    const GlTexture& tex = s_textures[handle.id];
+    if (!tex.alive) return 0;
+    return tex.height;
+}
+
+void updateTextureSubImage(const TextureHandle handle, const u32 x, const u32 y,
+                           const u32 width, const u32 height, const void* pixelData) {
+    if (s_headless) return;
+    if (handle.id == 0 || handle.id >= MAX_TEXTURES) return;
+    const GlTexture& tex = s_textures[handle.id];
+    if (!tex.alive) return;
+    if (pixelData == nullptr) return;
+    if (x + width > tex.width || y + height > tex.height) return;
+
+    glBindTexture(GL_TEXTURE_2D, tex.glId);
+    glTexSubImage2D(GL_TEXTURE_2D, 0,
+                    static_cast<GLint>(x), static_cast<GLint>(y),
+                    static_cast<GLsizei>(width), static_cast<GLsizei>(height),
+                    GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+bool readTexturePixels(const TextureHandle handle, void* outBuffer, const u32 bufferSize) {
+    if (s_headless) return false;
+    if (handle.id == 0 || handle.id >= MAX_TEXTURES) return false;
+    const GlTexture& tex = s_textures[handle.id];
+    if (!tex.alive) return false;
+    if (outBuffer == nullptr) return false;
+
+    // Compute required buffer size (RGBA8 = 4 bytes per pixel)
+    const u64 required = static_cast<u64>(tex.width) * static_cast<u64>(tex.height) * 4u;
+    if (static_cast<u64>(bufferSize) < required) return false;
+
+    glBindTexture(GL_TEXTURE_2D, tex.glId);
+    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, outBuffer);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    return true;
 }
 
 // --- Shaders ---

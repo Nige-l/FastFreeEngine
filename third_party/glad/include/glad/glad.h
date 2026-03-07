@@ -267,6 +267,8 @@ typedef void (GLAD_API_PTR *PFNGLDELETETEXTURESPROC)(GLsizei, const GLuint*);
 typedef void (GLAD_API_PTR *PFNGLBINDTEXTUREPROC)(GLenum, GLuint);
 typedef void (GLAD_API_PTR *PFNGLACTIVETEXTUREPROC)(GLenum);
 typedef void (GLAD_API_PTR *PFNGLTEXIMAGE2DPROC)(GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum, const void*);
+typedef void (GLAD_API_PTR *PFNGLTEXSUBIMAGE2DPROC)(GLenum, GLint, GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, const void*);
+typedef void (GLAD_API_PTR *PFNGLGETTEXIMAGEPROC)(GLenum, GLint, GLenum, GLenum, void*);
 typedef void (GLAD_API_PTR *PFNGLTEXPARAMETERIPROC)(GLenum, GLenum, GLint);
 typedef void (GLAD_API_PTR *PFNGLGENERATEMIPMAPPROC)(GLenum);
 
@@ -373,6 +375,8 @@ extern PFNGLDELETETEXTURESPROC          glad_glDeleteTextures;
 extern PFNGLBINDTEXTUREPROC             glad_glBindTexture;
 extern PFNGLACTIVETEXTUREPROC           glad_glActiveTexture;
 extern PFNGLTEXIMAGE2DPROC              glad_glTexImage2D;
+extern PFNGLTEXSUBIMAGE2DPROC           glad_glTexSubImage2D;
+extern PFNGLGETTEXIMAGEPROC             glad_glGetTexImage;
 extern PFNGLTEXPARAMETERIPROC           glad_glTexParameteri;
 extern PFNGLGENERATEMIPMAPPROC          glad_glGenerateMipmap;
 
@@ -466,6 +470,8 @@ extern PFNGLDEBUGMESSAGECONTROLPROC     glad_glDebugMessageControl;
 #define glBindTexture             glad_glBindTexture
 #define glActiveTexture           glad_glActiveTexture
 #define glTexImage2D              glad_glTexImage2D
+#define glTexSubImage2D           glad_glTexSubImage2D
+#define glGetTexImage             glad_glGetTexImage
 #define glTexParameteri           glad_glTexParameteri
 #define glGenerateMipmap          glad_glGenerateMipmap
 

@@ -37,6 +37,14 @@ struct SpriteBatch {
     rhi::TextureHandle currentTexture;
     u32 spriteCount     = 0;
     u32 drawCallCount   = 0;
+
+    // Atlas state: the atlas page index currently bound (-1 = no atlas page bound).
+    // When atlas batching is active, currentTexture holds the atlas page texture
+    // and currentAtlasPage tracks which page it is.
+    i32 currentAtlasPage = -1;
+
+    // Atlas-batched sprite count (statistics, not functional).
+    u32 atlasBatchedCount = 0;
 };
 
 // Initialize the sprite batch. Creates GPU buffers.
@@ -48,7 +56,10 @@ void shutdownSpriteBatch(SpriteBatch& batch);
 // Begin a new frame of sprite rendering. Resets counters.
 void beginSpriteBatch(SpriteBatch& batch, rhi::SpriteVertex* vertexStaging);
 
-// Add a sprite to the batch.
+// Add a sprite to the batch. Transparently uses the texture atlas when possible.
+// If the texture is in the atlas, UVs are remapped to atlas space and the atlas
+// page texture is bound instead. If not in the atlas, the original texture is used.
+// This is fully backward-compatible: the caller does not need to know about the atlas.
 void addSprite(SpriteBatch& batch, rhi::TextureHandle texture, const SpriteInstance& sprite);
 
 // Flush any remaining sprites. Must be called after all sprites are added.

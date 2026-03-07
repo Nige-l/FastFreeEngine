@@ -18,6 +18,7 @@ extern "C" {
 #include "renderer/shadow_map.h"
 #include "renderer/screenshot.h"
 #include "renderer/rhi.h"
+#include "renderer/texture_atlas.h"
 #include "renderer/texture_loader.h"
 #include "renderer/camera.h"
 #include "renderer/pbr_material.h"
@@ -2723,6 +2724,14 @@ void ScriptEngine::registerEcsBindings() {
         return 0;
     });
     lua_setfield(L, -2, "unloadTexture");
+
+    // ffe.getAtlasUtilization() -> number [0.0, 1.0]
+    // Returns the fraction of atlas space used. Debugging/profiling only.
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushnumber(state, static_cast<lua_Number>(ffe::renderer::getAtlasUtilization()));
+        return 1;
+    });
+    lua_setfield(L, -2, "getAtlasUtilization");
 
     // ----------------------------------------------------------------
     // Music playback bindings — wrap ffe::audio music API for Lua scripts.

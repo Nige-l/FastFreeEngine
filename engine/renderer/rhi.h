@@ -34,6 +34,27 @@ void bindTexture(TextureHandle handle, u32 unitIndex);
 void destroyTexture(TextureHandle handle);
 u32 textureVramUsed();
 
+// --- Texture queries ---
+/// Returns the width of a texture in pixels. Returns 0 for invalid handles.
+u32 getTextureWidth(TextureHandle handle);
+/// Returns the height of a texture in pixels. Returns 0 for invalid handles.
+u32 getTextureHeight(TextureHandle handle);
+
+// --- Texture sub-image upload ---
+/// Upload pixel data to a rectangular region of an existing texture.
+/// The texture must have been created with createTexture() and remain alive.
+/// pixelData must point to (width * height * bytesPerPixel) bytes of RGBA8 data.
+/// The region must fit within the texture dimensions.
+void updateTextureSubImage(TextureHandle handle, u32 x, u32 y, u32 width, u32 height,
+                           const void* pixelData);
+
+// --- Texture pixel readback ---
+/// Read pixel data from a texture into a CPU buffer.
+/// outBuffer must point to at least (width * height * 4) bytes for RGBA8.
+/// Returns true on success, false if the texture is invalid or readback is unavailable.
+/// COLD-PATH only. Used by the texture atlas to copy source textures into atlas pages.
+bool readTexturePixels(TextureHandle handle, void* outBuffer, u32 bufferSize);
+
 // --- Shader operations ---
 ShaderHandle createShader(const ShaderDesc& desc);
 void bindShader(ShaderHandle handle);

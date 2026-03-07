@@ -23,6 +23,7 @@ add_executable(ffe_tests
     renderer/test_gpu_instancing.cpp
     renderer/test_anti_aliasing.cpp
     renderer/test_ssao.cpp
+    renderer/test_texture_atlas.cpp
 )
 
 target_link_libraries(ffe_tests
