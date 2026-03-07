@@ -6,12 +6,12 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 55 |
-| Total tests | 828 (Clang-18 + GCC-13 passing, zero warnings) |
-| Total Lua bindings | ~115 |
+| Last session | 56 |
+| Total tests | 842 (Clang-18 passing, zero warnings) |
+| Total Lua bindings | ~116 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
 | Phase 2 (3D Foundation) | COMPLETE |
-| Phase 3 (Standalone Editor) | IN PROGRESS — Milestone 5 delivered |
+| Phase 3 (Standalone Editor) | MVP COMPLETE (6 milestones, Sessions 51-56) |
 | Windows build | DONE (MinGW-w64 cross-compilation) |
 | macOS build | DONE (arm64 + x86_64) |
 | GitHub Actions CI | DONE (Linux Clang-18, Linux GCC-13, macOS arm64) |
@@ -31,7 +31,8 @@
 | Tilemap | Stable | Tilemap component, renderTilemaps, 1024x1024 max |
 | Particles | Stable | ParticleEmitter, 128 inline pool, gravity/color/size interp |
 | Scene Serialisation | Stable | SceneSerialiser — saveScene/loadScene (JSON), entity count limits, NaN rejection, path traversal rejection |
-| Editor | Milestone 5 | Standalone binary, ImGui dockspace, scene hierarchy tree (parent/child), inspector, undo/redo (entity + component + inspector fields + add/remove + reparent), FBO viewport, file dialogs, play-in-editor (snapshot/restore), asset browser with drag-and-drop, viewport gizmos (translate/rotate/scale), keyboard shortcuts, component add/remove |
+| Editor | MVP Complete | Standalone binary, ImGui dockspace, scene hierarchy tree (parent/child), inspector, undo/redo (entity + component + inspector fields + add/remove + reparent), FBO viewport, file dialogs, play-in-editor (snapshot/restore), asset browser with drag-and-drop, viewport gizmos (translate/rotate/scale), keyboard shortcuts, component add/remove, build pipeline (game export) |
+| Runtime | Stable | ffe_runtime generic Lua game runner, ffe.loadSceneJSON for exported scenes |
 | Scene Graph | Stable | setParent/removeParent/getParent/getChildren/isRoot/isAncestor/getRootEntities, circular parenting prevention |
 | Scene Mgmt | Stable | destroyAllEntities, cancelAllTimers, loadScene |
 | Input | Stable | keyboard+mouse+gamepad, pressed/held/released, action bindings |
@@ -61,11 +62,11 @@
 
 | Session | Summary |
 |---------|---------|
+| 56 | Build pipeline — game export, runtime binary, ffe.loadSceneJSON. 842 tests. Milestone 6 delivered. **Phase 3 MVP COMPLETE.** |
 | 55 | Scene hierarchy tree (parent/child), drag-and-drop (asset browser to inspector), scene graph, ReparentCommand. 828 tests. Milestone 5 delivered. |
 | 54 | Viewport gizmos, keyboard shortcuts, component add/remove from inspector. 810 tests. Milestone 4 delivered. |
 | 53 | Play-in-editor (snapshot/restore), inspector undo integration, asset browser panel. 793 tests. Milestone 3 delivered. |
 | 52 | FBO viewport, component-modify commands, file dialogs (Open/Save/Save As). 780 tests. Milestone 2 delivered. |
-| 51 | Phase 3 kickoff — standalone editor scaffold, scene serialisation, inspector, undo/redo commands. 766 tests. Milestone 1 delivered. |
 
 ## Phase 2 — 3D Foundation: COMPLETE
 
@@ -86,30 +87,49 @@ All deliverables met:
 - [x] 3D demo game
 - [x] .context.md files for all new subsystems
 
-## Current Phase: Phase 3 — Standalone Editor (IN PROGRESS)
+## Phase 3 — Standalone Editor: MVP COMPLETE
 
 **Goal:** A graphical application for building games with FFE, like Unity or Unreal Editor.
 
-### Deliverables
-- [x] Standalone editor application (separate binary from the game runtime) — Milestone 1
-- [x] Scene serialisation (save/load scene files) — Milestone 1
-- [x] Entity inspector (create, modify, delete entities and components) — Milestone 1 (basic)
-- [x] Undo/redo system — Milestone 1 (entity create/destroy), Milestone 2 (component modify), Milestone 3 (inspector fields), Milestone 4 (add/remove)
-- [x] Scene view with 2D and 3D viewport (FBO rendering) — Milestone 2
-- [x] Play-in-editor (snapshot/restore, Play/Pause/Resume/Stop) — Milestone 3
-- [x] File dialogs for Open/Save Scene — Milestone 2
-- [x] Asset browser (directory traversal, file type indicators, security boundary) — Milestone 3
-- [x] Viewport gizmos (translate/rotate/scale, axis constraints, undo integration) — Milestone 4
-- [x] Keyboard shortcuts (ShortcutManager, 7 default bindings) — Milestone 4
-- [x] Component add/remove from inspector (undoable) — Milestone 4
-- [x] Scene hierarchy tree (parent/child relationships, drag reorder) — Milestone 5
-- [x] Drag-and-drop (asset browser to inspector for texture/mesh assignment) — Milestone 5
+### Delivered (6 milestones, Sessions 51-56)
+- [x] Standalone editor application (separate binary from the game runtime) — M1
+- [x] Scene serialisation (save/load scene files) — M1
+- [x] Entity inspector (create, modify, delete entities and components) — M1
+- [x] Undo/redo system (entity, component, inspector, add/remove, reparent) — M1-M5
+- [x] Scene view with 2D and 3D viewport (FBO rendering) — M2
+- [x] File dialogs for Open/Save Scene — M2
+- [x] Play-in-editor (snapshot/restore, Play/Pause/Resume/Stop) — M3
+- [x] Asset browser (directory traversal, file type indicators, security boundary) — M3
+- [x] Viewport gizmos (translate/rotate/scale, axis constraints, undo integration) — M4
+- [x] Keyboard shortcuts (ShortcutManager, 7 default bindings) — M4
+- [x] Component add/remove from inspector (undoable) — M4
+- [x] Scene hierarchy tree (parent/child relationships, drag reorder) — M5
+- [x] Drag-and-drop (asset browser to inspector for texture/mesh assignment) — M5
+- [x] Build pipeline (game export, runtime binary, ffe.loadSceneJSON) — M6
+
+### Backlog (polish, not blocking Phase 4)
 - [ ] Editor preferences persistence
-- [ ] Build pipeline (export game as standalone executable)
 - [ ] Project creation wizard
 - [ ] LLM integration panel (connect AI assistant, generate code, explain systems)
 
-### Next Session (56) — TBD (Phase 3 MVP assessment — see Session 55 devlog)
+## Current Phase: Phase 4 — Networking and Multiplayer (NOT STARTED)
+
+**Goal:** Built-in multiplayer support for both 2D and 3D games.
+
+### Deliverables
+- [ ] Client-server architecture (authoritative server model)
+- [ ] Network transport (UDP with reliability layer — ENet or GameNetworkingSockets)
+- [ ] ECS state replication (sync entity components across network)
+- [ ] Network prediction and interpolation (client-side prediction, server reconciliation)
+- [ ] Lobby/matchmaking API
+- [ ] Lua bindings for networking (send/receive messages, RPC)
+- [ ] Lag compensation
+- [ ] Network security (packet validation, rate limiting, anti-cheat hooks)
+- [ ] NAT traversal / relay server support
+- [ ] At least one networked demo game
+- [ ] .context.md files for all new subsystems
+
+### Next Session (57) — Phase 4 kickoff (see dispatch plan below)
 
 ## Build Commands
 

@@ -3,6 +3,55 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-34 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 56: Editor Milestone 6 — Build Pipeline (Phase 3 MVP COMPLETE)
+
+### Summary
+
+Session 56 delivered the final milestone of Phase 3: a build pipeline for exporting games from the editor as standalone executables. This completes the Phase 3 (Standalone Editor) MVP with 6 milestones delivered across Sessions 51-56. FAST build passed: 842 tests on Clang-18, zero warnings.
+
+### New Features
+
+- **Generic Runtime Binary** (`examples/runtime/main.cpp`) — `ffe_runtime` is a standalone Lua game runner that loads exported scenes and scripts. It uses `ffe.loadSceneJSON` to parse editor-exported scene files at runtime.
+- **ffe.loadSceneJSON Lua Binding** — new scripting API that allows the runtime to load JSON scene files exported by the editor's scene serialiser. Enables exported games to reconstruct their entity/component state.
+- **Build Configuration** (`editor/build/build_config.h/.cpp`) — project-level build settings: project name, entry scene, asset directories, script directories. Persists to/from JSON for project portability.
+- **Game Exporter** (`editor/build/exporter.h/.cpp`) — orchestrates the export process: copies the runtime binary, assets, scenes, and scripts to an output directory, then generates a `main.lua` entry point that bootstraps the game.
+- **Build Panel** (`editor/panels/build_panel.h/.cpp`) — ImGui panel for configuring and triggering game export. Users set project name, entry scene, and output directory, then click Export.
+- **ADR** — `docs/architecture/adr-build-pipeline.md` documents the export architecture decisions.
+
+### Tests
+
+- 14 new tests (842 total, up from 828)
+- Test coverage: exporter logic, scene load binding
+- All tests passing on Clang-18, zero warnings
+
+### Reviews
+
+- **performance-critic:** PASS
+- **api-designer:** Updated `.context.md` files for scripting, editor, editor/build
+- **security-auditor:** Not invoked (build pipeline is editor tooling, no new attack surface)
+- **game-dev-tester:** SKIP (build pipeline is editor tooling, not a new API paradigm)
+
+### Phase 3 MVP Assessment
+
+Phase 3 (Standalone Editor) has reached MVP status. Six milestones delivered:
+
+| Milestone | Session | Feature |
+|-----------|---------|---------|
+| M1 | 51 | Scaffold, scene serialisation, inspector, undo/redo |
+| M2 | 52 | FBO viewport, component commands, file dialogs |
+| M3 | 53 | Play-in-editor, inspector undo, asset browser |
+| M4 | 54 | Gizmos, shortcuts, component add/remove |
+| M5 | 55 | Scene hierarchy tree, drag-and-drop |
+| M6 | 56 | Build pipeline (game export) |
+
+Remaining Phase 3 items (editor preferences, project wizard, LLM panel) are moved to the backlog as polish — they are not blocking for Phase 4 (Networking/Multiplayer).
+
+### Git
+
+- `1761d8f` — `feat(editor): build pipeline — game export, runtime binary, loadSceneJSON (842 tests)`
+
+---
+
 ## 2026-03-07 — Session 55: Editor Milestone 5 — Scene Hierarchy Tree + Drag-and-Drop
 
 ### Summary
