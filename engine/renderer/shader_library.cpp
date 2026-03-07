@@ -311,6 +311,41 @@ void main() {
 }
 )glsl";
 
+// --- Skybox shaders (cubemap environment rendering) ---
+
+static const char* const SKYBOX_VERT_SOURCE = R"glsl(
+#version 330 core
+
+layout(location = 0) in vec3 a_position;
+
+uniform mat4 u_viewNoTranslation;
+uniform mat4 u_projection;
+
+out vec3 v_texCoord;
+
+void main() {
+    v_texCoord = a_position;
+    vec4 pos = u_projection * u_viewNoTranslation * vec4(a_position, 1.0);
+    // Set z = w so that after perspective divide, depth = 1.0 (max depth).
+    // This ensures the skybox is drawn behind all other geometry.
+    gl_Position = pos.xyww;
+}
+)glsl";
+
+static const char* const SKYBOX_FRAG_SOURCE = R"glsl(
+#version 330 core
+
+in vec3 v_texCoord;
+
+uniform samplerCube u_skybox;
+
+out vec4 fragColor;
+
+void main() {
+    fragColor = texture(u_skybox, v_texCoord);
+}
+)glsl";
+
 // ==================== Library Implementation ====================
 
 struct ShaderPair {
@@ -325,6 +360,7 @@ static const ShaderPair PAIRS[] = {
     { SPRITE_VERT_SOURCE,              SPRITE_FRAG_SOURCE,              "sprite"           },
     { MESH_BLINN_PHONG_VERT_SOURCE,    MESH_BLINN_PHONG_FRAG_SOURCE,    "mesh_blinn_phong" },
     { SHADOW_DEPTH_VERT_SOURCE,        SHADOW_DEPTH_FRAG_SOURCE,        "shadow_depth"     },
+    { SKYBOX_VERT_SOURCE,              SKYBOX_FRAG_SOURCE,              "skybox"           },
 };
 static_assert(sizeof(PAIRS) / sizeof(PAIRS[0]) == static_cast<u32>(BuiltinShader::COUNT));
 

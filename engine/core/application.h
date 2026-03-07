@@ -78,6 +78,7 @@ private:
     renderer::TextRenderer m_textRenderer;
     ShadowConfig m_shadowConfig;
     ShadowMap m_shadowMap;
+    renderer::SkyboxConfig m_skyboxConfig;
     glm::vec4 m_clearColor = {0.1f, 0.1f, 0.12f, 1.0f};
 
 #ifdef FFE_EDITOR

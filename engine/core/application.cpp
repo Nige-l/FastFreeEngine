@@ -6,6 +6,7 @@
 #include "renderer/mesh_renderer.h"
 #include "renderer/shadow_map.h"
 #include "renderer/text_renderer.h"
+#include "renderer/texture_loader.h"
 #include "physics/collider2d.h"
 #include "physics/collision_system.h"
 
@@ -346,6 +347,10 @@ Result Application::startup() {
     m_world.registry().ctx().emplace<ShadowConfig*>(&m_shadowConfig);
     m_world.registry().ctx().emplace<ShadowMap*>(&m_shadowMap);
 
+    // Emplace skybox config pointer into ECS context for Lua access.
+    // Skybox rendering is disabled by default (SkyboxConfig::enabled = false).
+    m_world.registry().ctx().emplace<renderer::SkyboxConfig*>(&m_skyboxConfig);
+
     // 5e. Initialize render queue (pre-allocated, persistent — not from the frame arena)
     renderer::initRenderQueue(m_renderQueue, renderer::MAX_DRAW_COMMANDS_LEGACY);
 
@@ -414,6 +419,13 @@ void Application::shutdown() {
     // 8. (nothing)
     // 7. Unregister systems (clear handled by World destructor)
     // 6. Shutdown scripting — not yet implemented
+
+    // 5e0. Destroy skybox cubemap texture (if any) before RHI shutdown.
+    if (m_skyboxConfig.cubemapTexture != 0) {
+        renderer::unloadCubemap(m_skyboxConfig.cubemapTexture);
+        m_skyboxConfig.cubemapTexture = 0;
+        m_skyboxConfig.enabled = false;
+    }
 
     // 5e1. Destroy shadow map GPU resources (if any) before RHI shutdown.
     if (m_shadowMap.fbo != 0) {
@@ -512,6 +524,12 @@ void Application::render(const float alpha) {
         // in ctx points directly to m_camera3d so it's always current)
         renderer::meshRenderSystem(m_world, m_camera3d, m_shadowConfig, m_shadowMap);
     }
+
+    // --- Skybox pass: render cubemap environment after 3D meshes, before 2D ---
+    // Uses depth func LEQUAL so skybox writes at max depth (behind all 3D geometry).
+    // meshRenderSystem already restored 2D-compatible state; renderSkybox temporarily
+    // re-enables depth test for the skybox draw and restores state after.
+    renderer::renderSkybox(m_world, m_camera3d, m_skyboxConfig);
 
     // Apply camera shake (if active) and compute VP matrix.
     // Shake uses exponential decay for a punchy start that fades naturally.

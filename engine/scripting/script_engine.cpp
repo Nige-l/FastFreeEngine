@@ -19,6 +19,7 @@ extern "C" {
 #include "renderer/rhi.h"
 #include "renderer/texture_loader.h"
 #include "renderer/camera.h"
+
 #include "audio/audio.h"
 #include "renderer/text_renderer.h"
 #include "physics/collider2d.h"
@@ -28,6 +29,8 @@ extern "C" {
 #include <nlohmann/json.hpp>
 
 #include <algorithm>  // std::max, std::min
+#include <array>
+#include <string>
 #include <cinttypes>  // PRId64
 #include <climits>    // PATH_MAX
 #include <cmath>      // std::isfinite
@@ -4698,7 +4701,110 @@ void ScriptEngine::registerEcsBindings() {
     lua_pushcfunction(L, ffe_setShadowArea);
     lua_setfield(L, -2, "setShadowArea");
 
-    // Set the 'ffe' table as a global.
+    // ----------------------------------------------------------------
+    // Skybox bindings
+    // ----------------------------------------------------------------
+
+    // ffe.loadSkybox(right, left, top, bottom, front, back) -> boolean
+    // Load 6 face images into a cubemap texture and enable skybox rendering.
+    // Face paths are relative to the asset root (same rules as loadTexture).
+    // Returns true on success, false on failure.
+    auto ffe_loadSkybox = [](lua_State* state) -> int {
+        // All 6 arguments must be strings.
+        for (int arg = 1; arg <= 6; ++arg) {
+            if (lua_type(state, arg) != LUA_TSTRING) {
+                FFE_LOG_ERROR("ScriptEngine",
+                              "ffe.loadSkybox: argument %d must be a string (face path)", arg);
+                lua_pushboolean(state, 0);
+                return 1;
+            }
+        }
+
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); lua_pushboolean(state, 0); return 1; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        auto** skyPtr = world->registry().ctx().find<ffe::renderer::SkyboxConfig*>();
+        if (skyPtr == nullptr) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.loadSkybox: skybox context not in ECS");
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        ffe::renderer::SkyboxConfig* cfg = *skyPtr;
+
+        // Unload existing cubemap if any.
+        if (cfg->cubemapTexture != 0) {
+            ffe::renderer::unloadCubemap(cfg->cubemapTexture);
+            cfg->cubemapTexture = 0;
+            cfg->enabled = false;
+        }
+
+        // Collect 6 face paths.
+        std::array<std::string, 6> facePaths;
+        for (int arg = 1; arg <= 6; ++arg) {
+            facePaths[static_cast<std::size_t>(arg - 1)] = lua_tostring(state, arg);
+        }
+
+        const ffe::u32 texId = ffe::renderer::loadCubemap(facePaths);
+        if (texId == 0) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.loadSkybox: loadCubemap failed");
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+
+        cfg->cubemapTexture = texId;
+        cfg->enabled = true;
+        lua_pushboolean(state, 1);
+        return 1;
+    };
+    lua_pushcfunction(L, ffe_loadSkybox);
+    lua_setfield(L, -2, "loadSkybox");
+
+    // ffe.unloadSkybox() -> nothing
+    // Delete the cubemap texture and disable skybox rendering.
+    auto ffe_unloadSkybox = [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        auto** skyPtr = world->registry().ctx().find<ffe::renderer::SkyboxConfig*>();
+        if (skyPtr == nullptr) { return 0; }
+        ffe::renderer::SkyboxConfig* cfg = *skyPtr;
+
+        if (cfg->cubemapTexture != 0) {
+            ffe::renderer::unloadCubemap(cfg->cubemapTexture);
+            cfg->cubemapTexture = 0;
+        }
+        cfg->enabled = false;
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_unloadSkybox);
+    lua_setfield(L, -2, "unloadSkybox");
+
+    // ffe.setSkyboxEnabled(enabled: boolean) -> nothing
+    // Toggle skybox rendering without unloading the cubemap texture.
+    auto ffe_setSkyboxEnabled = [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        auto** skyPtr = world->registry().ctx().find<ffe::renderer::SkyboxConfig*>();
+        if (skyPtr == nullptr) { return 0; }
+        ffe::renderer::SkyboxConfig* cfg = *skyPtr;
+
+        const bool enabled = lua_toboolean(state, 1) != 0;
+        cfg->enabled = enabled;
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_setSkyboxEnabled);
+    lua_setfield(L, -2, "setSkyboxEnabled");
+
     // ----------------------------------------------------------------
     // Screenshot binding
     // ----------------------------------------------------------------

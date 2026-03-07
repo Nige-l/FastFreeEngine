@@ -23,6 +23,11 @@
 
 #include <glad/glad.h>
 
+// GL_TEXTURE_CUBE_MAP is core in OpenGL 3.3 but not included in our minimal GLAD header.
+#ifndef GL_TEXTURE_CUBE_MAP
+#define GL_TEXTURE_CUBE_MAP 0x8513
+#endif
+
 #include <cstdio>
 
 #include <glm/gtc/matrix_transform.hpp>
@@ -30,6 +35,141 @@
 #include <glm/gtc/type_ptr.hpp>
 
 namespace ffe::renderer {
+
+// ---------------------------------------------------------------------------
+// Skybox unit cube — created once, never destroyed.
+// 36 vertices (6 faces * 2 triangles * 3 verts), no index buffer.
+// Positions form a [-1, +1] cube centered at origin. The vertex shader
+// strips the view translation so the cube moves with the camera.
+// ---------------------------------------------------------------------------
+
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
+static GLuint s_skyboxVao = 0;
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
+static GLuint s_skyboxVbo = 0;
+
+static void ensureSkyboxCube() {
+    if (s_skyboxVao != 0) {
+        return; // Already initialised.
+    }
+    // Guard: no GL context in headless mode.
+    if (glad_glGenVertexArrays == nullptr) {
+        return;
+    }
+
+    // 36 vertices = 6 faces * 2 triangles * 3 verts * 3 floats = 108 floats
+    static constexpr float CUBE_VERTICES[] = {
+        // Back face (-Z)
+        -1.0f,  1.0f, -1.0f,
+        -1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+         1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f,
+        // Front face (+Z)
+        -1.0f, -1.0f,  1.0f,
+        -1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f, -1.0f,  1.0f,
+        -1.0f, -1.0f,  1.0f,
+        // Left face (-X)
+        -1.0f,  1.0f,  1.0f,
+        -1.0f,  1.0f, -1.0f,
+        -1.0f, -1.0f, -1.0f,
+        -1.0f, -1.0f, -1.0f,
+        -1.0f, -1.0f,  1.0f,
+        -1.0f,  1.0f,  1.0f,
+        // Right face (+X)
+         1.0f,  1.0f, -1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f, -1.0f,  1.0f,
+         1.0f, -1.0f,  1.0f,
+         1.0f, -1.0f, -1.0f,
+         1.0f,  1.0f, -1.0f,
+        // Top face (+Y)
+        -1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f, -1.0f,
+         1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f,  1.0f,
+        // Bottom face (-Y)
+        -1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f,  1.0f,
+         1.0f, -1.0f,  1.0f,
+        -1.0f, -1.0f,  1.0f,
+        -1.0f, -1.0f, -1.0f,
+    };
+
+    glGenVertexArrays(1, &s_skyboxVao);
+    glGenBuffers(1, &s_skyboxVbo);
+    glBindVertexArray(s_skyboxVao);
+    glBindBuffer(GL_ARRAY_BUFFER, s_skyboxVbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(CUBE_VERTICES), CUBE_VERTICES, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), nullptr);
+    glBindVertexArray(0);
+}
+
+void renderSkybox(World& world, const Camera& camera3d, const SkyboxConfig& skyboxCfg) {
+    // Early out if skybox is not active.
+    if (!skyboxCfg.enabled || skyboxCfg.cubemapTexture == 0) {
+        return;
+    }
+
+    // Retrieve shader library from ECS context.
+    const auto* shaderLib = world.registry().ctx().find<renderer::ShaderLibrary>();
+    if (shaderLib == nullptr) {
+        return;
+    }
+
+    const rhi::ShaderHandle skyboxShader = getShader(*shaderLib, BuiltinShader::SKYBOX);
+    if (!rhi::isValid(skyboxShader)) {
+        return;
+    }
+
+    // Lazy-init the cube VAO (one-time allocation).
+    ensureSkyboxCube();
+    if (s_skyboxVao == 0) {
+        return; // GL not available (headless).
+    }
+
+    // Build view matrix with translation stripped (mat3 -> mat4 drops position).
+    const glm::mat4 viewFull = computeViewMatrix(camera3d);
+    const glm::mat4 viewNoTranslation = glm::mat4(glm::mat3(viewFull));
+    const glm::mat4 projection = computeProjectionMatrix(camera3d);
+
+    // Enable depth test (meshRenderSystem may have restored 2D state with depth disabled).
+    // Use LEQUAL so skybox fragments pass at depth = 1.0 (the vertex shader outputs
+    // z = w, which becomes depth = 1.0 after perspective divide).
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
+    glDepthMask(GL_FALSE); // Do not write to depth buffer — skybox is always at max depth.
+
+    rhi::bindShader(skyboxShader);
+    rhi::setUniformMat4(skyboxShader, "u_viewNoTranslation", viewNoTranslation);
+    rhi::setUniformMat4(skyboxShader, "u_projection", projection);
+
+    // Bind cubemap texture to unit 0.
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxCfg.cubemapTexture);
+    rhi::setUniformInt(skyboxShader, "u_skybox", 0);
+
+    // Draw the skybox cube.
+    glBindVertexArray(s_skyboxVao);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+    glBindVertexArray(0);
+
+    // Unbind cubemap.
+    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+
+    // Restore 2D-compatible state: depth disabled, depth write off.
+    glDepthFunc(GL_LESS);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_DEPTH_TEST);
+}
 
 void meshRenderSystem(World& world, const Camera& camera3d,
                       const ShadowConfig& shadowCfg, const ShadowMap& shadowMap) {

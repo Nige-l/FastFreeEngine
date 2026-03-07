@@ -11,6 +11,7 @@ enum class BuiltinShader : u8 {
     SPRITE           = 2,
     MESH_BLINN_PHONG = 3,  // 3D Blinn-Phong lighting shader (ADR-007)
     SHADOW_DEPTH     = 4,  // Depth-only pass for directional light shadow mapping
+    SKYBOX           = 5,  // Cubemap skybox rendering
     COUNT
 };
 

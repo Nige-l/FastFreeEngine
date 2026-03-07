@@ -58,7 +58,26 @@
 #include "renderer/rhi.h"
 #include "core/logging.h"
 
+#include <glad/glad.h>
+
+// Cubemap constants — core in OpenGL 3.3 but not included in our minimal GLAD header.
+// Values per the OpenGL 3.3 spec (Table 3.17).
+#ifndef GL_TEXTURE_CUBE_MAP
+#define GL_TEXTURE_CUBE_MAP                 0x8513
+#endif
+#ifndef GL_TEXTURE_CUBE_MAP_POSITIVE_X
+#define GL_TEXTURE_CUBE_MAP_POSITIVE_X      0x8515
+#endif
+#ifndef GL_TEXTURE_WRAP_R
+#define GL_TEXTURE_WRAP_R                   0x8072
+#endif
+#ifndef GL_RGBA8
+#define GL_RGBA8                            0x8058
+#endif
+
+#include <array>
 #include <climits>    // PATH_MAX
+#include <string>
 #include <cstring>    // strnlen, strstr, memcpy
 #include <sys/stat.h> // stat(), S_ISDIR
 #include <stdlib.h>   // size_t
@@ -383,11 +402,186 @@ ffe::rhi::TextureHandle loadTexture(const char* const path, const char* const as
     return loadTextureImpl(path, assetRoot, params);
 }
 
+u32 loadCubemap(const std::array<std::string, 6>& facePaths) {
+    // Require asset root to be set (same as loadTexture).
+    if (!s_state.isSet || s_state.root[0] == '\0') {
+        FFE_LOG_ERROR("texture_loader",
+                      "loadCubemap: called before setAssetRoot() — no asset root configured");
+        return 0;
+    }
+
+    // Require a GL context (glGenTextures is NULL in headless mode).
+    if (glad_glGenTextures == nullptr) {
+        FFE_LOG_WARN("texture_loader", "loadCubemap: no GL context (headless mode)");
+        return 0;
+    }
+
+    GLuint cubemapId = 0;
+    glGenTextures(1, &cubemapId);
+    if (cubemapId == 0) {
+        FFE_LOG_ERROR("texture_loader", "loadCubemap: glGenTextures failed");
+        return 0;
+    }
+    glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapId);
+
+    // GL_TEXTURE_CUBE_MAP_POSITIVE_X + i gives the face target for face i.
+    // Order: +X, -X, +Y, -Y, +Z, -Z.
+    int expectedW = 0;
+    int expectedH = 0;
+
+    for (u32 i = 0; i < 6; ++i) {
+        const std::string& facePath = facePaths[i];
+
+        // Path safety check
+        if (!isPathSafe(facePath.c_str())) {
+            FFE_LOG_ERROR("texture_loader",
+                          "loadCubemap: unsafe path rejected for face %u: \"%s\"",
+                          i, facePath.c_str());
+            glDeleteTextures(1, &cubemapId);
+            return 0;
+        }
+
+        // Build full path: assetRoot + "/" + facePath
+        const size_t rootLen = strnlen(s_state.root, PATH_MAX);
+        const size_t pathLen = facePath.size();
+        if (rootLen + 1u + pathLen + 1u > static_cast<size_t>(PATH_MAX) + 1u) {
+            FFE_LOG_ERROR("texture_loader", "loadCubemap: concatenated path too long for face %u", i);
+            glDeleteTextures(1, &cubemapId);
+            return 0;
+        }
+
+        char fullPath[PATH_MAX + 1];
+        memcpy(fullPath, s_state.root, rootLen);
+        fullPath[rootLen] = '/';
+        memcpy(fullPath + rootLen + 1u, facePath.c_str(), pathLen);
+        fullPath[rootLen + 1u + pathLen] = '\0';
+
+        // Canonicalize and verify under asset root
+        char canonPath[PATH_MAX + 1];
+        if (!ffe::canonicalizePath(fullPath, canonPath, sizeof(canonPath))) {
+            FFE_LOG_ERROR("texture_loader",
+                          "loadCubemap: canonicalizePath() failed for face %u: \"%s\"",
+                          i, fullPath);
+            glDeleteTextures(1, &cubemapId);
+            return 0;
+        }
+        if (strncmp(canonPath, s_state.root, rootLen) != 0) {
+            FFE_LOG_ERROR("texture_loader",
+                          "loadCubemap: face %u path escapes asset root", i);
+            glDeleteTextures(1, &cubemapId);
+            return 0;
+        }
+        // Separator check: confirm canonical path is truly under root, not a
+        // prefix match (e.g., root="/assets" must not match "/assets_evil/").
+        if (canonPath[rootLen] != '/' && canonPath[rootLen] != '\0') {
+            FFE_LOG_ERROR("texture_loader",
+                          "loadCubemap: face %u canonical path escapes asset root", i);
+            glDeleteTextures(1, &cubemapId);
+            return 0;
+        }
+
+        // Pre-decode file-size check via stat() (mirrors loadTextureImpl MEDIUM-2).
+        {
+            struct stat fileStat{};
+            if (::stat(canonPath, &fileStat) == 0) {
+                const u64 fileSize = static_cast<u64>(fileStat.st_size);
+                if (fileSize > MAX_TEXTURE_FILE_BYTES) {
+                    FFE_LOG_ERROR("texture_loader",
+                                  "loadCubemap: face %u file too large (%" PRIu64 " bytes, max %" PRIu64 "): \"%s\"",
+                                  i, fileSize, MAX_TEXTURE_FILE_BYTES, canonPath);
+                    glDeleteTextures(1, &cubemapId);
+                    return 0;
+                }
+            }
+            // If stat fails here, stbi_load will fail and we handle it below.
+        }
+
+        // Decode image via stb_image — force RGBA (4 channels)
+        int w = 0;
+        int h = 0;
+        int channels = 0;
+        stbi_uc* const pixels = stbi_load(canonPath, &w, &h, &channels, 4);
+        if (pixels == nullptr) {
+            FFE_LOG_ERROR("texture_loader",
+                          "loadCubemap: stbi_load failed for face %u (\"%s\"): %s",
+                          i, canonPath, stbi_failure_reason());
+            glDeleteTextures(1, &cubemapId);
+            return 0;
+        }
+
+        // Validate dimensions
+        if (w <= 0 || h <= 0 ||
+            static_cast<u32>(w) > MAX_TEXTURE_DIMENSION ||
+            static_cast<u32>(h) > MAX_TEXTURE_DIMENSION) {
+            FFE_LOG_ERROR("texture_loader",
+                          "loadCubemap: face %u has invalid dimensions %dx%d", i, w, h);
+            stbi_image_free(pixels);
+            glDeleteTextures(1, &cubemapId);
+            return 0;
+        }
+
+        // Post-decode byte-count check (mirrors loadTextureImpl SEC-3).
+        constexpr u64 DECODED_CHANNELS = 4u;
+        const u64 requiredBytes = static_cast<u64>(w)
+                                * static_cast<u64>(h)
+                                * DECODED_CHANNELS;
+        if (requiredBytes > MAX_TEXTURE_BYTES) {
+            FFE_LOG_ERROR("texture_loader",
+                          "loadCubemap: face %u decoded size %" PRIu64 " bytes exceeds MAX_TEXTURE_BYTES=%" PRIu64,
+                          i, requiredBytes, MAX_TEXTURE_BYTES);
+            stbi_image_free(pixels);
+            glDeleteTextures(1, &cubemapId);
+            return 0;
+        }
+
+        // All 6 faces must have the same dimensions.
+        if (i == 0) {
+            expectedW = w;
+            expectedH = h;
+        } else if (w != expectedW || h != expectedH) {
+            FFE_LOG_ERROR("texture_loader",
+                          "loadCubemap: face %u dimensions %dx%d differ from face 0 (%dx%d)",
+                          i, w, h, expectedW, expectedH);
+            stbi_image_free(pixels);
+            glDeleteTextures(1, &cubemapId);
+            return 0;
+        }
+
+        // Upload face to the cubemap texture
+        glTexImage2D(
+            static_cast<GLenum>(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i),
+            0, GL_RGBA8,
+            static_cast<GLsizei>(w), static_cast<GLsizei>(h),
+            0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+
+        stbi_image_free(pixels);
+    }
+
+    // Cubemap sampling parameters — LINEAR filter, CLAMP_TO_EDGE on all 3 axes.
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+
+    FFE_LOG_INFO("texture_loader",
+                 "loadCubemap: loaded 6 faces (%dx%d RGBA8), GL id=%u",
+                 expectedW, expectedH, cubemapId);
+    return cubemapId;
+}
+
 void unloadTexture(const ffe::rhi::TextureHandle handle) {
     if (!ffe::rhi::isValid(handle)) {
         return; // Safe no-op for invalid/null handles
     }
     ffe::rhi::destroyTexture(handle);
+}
+
+void unloadCubemap(const u32 textureId) {
+    if (textureId == 0) return;
+    glDeleteTextures(1, &textureId);
 }
 
 } // namespace ffe::renderer

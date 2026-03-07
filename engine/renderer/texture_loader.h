@@ -3,6 +3,9 @@
 #include "renderer/rhi_types.h"
 #include "core/types.h"
 
+#include <array>
+#include <string>
+
 // texture_loader.h — load image files from disk and upload to GPU as textures.
 //
 // NOT a per-frame API. All functions perform file I/O and/or GPU uploads.
@@ -102,11 +105,33 @@ ffe::rhi::TextureHandle loadTexture(const char* path, const TextureLoadParams& p
 ffe::rhi::TextureHandle loadTexture(const char* path, const char* assetRoot,
                                     const TextureLoadParams& params);
 
+// --- Cubemap Loading ---
+
+// Load 6 face images into a GL_TEXTURE_CUBE_MAP.
+// Face order: +X (right), -X (left), +Y (top), -Y (bottom), +Z (front), -Z (back).
+// All 6 faces must be the same dimensions and decode as RGBA8.
+// Returns the raw GL texture ID (GLuint) — NOT a TextureHandle (the RHI does not
+// track cubemaps). Returns 0 on failure (missing file, dimension mismatch, etc.).
+// Uses the global asset root set by setAssetRoot(). NOT a per-frame API.
+//
+// Caller must delete the returned texture via unloadCubemap() when done.
+// Thread safety: single-threaded, render thread only.
+//
+// Tier support: LEGACY (OpenGL 3.3 core). GL_TEXTURE_CUBE_MAP is core in 3.3.
+u32 loadCubemap(const std::array<std::string, 6>& facePaths);
+
 // --- Texture Destruction ---
 
 // Destroy a GPU texture created by loadTexture().
 // Safe to call with an invalid handle (handle.id == 0) — no-op.
 // After this call, handle.id must not be used again.
 void unloadTexture(ffe::rhi::TextureHandle handle);
+
+// Destroy a cubemap texture created by loadCubemap().
+// Safe to call with textureId == 0 — no-op.
+// After this call, textureId must not be used again.
+// This exists so that callers outside the renderer (e.g. scripting, application)
+// do not need to include glad/GL headers to delete cubemap textures.
+void unloadCubemap(u32 textureId);
 
 } // namespace ffe::renderer

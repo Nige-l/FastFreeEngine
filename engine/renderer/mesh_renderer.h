@@ -49,6 +49,30 @@ struct SceneLighting3D {
     u32        activePointLightCount = 0;  // Cached count of active lights for shader upload
 };
 
+// Skybox configuration. Stored in the ECS registry context.
+// Settable from Lua via ffe.loadSkybox / ffe.unloadSkybox / ffe.setSkyboxEnabled.
+// Default: disabled (no skybox overhead).
+struct SkyboxConfig {
+    u32  cubemapTexture = 0;  // GL cubemap texture ID (0 = none loaded)
+    bool enabled        = false;
+};
+
+// Render the skybox cubemap.
+//
+// Must be called AFTER meshRenderSystem (so 3D geometry writes depth first)
+// and BEFORE the 2D sprite pass (so the skybox does not occlude sprites).
+//
+// Uses depth func GL_LEQUAL to write at max depth (behind all 3D geometry).
+// Restores GL_LESS after drawing.
+//
+// The unit cube VAO is created once (lazy-initialised, static lifetime).
+// No per-frame heap allocations.
+//
+// camera3d: the active 3D perspective camera (view + projection).
+// skyboxCfg: must have enabled=true and cubemapTexture != 0.
+//            If either condition is false, this function is a no-op.
+void renderSkybox(World& world, const Camera& camera3d, const SkyboxConfig& skyboxCfg);
+
 // Render all entities with Transform3D + Mesh components using the Blinn-Phong shader.
 //
 // If shadowCfg.enabled is true and shadowMap.fbo != 0, a depth-only shadow pass

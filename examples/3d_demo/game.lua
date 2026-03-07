@@ -111,7 +111,22 @@ end
 -- Scene init
 -- ---------------------------------------------------------------------------
 
+-- Try to load a skybox cubemap. If the images are not present, the call
+-- returns false and we fall back to the flat background colour.
+-- Face order: right (+X), left (-X), top (+Y), bottom (-Y), front (+Z), back (-Z).
+local skyboxLoaded = ffe.loadSkybox(
+    "skybox/right.png", "skybox/left.png",
+    "skybox/top.png",   "skybox/bottom.png",
+    "skybox/front.png", "skybox/back.png"
+)
+if skyboxLoaded then
+    ffe.log("Skybox loaded successfully")
+else
+    ffe.log("Skybox images not found -- using flat background colour")
+end
+
 -- Set a dark, moody sky colour that contrasts with the lit cubes.
+-- This is visible when the skybox is not loaded (or skybox is disabled).
 ffe.setBackgroundColor(0.05, 0.05, 0.12)
 
 -- Configure scene lighting:
@@ -333,7 +348,8 @@ function update(entityId, dt)
 
     -- Status: mesh load result
     if meshLoaded then
-        local entStr = "Entities: 4  |  Mesh: cube.glb  |  Shadows: ON  |  Point Lights: 2"
+        local skyStr = skyboxLoaded and "Skybox: ON" or "Skybox: OFF"
+        local entStr = "Entities: 4  |  Mesh: cube.glb  |  Shadows: ON  |  " .. skyStr .. "  |  Point Lights: 2"
         ffe.drawText(entStr, sw / 2 - (#entStr * 8), 8, 2, 0.6, 0.8, 1.0, 0.85)
     else
         ffe.drawText("cube.glb NOT FOUND -- HUD only mode", 12, 44, 2, 1, 0.4, 0.2, 1)
@@ -366,6 +382,9 @@ end
 -- shutdown() -- called by ScriptEngine before lua_close()
 -- ---------------------------------------------------------------------------
 function shutdown()
+    -- Unload skybox cubemap (safe even if not loaded).
+    ffe.unloadSkybox()
+
     -- Remove point lights before shutdown.
     ffe.removePointLight(0)
     ffe.removePointLight(1)
