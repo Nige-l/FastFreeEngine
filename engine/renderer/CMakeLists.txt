@@ -74,6 +74,103 @@ if(FFE_BACKEND STREQUAL "VULKAN")
     find_package(VulkanMemoryAllocator CONFIG REQUIRED)
     target_link_libraries(ffe_renderer PRIVATE volk::volk GPUOpen::VulkanMemoryAllocator)
     target_compile_definitions(ffe_renderer PUBLIC FFE_BACKEND_VULKAN=1)
+
+    # ================================================================
+    # Build-time SPIR-V compilation (M5)
+    # ================================================================
+    # Find glslc (Vulkan SDK) or glslangValidator as SPIR-V compiler.
+    # If neither is found, fall back to existing hand-assembled SPIR-V headers.
+    find_program(GLSLC glslc HINTS "$ENV{VULKAN_SDK}/bin")
+    find_program(GLSLANG glslangValidator HINTS "$ENV{VULKAN_SDK}/bin")
+
+    set(FFE_SPIRV_COMPILER "")
+    if(GLSLC)
+        set(FFE_SPIRV_COMPILER "${GLSLC}")
+        set(FFE_SPIRV_COMPILE_CMD_ARGS "")
+    elseif(GLSLANG)
+        set(FFE_SPIRV_COMPILER "${GLSLANG}")
+        set(FFE_SPIRV_COMPILE_CMD_ARGS "-V" "--target-env" "vulkan1.0")
+    endif()
+
+    set(FFE_SHADER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vulkan/shaders")
+    set(FFE_SPIRV_OUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/shaders")
+    file(MAKE_DIRECTORY "${FFE_SPIRV_OUT_DIR}")
+
+    set(FFE_SHADER_SOURCES
+        triangle.vert    triangle.frag
+        textured.vert    textured.frag
+        blinn_phong.vert blinn_phong.frag
+    )
+
+    # Map shader file names to C array names
+    set(FFE_SPV_ARRAYNAME_triangle.vert     TRIANGLE_VERT_SPV)
+    set(FFE_SPV_ARRAYNAME_triangle.frag     TRIANGLE_FRAG_SPV)
+    set(FFE_SPV_ARRAYNAME_textured.vert     TEXTURED_VERT_SPV)
+    set(FFE_SPV_ARRAYNAME_textured.frag     TEXTURED_FRAG_SPV)
+    set(FFE_SPV_ARRAYNAME_blinn_phong.vert  BLINN_PHONG_VERT_SPV)
+    set(FFE_SPV_ARRAYNAME_blinn_phong.frag  BLINN_PHONG_FRAG_SPV)
+
+    if(FFE_SPIRV_COMPILER)
+        message(STATUS "SPIR-V compiler found: ${FFE_SPIRV_COMPILER}")
+
+        set(FFE_GENERATED_SPV_HEADERS "")
+
+        foreach(SHADER ${FFE_SHADER_SOURCES})
+            # Determine output file names
+            string(REPLACE "." "_" SHADER_UNDERSCORE "${SHADER}")
+            set(SPV_FILE    "${FFE_SPIRV_OUT_DIR}/${SHADER}.spv")
+            set(SPV_HEADER  "${FFE_SPIRV_OUT_DIR}/${SHADER_UNDERSCORE}_spv.h")
+            set(ARRAY_NAME  "${FFE_SPV_ARRAYNAME_${SHADER}}")
+
+            # Compile GLSL -> SPIR-V
+            if(GLSLC)
+                add_custom_command(
+                    OUTPUT "${SPV_FILE}"
+                    COMMAND "${FFE_SPIRV_COMPILER}" "${FFE_SHADER_DIR}/${SHADER}"
+                            -o "${SPV_FILE}"
+                    DEPENDS "${FFE_SHADER_DIR}/${SHADER}"
+                    COMMENT "Compiling SPIR-V: ${SHADER}"
+                    VERBATIM
+                )
+            else()
+                add_custom_command(
+                    OUTPUT "${SPV_FILE}"
+                    COMMAND "${FFE_SPIRV_COMPILER}" ${FFE_SPIRV_COMPILE_CMD_ARGS}
+                            "${FFE_SHADER_DIR}/${SHADER}"
+                            -o "${SPV_FILE}"
+                    DEPENDS "${FFE_SHADER_DIR}/${SHADER}"
+                    COMMENT "Compiling SPIR-V: ${SHADER}"
+                    VERBATIM
+                )
+            endif()
+
+            # Embed SPIR-V -> C header
+            add_custom_command(
+                OUTPUT "${SPV_HEADER}"
+                COMMAND "${CMAKE_COMMAND}" -P "${CMAKE_SOURCE_DIR}/cmake/embed_spirv.cmake"
+                        "${SPV_FILE}" "${SPV_HEADER}" "${ARRAY_NAME}"
+                DEPENDS "${SPV_FILE}"
+                COMMENT "Embedding SPIR-V header: ${SHADER_UNDERSCORE}_spv.h"
+                VERBATIM
+            )
+
+            list(APPEND FFE_GENERATED_SPV_HEADERS "${SPV_HEADER}")
+        endforeach()
+
+        # Custom target that all generated headers depend on
+        add_custom_target(ffe_spirv_shaders DEPENDS ${FFE_GENERATED_SPV_HEADERS})
+        add_dependencies(ffe_renderer ffe_spirv_shaders)
+
+        # Make the generated headers includable
+        target_include_directories(ffe_renderer PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+        target_compile_definitions(ffe_renderer PRIVATE FFE_SPIRV_COMPILED=1)
+
+        message(STATUS "SPIR-V shaders will be compiled at build time")
+    else()
+        message(WARNING "No SPIR-V compiler found (glslc/glslangValidator) "
+                        "-- using pre-compiled SPIR-V headers as fallback")
+    endif()
+
 else()
     target_link_libraries(ffe_renderer PRIVATE glad)
     target_compile_definitions(ffe_renderer PUBLIC FFE_BACKEND_OPENGL=1)

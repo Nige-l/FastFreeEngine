@@ -11,12 +11,21 @@
 #include "renderer/vulkan/vk_descriptor.h"
 #include "renderer/vulkan/vk_uniform.h"
 #include "renderer/vulkan/vk_resource_manager.h"
+#ifdef FFE_SPIRV_COMPILED
+#include "shaders/triangle_vert_spv.h"
+#include "shaders/triangle_frag_spv.h"
+#include "shaders/textured_vert_spv.h"
+#include "shaders/textured_frag_spv.h"
+#include "shaders/blinn_phong_vert_spv.h"
+#include "shaders/blinn_phong_frag_spv.h"
+#else
 #include "renderer/vulkan/shaders/triangle_vert.h"
 #include "renderer/vulkan/shaders/triangle_frag.h"
 #include "renderer/vulkan/shaders/textured_vert.h"
 #include "renderer/vulkan/shaders/textured_frag.h"
 #include "renderer/vulkan/shaders/blinn_phong_vert.h"
 #include "renderer/vulkan/shaders/blinn_phong_frag.h"
+#endif
 #endif
 
 using namespace ffe;
@@ -451,6 +460,73 @@ TEST_CASE("TextureSlot: default fields are null/inactive", "[renderer][vulkan]")
     REQUIRE(ts.texture.image == VK_NULL_HANDLE);
     REQUIRE(ts.vramBytes == 0);
     REQUIRE(ts.active == false);
+}
+
+// ============================================================================
+// M5 — Depth Buffer + SPIR-V Compilation (CPU-only)
+// ============================================================================
+
+// --- Depth format constants ---
+
+TEST_CASE("VK_FORMAT_D32_SFLOAT value is 126", "[renderer][vulkan]") {
+    REQUIRE(VK_FORMAT_D32_SFLOAT == 126);
+}
+
+TEST_CASE("VK_FORMAT_D32_SFLOAT_S8_UINT value is 130", "[renderer][vulkan]") {
+    REQUIRE(VK_FORMAT_D32_SFLOAT_S8_UINT == 130);
+}
+
+TEST_CASE("VK_FORMAT_D24_UNORM_S8_UINT value is 129", "[renderer][vulkan]") {
+    REQUIRE(VK_FORMAT_D24_UNORM_S8_UINT == 129);
+}
+
+// --- PipelineConfig depth defaults ---
+
+TEST_CASE("PipelineConfig: depth test enabled by default", "[renderer][vulkan]") {
+    const vk::PipelineConfig config{};
+    REQUIRE(config.depthTestEnabled == true);
+}
+
+TEST_CASE("PipelineConfig: depth write enabled by default", "[renderer][vulkan]") {
+    const vk::PipelineConfig config{};
+    REQUIRE(config.depthWriteEnabled == true);
+}
+
+TEST_CASE("PipelineConfig: depth compare op is LESS by default", "[renderer][vulkan]") {
+    const vk::PipelineConfig config{};
+    REQUIRE(config.depthCompareOp == VK_COMPARE_OP_LESS);
+}
+
+// --- Depth clear value ---
+
+TEST_CASE("Depth clear value is 1.0f (far plane)", "[renderer][vulkan]") {
+    VkClearDepthStencilValue depthClear{};
+    depthClear.depth = 1.0f;
+    depthClear.stencil = 0;
+    REQUIRE(depthClear.depth == 1.0f);
+    REQUIRE(depthClear.stencil == 0);
+}
+
+// --- VulkanContext depth fields ---
+
+TEST_CASE("VulkanContext: depth fields default to null/D32_SFLOAT", "[renderer][vulkan]") {
+    const vk::VulkanContext ctx{};
+    REQUIRE(ctx.depthImage      == VK_NULL_HANDLE);
+    REQUIRE(ctx.depthImageView  == VK_NULL_HANDLE);
+    REQUIRE(ctx.depthAllocation == VK_NULL_HANDLE);
+    REQUIRE(ctx.depthFormat     == VK_FORMAT_D32_SFLOAT);
+}
+
+// --- PipelineConfig depth customisation ---
+
+TEST_CASE("PipelineConfig: depth test can be disabled", "[renderer][vulkan]") {
+    vk::PipelineConfig config{};
+    config.depthTestEnabled = false;
+    config.depthWriteEnabled = false;
+    config.depthCompareOp = VK_COMPARE_OP_ALWAYS;
+    REQUIRE(config.depthTestEnabled == false);
+    REQUIRE(config.depthWriteEnabled == false);
+    REQUIRE(config.depthCompareOp == VK_COMPARE_OP_ALWAYS);
 }
 
 #endif // FFE_BACKEND_VULKAN

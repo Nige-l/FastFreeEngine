@@ -9,12 +9,23 @@
 #include "renderer/vulkan/vk_descriptor.h"
 #include "renderer/vulkan/vk_uniform.h"
 #include "renderer/vulkan/vk_resource_manager.h"
+// SPIR-V shader headers: prefer build-time compiled shaders (M5),
+// fall back to hand-assembled headers if no SPIR-V compiler was available.
+#ifdef FFE_SPIRV_COMPILED
+#include "shaders/triangle_vert_spv.h"
+#include "shaders/triangle_frag_spv.h"
+#include "shaders/textured_vert_spv.h"
+#include "shaders/textured_frag_spv.h"
+#include "shaders/blinn_phong_vert_spv.h"
+#include "shaders/blinn_phong_frag_spv.h"
+#else
 #include "renderer/vulkan/shaders/triangle_vert.h"
 #include "renderer/vulkan/shaders/triangle_frag.h"
 #include "renderer/vulkan/shaders/textured_vert.h"
 #include "renderer/vulkan/shaders/textured_frag.h"
 #include "renderer/vulkan/shaders/blinn_phong_vert.h"
 #include "renderer/vulkan/shaders/blinn_phong_frag.h"
+#endif
 #include "core/logging.h"
 
 #define GLFW_INCLUDE_NONE
@@ -1108,8 +1119,9 @@ void setUniformMat4Array(const ShaderHandle handle, const char* name, const glm:
 void applyPipelineState(const PipelineState& state) {
     if (s_headless) return;
     // In Vulkan, pipeline state changes require different pipeline objects.
-    // For M4, we acknowledge the state but use the single pipeline created per shader.
-    // Pipeline variants (blend modes, depth modes) will be added in M5.
+    // For M5, we track the depth test state. Full pipeline variants (blend modes,
+    // per-shader depth mode permutations) will be added in a future milestone.
+    // The default pipeline has depth test enabled via PipelineConfig defaults.
     (void)state;
 }
 
@@ -1197,9 +1209,10 @@ void beginFrame(const glm::vec4& clearColor) {
         }
     }
 
-    // Begin render pass with clear color
-    VkClearValue clear{};
-    clear.color = {{clearColor.r, clearColor.g, clearColor.b, clearColor.a}};
+    // Begin render pass with clear color + depth (M5)
+    VkClearValue clearValues[2]{};
+    clearValues[0].color = {{clearColor.r, clearColor.g, clearColor.b, clearColor.a}};
+    clearValues[1].depthStencil = {1.0f, 0};
 
     VkRenderPassBeginInfo rpBegin{};
     rpBegin.sType             = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -1207,8 +1220,8 @@ void beginFrame(const glm::vec4& clearColor) {
     rpBegin.framebuffer       = s_vk.swapFramebuffers[s_vk.acquiredImageIndex];
     rpBegin.renderArea.offset = {0, 0};
     rpBegin.renderArea.extent = s_vk.swapchainExtent;
-    rpBegin.clearValueCount   = 1;
-    rpBegin.pClearValues      = &clear;
+    rpBegin.clearValueCount   = 2;
+    rpBegin.pClearValues      = clearValues;
 
     vkCmdBeginRenderPass(s_vk.commandBuffers[frame], &rpBegin, VK_SUBPASS_CONTENTS_INLINE);
 

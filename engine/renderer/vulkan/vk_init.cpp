@@ -349,6 +349,105 @@ VkInitResult createAllocator(VulkanContext& ctx) {
 }
 
 // ============================================================================
+// Depth Format Selection (M5)
+// ============================================================================
+
+VkFormat findDepthFormat(VkPhysicalDevice physicalDevice) {
+    // Preferred formats in order: pure depth float, depth+stencil float, depth+stencil 24-bit
+    static constexpr VkFormat candidates[] = {
+        VK_FORMAT_D32_SFLOAT,
+        VK_FORMAT_D32_SFLOAT_S8_UINT,
+        VK_FORMAT_D24_UNORM_S8_UINT,
+    };
+
+    for (const VkFormat fmt : candidates) {
+        VkFormatProperties props;
+        vkGetPhysicalDeviceFormatProperties(physicalDevice, fmt, &props);
+        if ((props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0) {
+            return fmt;
+        }
+    }
+
+    // Fallback — D32_SFLOAT is universally supported on Vulkan 1.0 implementations
+    return VK_FORMAT_D32_SFLOAT;
+}
+
+// ============================================================================
+// Depth Resources (M5)
+// ============================================================================
+
+VkInitResult createDepthResources(VulkanContext& ctx) {
+    if (ctx.swapchainExtent.width == 0 || ctx.swapchainExtent.height == 0) {
+        return {true, ""};
+    }
+
+    ctx.depthFormat = findDepthFormat(ctx.physicalDevice);
+
+    // Create depth image via VMA
+    VkImageCreateInfo imageInfo{};
+    imageInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageInfo.imageType     = VK_IMAGE_TYPE_2D;
+    imageInfo.format        = ctx.depthFormat;
+    imageInfo.extent.width  = ctx.swapchainExtent.width;
+    imageInfo.extent.height = ctx.swapchainExtent.height;
+    imageInfo.extent.depth  = 1;
+    imageInfo.mipLevels     = 1;
+    imageInfo.arrayLayers   = 1;
+    imageInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
+    imageInfo.usage         = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    imageInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
+    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    VmaAllocationCreateInfo allocInfo{};
+    allocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+
+    const VkResult result = vmaCreateImage(ctx.allocator, &imageInfo, &allocInfo,
+                                           &ctx.depthImage, &ctx.depthAllocation, nullptr);
+    if (result != VK_SUCCESS) {
+        FFE_LOG_ERROR("Vulkan", "Failed to create depth image (VkResult %d)", static_cast<int>(result));
+        return {false, "Failed to create depth image"};
+    }
+
+    // Layout transition from UNDEFINED to DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+    // is handled implicitly by the render pass (depth attachment initialLayout = UNDEFINED,
+    // finalLayout = DEPTH_STENCIL_ATTACHMENT_OPTIMAL). No explicit barrier needed.
+
+    // Create depth image view
+    VkImageViewCreateInfo viewInfo{};
+    viewInfo.sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewInfo.image                           = ctx.depthImage;
+    viewInfo.viewType                        = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.format                          = ctx.depthFormat;
+    viewInfo.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_DEPTH_BIT;
+    viewInfo.subresourceRange.baseMipLevel   = 0;
+    viewInfo.subresourceRange.levelCount     = 1;
+    viewInfo.subresourceRange.baseArrayLayer = 0;
+    viewInfo.subresourceRange.layerCount     = 1;
+
+    VK_CHECK(vkCreateImageView(ctx.device, &viewInfo, nullptr, &ctx.depthImageView),
+             (VkInitResult{false, "Failed to create depth image view"}));
+
+    FFE_LOG_INFO("Vulkan", "Depth resources created (%ux%u, format %d)",
+                 ctx.swapchainExtent.width, ctx.swapchainExtent.height,
+                 static_cast<int>(ctx.depthFormat));
+
+    return {true, ""};
+}
+
+void destroyDepthResources(VulkanContext& ctx) {
+    if (ctx.depthImageView != VK_NULL_HANDLE) {
+        vkDestroyImageView(ctx.device, ctx.depthImageView, nullptr);
+        ctx.depthImageView = VK_NULL_HANDLE;
+    }
+    if (ctx.depthImage != VK_NULL_HANDLE && ctx.allocator != VK_NULL_HANDLE) {
+        vmaDestroyImage(ctx.allocator, ctx.depthImage, ctx.depthAllocation);
+        ctx.depthImage      = VK_NULL_HANDLE;
+        ctx.depthAllocation = VK_NULL_HANDLE;
+    }
+}
+
+// ============================================================================
 // Swap Chain Creation
 // ============================================================================
 
@@ -503,38 +602,61 @@ VkInitResult createSwapChain(VulkanContext& ctx, const u32 preferredImageCount) 
                  (VkInitResult{false, "Failed to create swap chain image view"}));
     }
 
-    // Create render pass (clear-color only, no depth, M1 scope)
-    VkAttachmentDescription colorAttachment{};
-    colorAttachment.format         = ctx.swapchainFormat;
-    colorAttachment.samples        = VK_SAMPLE_COUNT_1_BIT;
-    colorAttachment.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    colorAttachment.storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
-    colorAttachment.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    colorAttachment.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
-    colorAttachment.finalLayout    = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    // Select depth format (M5)
+    ctx.depthFormat = findDepthFormat(ctx.physicalDevice);
+
+    // Create render pass with color + depth attachments (M5)
+    VkAttachmentDescription attachments[2]{};
+
+    // Attachment 0: color
+    attachments[0].format         = ctx.swapchainFormat;
+    attachments[0].samples        = VK_SAMPLE_COUNT_1_BIT;
+    attachments[0].loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    attachments[0].storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
+    attachments[0].stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachments[0].initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachments[0].finalLayout    = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+    // Attachment 1: depth
+    attachments[1].format         = ctx.depthFormat;
+    attachments[1].samples        = VK_SAMPLE_COUNT_1_BIT;
+    attachments[1].loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    attachments[1].storeOp        = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachments[1].stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachments[1].initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachments[1].finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
     VkAttachmentReference colorRef{};
     colorRef.attachment = 0;
     colorRef.layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
+    VkAttachmentReference depthRef{};
+    depthRef.attachment = 1;
+    depthRef.layout     = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
     VkSubpassDescription subpass{};
-    subpass.pipelineBindPoint    = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass.colorAttachmentCount = 1;
-    subpass.pColorAttachments    = &colorRef;
+    subpass.pipelineBindPoint       = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount    = 1;
+    subpass.pColorAttachments       = &colorRef;
+    subpass.pDepthStencilAttachment = &depthRef;
 
     VkSubpassDependency dependency{};
     dependency.srcSubpass    = VK_SUBPASS_EXTERNAL;
     dependency.dstSubpass    = 0;
-    dependency.srcStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.srcStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                               VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
     dependency.srcAccessMask = 0;
-    dependency.dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependency.dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                               VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                               VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
     VkRenderPassCreateInfo rpInfo{};
     rpInfo.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    rpInfo.attachmentCount = 1;
-    rpInfo.pAttachments    = &colorAttachment;
+    rpInfo.attachmentCount = 2;
+    rpInfo.pAttachments    = attachments;
     rpInfo.subpassCount    = 1;
     rpInfo.pSubpasses      = &subpass;
     rpInfo.dependencyCount = 1;
@@ -543,13 +665,23 @@ VkInitResult createSwapChain(VulkanContext& ctx, const u32 preferredImageCount) 
     VK_CHECK(vkCreateRenderPass(ctx.device, &rpInfo, nullptr, &ctx.clearPass),
              (VkInitResult{false, "Failed to create render pass"}));
 
-    // Create framebuffers
+    // Create depth resources (M5) — must be created before framebuffers
+    {
+        const VkInitResult depthResult = createDepthResources(ctx);
+        if (!depthResult.success) {
+            return depthResult;
+        }
+    }
+
+    // Create framebuffers (color + depth attachments)
     for (u32 i = 0; i < ctx.swapImageCount; ++i) {
+        const VkImageView fbAttachments[] = {ctx.swapImageViews[i], ctx.depthImageView};
+
         VkFramebufferCreateInfo fbInfo{};
         fbInfo.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         fbInfo.renderPass      = ctx.clearPass;
-        fbInfo.attachmentCount = 1;
-        fbInfo.pAttachments    = &ctx.swapImageViews[i];
+        fbInfo.attachmentCount = 2;
+        fbInfo.pAttachments    = fbAttachments;
         fbInfo.width           = ctx.swapchainExtent.width;
         fbInfo.height          = ctx.swapchainExtent.height;
         fbInfo.layers          = 1;
@@ -620,6 +752,9 @@ VkInitResult createCommandBuffers(VulkanContext& ctx) {
 // ============================================================================
 
 void destroySwapChainResources(VulkanContext& ctx) {
+    // Destroy depth resources before framebuffers (M5)
+    destroyDepthResources(ctx);
+
     for (u32 i = 0; i < ctx.swapImageCount; ++i) {
         if (ctx.swapFramebuffers[i] != VK_NULL_HANDLE) {
             vkDestroyFramebuffer(ctx.device, ctx.swapFramebuffers[i], nullptr);

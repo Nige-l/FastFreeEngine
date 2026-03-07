@@ -130,6 +130,15 @@ VkPipeline createGraphicsPipeline(VkDevice device,
         return VK_NULL_HANDLE;
     }
 
+    // --- Depth/stencil state (M5) ---
+    VkPipelineDepthStencilStateCreateInfo depthStencil{};
+    depthStencil.sType                 = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencil.depthTestEnable       = config.depthTestEnabled ? VK_TRUE : VK_FALSE;
+    depthStencil.depthWriteEnable      = config.depthWriteEnabled ? VK_TRUE : VK_FALSE;
+    depthStencil.depthCompareOp        = config.depthCompareOp;
+    depthStencil.depthBoundsTestEnable = VK_FALSE;
+    depthStencil.stencilTestEnable     = VK_FALSE;
+
     // --- Graphics pipeline ---
     VkGraphicsPipelineCreateInfo pipelineInfo{};
     pipelineInfo.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -140,7 +149,7 @@ VkPipeline createGraphicsPipeline(VkDevice device,
     pipelineInfo.pViewportState      = &viewportState;
     pipelineInfo.pRasterizationState = &rasterizer;
     pipelineInfo.pMultisampleState   = &multisampling;
-    pipelineInfo.pDepthStencilState  = nullptr; // No depth for M2 triangle
+    pipelineInfo.pDepthStencilState  = &depthStencil;
     pipelineInfo.pColorBlendState    = &colorBlending;
     pipelineInfo.pDynamicState       = &dynamicState;
     pipelineInfo.layout              = outLayout;

@@ -38,6 +38,14 @@ target_link_libraries(ffe_tests
 
 target_compile_definitions(ffe_tests PRIVATE FFE_TEST)
 
+# When building with Vulkan backend, propagate SPIR-V compiled flag and include dirs
+# so that test_rhi_vulkan.cpp can find the generated shader headers.
+if(FFE_BACKEND STREQUAL "VULKAN" AND TARGET ffe_spirv_shaders)
+    target_compile_definitions(ffe_tests PRIVATE FFE_SPIRV_COMPILED=1)
+    target_include_directories(ffe_tests PRIVATE "${CMAKE_BINARY_DIR}/engine/renderer")
+    add_dependencies(ffe_tests ffe_spirv_shaders)
+endif()
+
 include(Catch)
 catch_discover_tests(ffe_tests)
 

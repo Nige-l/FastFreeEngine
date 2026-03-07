@@ -27,6 +27,11 @@ struct PipelineConfig {
     /// When non-null, the pipeline layout is created with this descriptor set layout.
     /// When null (VK_NULL_HANDLE), the pipeline layout has no descriptor sets (M2 style).
     VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
+
+    /// Depth/stencil configuration (M5).
+    bool depthTestEnabled  = true;
+    bool depthWriteEnabled = true;
+    VkCompareOp depthCompareOp = VK_COMPARE_OP_LESS;
 };
 
 /// Create a graphics pipeline with the given shader modules and configuration.

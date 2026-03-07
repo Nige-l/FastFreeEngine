@@ -97,6 +97,12 @@ struct VulkanContext {
     u32 acquiredImageIndex = 0;
     bool imageAcquired = false;
 
+    // Depth buffer (M5)
+    VkImage       depthImage      = VK_NULL_HANDLE;
+    VkImageView   depthImageView  = VK_NULL_HANDLE;
+    VmaAllocation depthAllocation = VK_NULL_HANDLE;
+    VkFormat      depthFormat     = VK_FORMAT_D32_SFLOAT;
+
     // VMA allocator (M2+)
     VmaAllocator allocator = VK_NULL_HANDLE;
 
@@ -127,6 +133,16 @@ VkInitResult selectPhysicalDevice(VulkanContext& ctx);
 
 /// Create logical device with graphics and present queues.
 VkInitResult createLogicalDevice(VulkanContext& ctx);
+
+/// Find a supported depth format for the given physical device.
+/// Tries D32_SFLOAT, D32_SFLOAT_S8_UINT, D24_UNORM_S8_UINT in order.
+VkFormat findDepthFormat(VkPhysicalDevice physicalDevice);
+
+/// Create depth image, image view, and transition to DEPTH_STENCIL_ATTACHMENT_OPTIMAL.
+VkInitResult createDepthResources(VulkanContext& ctx);
+
+/// Destroy depth image, image view, and free VMA allocation.
+void destroyDepthResources(VulkanContext& ctx);
 
 /// Create swap chain, image views, render pass, and framebuffers.
 VkInitResult createSwapChain(VulkanContext& ctx, u32 preferredImageCount);
