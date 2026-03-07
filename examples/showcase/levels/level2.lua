@@ -60,9 +60,9 @@ end
 --------------------------------------------------------------------
 ffe.setLightDirection(0, -1, 0.2)       -- overhead light
 if softwareRenderer then
-    -- Brighter ambient so geometry is visible without HDR / tone mapping
-    ffe.setLightColor(0.9, 0.7, 0.5)
-    ffe.setAmbientColor(0.2, 0.15, 0.1)
+    -- Cranked lighting so underground geometry is clearly visible on llvmpipe
+    ffe.setLightColor(1.0, 0.9, 0.7)
+    ffe.setAmbientColor(0.45, 0.38, 0.3)
 else
     ffe.setLightColor(0.8, 0.6, 0.4)       -- warm/orange (torch-lit feel)
     ffe.setAmbientColor(0.08, 0.05, 0.03)  -- very dark ambient
@@ -79,9 +79,9 @@ end
 -- Fog: dark reddish-brown, oppressive short range
 --------------------------------------------------------------------
 if softwareRenderer then
-    -- Lighter fog so underground doesn't appear fully black
-    ffe.setFog(0.15, 0.1, 0.08, 8.0, 40.0)
-    ffe.setBackgroundColor(0.08, 0.05, 0.06)
+    -- Push fog out so temple geometry is visible; warm dark background
+    ffe.setFog(0.12, 0.08, 0.06, 25.0, 120.0)
+    ffe.setBackgroundColor(0.06, 0.03, 0.04)
 else
     ffe.setFog(0.15, 0.08, 0.05, 5.0, 35.0)
     ffe.setBackgroundColor(0.02, 0.01, 0.03)
@@ -141,19 +141,19 @@ end
 -- 4 bridge arms extending over the lava pit.
 --------------------------------------------------------------------
 -- Central platform (16x1x16 -- thicker + brighter for visibility)
-createStaticBox(0, -0.5, 0, 8, 1.0, 8, 0.40, 0.35, 0.30)
+createStaticBox(0, -0.5, 0, 8, 1.0, 8, 0.55, 0.48, 0.40)
 
 -- South platform (entrance area, wider 12x1x10)
-createStaticBox(0, -0.5, -15, 6, 1.0, 5, 0.40, 0.35, 0.30)
+createStaticBox(0, -0.5, -15, 6, 1.0, 5, 0.55, 0.48, 0.40)
 
 -- North platform (exit area, wider 10x1x8)
-createStaticBox(0, -0.5, 15, 5, 1.0, 4, 0.40, 0.35, 0.30)
+createStaticBox(0, -0.5, 15, 5, 1.0, 4, 0.55, 0.48, 0.40)
 
 -- East platform (crystal alcove, wider 8x1x8)
-createStaticBox(13, -0.5, 0, 4, 1.0, 4, 0.40, 0.35, 0.30)
+createStaticBox(13, -0.5, 0, 4, 1.0, 4, 0.55, 0.48, 0.40)
 
 -- West platform (crystal alcove, wider 8x1x8)
-createStaticBox(-13, -0.5, 0, 4, 1.0, 4, 0.40, 0.35, 0.30)
+createStaticBox(-13, -0.5, 0, 4, 1.0, 4, 0.55, 0.48, 0.40)
 
 -- Platform edge markers: glowing border strips for spatial reference (Bug 2)
 -- Central platform edges
@@ -165,7 +165,7 @@ createVisualBox(-8, 0.02, 0, 0.15, 0.02, 8,  0.4, 0.25, 0.15, 1.0)
 --------------------------------------------------------------------
 -- LAVA PIT: Red-orange glowing flat plane below floor level
 --------------------------------------------------------------------
-createVisualBox(0, -2.0, 0, 18, 0.3, 18, 1.0, 0.35, 0.05, 1.0)
+createVisualBox(0, -2.0, 0, 18, 0.3, 18, 1.0, 0.45, 0.1, 1.0)
 
 --------------------------------------------------------------------
 -- NARROW BRIDGES: 4 stone bridges crossing the lava
@@ -225,27 +225,27 @@ end
 -- PERIMETER WALLS (dark stone, 6 units high)
 --------------------------------------------------------------------
 -- South wall: two segments with entrance gap
-createStaticBox(-11, 3, -20, 7, 3, 0.5, 0.2, 0.18, 0.17)
-createStaticBox( 11, 3, -20, 7, 3, 0.5, 0.2, 0.18, 0.17)
+createStaticBox(-11, 3, -20, 7, 3, 0.5, 0.35, 0.30, 0.28)
+createStaticBox( 11, 3, -20, 7, 3, 0.5, 0.35, 0.30, 0.28)
 
 -- North wall: two segments with exit gap
-createStaticBox(-11, 3, 20, 7, 3, 0.5, 0.2, 0.18, 0.17)
-createStaticBox( 11, 3, 20, 7, 3, 0.5, 0.2, 0.18, 0.17)
+createStaticBox(-11, 3, 20, 7, 3, 0.5, 0.35, 0.30, 0.28)
+createStaticBox( 11, 3, 20, 7, 3, 0.5, 0.35, 0.30, 0.28)
 
 -- East wall (solid)
-createStaticBox(18, 3, 0, 0.5, 3, 20, 0.2, 0.18, 0.17)
+createStaticBox(18, 3, 0, 0.5, 3, 20, 0.35, 0.30, 0.28)
 
 -- West wall (solid)
-createStaticBox(-18, 3, 0, 0.5, 3, 20, 0.2, 0.18, 0.17)
+createStaticBox(-18, 3, 0, 0.5, 3, 20, 0.35, 0.30, 0.28)
 
 --------------------------------------------------------------------
 -- PILLARS: Tall stone columns (1x6x1)
 --------------------------------------------------------------------
 -- Central platform corner pillars (4)
-createStaticBox(-5, 3, -5, 0.5, 3, 0.5, 0.22, 0.2, 0.19)
-createStaticBox( 5, 3, -5, 0.5, 3, 0.5, 0.22, 0.2, 0.19)
-createStaticBox(-5, 3,  5, 0.5, 3, 0.5, 0.22, 0.2, 0.19)
-createStaticBox( 5, 3,  5, 0.5, 3, 0.5, 0.22, 0.2, 0.19)
+createStaticBox(-5, 3, -5, 0.5, 3, 0.5, 0.38, 0.34, 0.30)
+createStaticBox( 5, 3, -5, 0.5, 3, 0.5, 0.38, 0.34, 0.30)
+createStaticBox(-5, 3,  5, 0.5, 3, 0.5, 0.38, 0.34, 0.30)
+createStaticBox( 5, 3,  5, 0.5, 3, 0.5, 0.38, 0.34, 0.30)
 
 -- Bridge-edge pillars (4, decorative only -- no physics needed)
 createVisualBox(-1.5, 2, -5.5, 0.4, 2, 0.4, 0.22, 0.2, 0.19, 1.0)
@@ -262,7 +262,7 @@ createVisualBox( 17, 3,  10, 0.6, 3, 0.6, 0.22, 0.2, 0.19, 1.0)
 --------------------------------------------------------------------
 -- CEILING: Dark flat plane above to enclose the space
 --------------------------------------------------------------------
-createVisualBox(0, 7, 0, 18, 0.3, 20, 0.08, 0.06, 0.07, 1.0)
+createVisualBox(0, 7, 0, 18, 0.3, 20, 0.18, 0.14, 0.13, 1.0)
 
 --------------------------------------------------------------------
 -- STALACTITES: Hanging boxes from ceiling for atmosphere
@@ -759,9 +759,9 @@ end)
 --------------------------------------------------------------------
 -- Player spawn (south entrance bridge)
 --------------------------------------------------------------------
-Player.create(0, 1.5, -17, cubeMesh)
-Camera.setPosition(0, 1.5, -17)
-Camera.setYawPitch(0, 30)  -- Pitch down to see the floor on spawn (Bug 2)
+Player.create(0, 1.5, -13, cubeMesh)
+Camera.setPosition(0, 2.5, -13)
+Camera.setYawPitch(0, 22)  -- Elevated view showing altar, crystals, lava pit
 
 if HUD then
     HUD.showPrompt("The Temple -- Activate the crystals to open the portal", 5.0)
@@ -973,8 +973,8 @@ ffe.every(TICK_RATE, function()
         local px, py, pz = Player.getPosition()
         if py < -3 then
             Player.cleanup()
-            Player.create(0, 1.5, -17, cubeMesh)
-            Camera.setPosition(0, 1.5, -17)
+            Player.create(0, 1.5, -13, cubeMesh)
+            Camera.setPosition(0, 2.5, -13)
             if HUD then HUD.showPrompt("The lava claims another...", 2.0) end
         end
     end

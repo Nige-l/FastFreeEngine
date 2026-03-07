@@ -79,7 +79,7 @@ ffe.setLightDirection(0.3, -0.8, 0.5)
 if softwareRenderer then
     -- Brighter lighting without tone mapping darkening
     ffe.setLightColor(1.0, 0.95, 0.85)
-    ffe.setAmbientColor(0.3, 0.35, 0.45)
+    ffe.setAmbientColor(0.45, 0.48, 0.55)  -- cranked ambient for software renderer readability
 else
     ffe.setLightColor(1.0, 0.95, 0.85)       -- warm sunlight
     ffe.setAmbientColor(0.15, 0.18, 0.25)    -- cool ambient (blueish shadows)
@@ -99,8 +99,9 @@ end
 -- post-tonemapped result looks correct (~0.6, 0.65, 0.75 perceived).
 --------------------------------------------------------------------
 if softwareRenderer then
-    ffe.setFog(0.6, 0.65, 0.75, 20.0, 80.0)
-    ffe.setBackgroundColor(0.6, 0.65, 0.75)
+    -- Push fog far out so all courtyard geometry is visible on llvmpipe
+    ffe.setFog(0.5, 0.7, 0.9, 60.0, 200.0)
+    ffe.setBackgroundColor(0.5, 0.7, 0.9)  -- sky blue, contrasts with stone
 else
     ffe.setFog(0.85, 0.9, 1.0, 20.0, 80.0)
     ffe.setBackgroundColor(0.85, 0.9, 1.0)
@@ -166,7 +167,7 @@ end
 -- serves as visual background; this ground plane provides the actual
 -- walkable collision surface under the play area.
 --------------------------------------------------------------------
-createStaticBox(0, -0.25, 0, 32, 0.25, 32, 0.35, 0.38, 0.3)
+createStaticBox(0, -0.25, 0, 32, 0.25, 32, 0.45, 0.50, 0.38)
 
 --------------------------------------------------------------------
 -- Edge border walls: low walls at ground perimeter for spatial reference (Bug 2)
@@ -184,8 +185,8 @@ createStaticBox(-30, 0.25, 0, 0.3, 0.25, 30,  0.35, 0.32, 0.28)
 -- Perimeter walls (4 segments with gaps for entrance/exit)
 --------------------------------------------------------------------
 -- South wall (entrance side): two segments with gap in center
-createStaticBox(-12.5, 2, -20,  7.5, 2.5, 0.5,  0.5, 0.48, 0.42)  -- left segment
-createStaticBox( 12.5, 2, -20,  7.5, 2.5, 0.5,  0.5, 0.48, 0.42)  -- right segment
+createStaticBox(-12.5, 2, -20,  7.5, 2.5, 0.5,  0.7, 0.68, 0.60)  -- left segment
+createStaticBox( 12.5, 2, -20,  7.5, 2.5, 0.5,  0.7, 0.68, 0.60)  -- right segment
 
 -- North wall (exit side): two segments with gap in center for gate
 createStaticBox(-12.5, 2, 20,  7.5, 2.5, 0.5,  0.5, 0.48, 0.42)
@@ -639,9 +640,9 @@ end
 -- Ground plane top is at Y=0; spawn player above it.
 --------------------------------------------------------------------
 local SPAWN_Y = 1.5
-Player.create(0, SPAWN_Y, -17, cesiumMesh)
-Camera.setPosition(0, SPAWN_Y, -17)
-Camera.setYawPitch(0, 25)  -- Slight pitch down to see the courtyard
+Player.create(0, SPAWN_Y, -12, cesiumMesh)
+Camera.setPosition(0, SPAWN_Y + 2, -12)
+Camera.setYawPitch(0, 25)  -- Elevated view showing courtyard, fountain, walls
 
 if HUD then
     HUD.showPrompt("The Courtyard -- Find the Ancient Artifact", 4.0)
@@ -754,8 +755,8 @@ ffe.every(TICK_RATE, function()
         -- Fall-off detection: respawn if player falls well below ground plane (Y=0)
         if py < -10 then
             Player.cleanup()
-            Player.create(0, SPAWN_Y, -17, cesiumMesh)
-            Camera.setPosition(0, SPAWN_Y, -17)
+            Player.create(0, SPAWN_Y, -12, cesiumMesh)
+            Camera.setPosition(0, SPAWN_Y + 2, -12)
             if HUD then HUD.showPrompt("Watch your step!", 2.0) end
         end
     end
