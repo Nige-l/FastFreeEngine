@@ -6,15 +6,15 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 42 |
-| Total tests | 559 (both Clang-18 and GCC-13 passing) |
-| Total Lua bindings | ~83 |
+| Last session | 43 |
+| Total tests | 568 (both Clang-18 and GCC-13 passing) |
+| Total Lua bindings | ~87 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
 | Phase 2 (3D Foundation) | IN PROGRESS (see current phase section below) |
 | Windows build | DONE (MinGW-w64 cross-compilation) |
 | macOS build | DONE (arm64 + x86_64) |
 | GitHub Actions CI | DONE (Linux Clang-18, Linux GCC-13, macOS arm64) |
-| GCC-13 verification | DONE (559/559 tests, 0 warnings — Session 42) |
+| GCC-13 verification | DONE (568/568 tests, 0 warnings — Session 43) |
 
 ## Engine Subsystems
 
@@ -22,7 +22,8 @@
 |-----------|--------|----------|
 | ECS | Stable | World, createEntity/destroyEntity, function-pointer systems |
 | Renderer (2D) | Stable | OpenGL 3.3, sprite batching (2048/batch), render queue, rotation+flip |
-| Renderer (3D) | Stable | cgltf .glb, Blinn-Phong, Transform3D/Mesh/Material3D, set3DCameraFPS/Orbit, setMeshTexture, 13 Lua bindings |
+| Renderer (3D) | Stable | cgltf .glb, Blinn-Phong, Transform3D/Mesh/Material3D, set3DCameraFPS/Orbit, setMeshTexture, 17 Lua bindings |
+| Shadow Mapping | Stable | Depth FBO, PCF 3x3, enableShadows/disableShadows/setShadowBias/setShadowArea |
 | Text (bitmap) | Stable | 8x8 bitmap font atlas, drawText, drawRect |
 | Text (TTF) | Stable | stb_truetype, loadFont/drawFontText/measureText, 8 font slots |
 | Sprite Animation | Stable | SpriteAnimation component, grid atlas |
@@ -55,11 +56,11 @@
 
 | Session | Summary |
 |---------|---------|
+| 43 | Shadow mapping (depth FBO, PCF 3x3, 4 Lua bindings), CI improvements (paths-ignore, concurrency), 568 tests |
 | 42 | 3D camera modes (FPS/orbit), mesh texture binding, process restructuring, 559 tests |
 | 41 | CI fix (vcpkg toolchain, X11 deps), GLAD glReadPixels fix, screenshot tests pass, 530 tests |
 | 40 | macOS arm64+x86_64 build, CI workflow, screenshot tool (blocked by GLAD gap) |
 | 39 | Windows MinGW-w64 cross-compilation, platform.h canonicalizePath, ADS path fix |
-| 38 | 3D Foundation implementation — cgltf, Blinn-Phong, 10 Lua bindings, 519 tests |
 
 ## Current Phase: Phase 2 — 3D Foundation (IN PROGRESS)
 
@@ -80,11 +81,11 @@
 - [ ] Skeletal animation (bone hierarchy, skinning)
 - [ ] 3D physics integration (Bullet, Jolt, or similar)
 - [ ] Skybox / environment rendering
-- [ ] Shadow mapping (STANDARD+ tiers)
+- [x] Shadow mapping (depth FBO, PCF 3x3, 4 Lua bindings)
 - [ ] 3D audio (positional sound sources)
 - [ ] Point lights (currently directional only)
 
-### Next Session (43) — PM to select from remaining items above
+### Next Session (44) — PM to select from remaining items above
 
 ## Build Commands
 

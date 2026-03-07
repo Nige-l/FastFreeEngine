@@ -769,3 +769,74 @@ User raised concerns about devlog reading overhead, git commit ownership confusi
 ### Next Session
 
 ROADMAP Phase 2 remaining: materials system (specular maps, normal maps), skeletal animation, 3D physics, skybox, shadow mapping, 3D audio. PM to assess priority at Session 43 start.
+
+---
+
+## 2026-03-07 — Sessions 42-43: Camera Modes, Mesh Texture, Shadow Mapping, CI Improvements
+
+### Session 42: 3D Camera Modes + Mesh Texture + Process Review
+
+**Features:**
+- `ffe.set3DCameraFPS(x, y, z, yaw, pitch)`: FPS camera, pitch clamped [-89, 89] degrees
+- `ffe.set3DCameraOrbit(tx, ty, tz, radius, yaw, pitch)`: orbit camera, pitch clamped [-85, 85], radius/finite guards
+- `ffe.setMeshTexture(entityId, textureHandle)`: binds diffuse texture to Material3D (shader+renderer+UV loading already existed; only binding was missing)
+- 3D demo updated to use orbit camera
+
+**Process restructuring (Director review):**
+1. Devlog split: `docs/project-state.md` (95-line living doc), `docs/devlog-archive.md` (Sessions 1-34)
+2. Git commit ownership: PM is sole owner of `git add/commit/push` (added to CLAUDE.md Section 7)
+3. system-engineer scope: explicit "You do NOT" list (no full builds, no test suites, no git commits)
+4. Stale 3-phase references updated to 5-phase across agent files
+
+**Build:** 559/559 tests, 0 warnings (Clang-18 + GCC-13)
+
+### Session 43: Directional Shadow Mapping + CI Improvements
+
+**Shadow mapping implementation:**
+- `engine/renderer/shadow_map.h/.cpp`: depth-only FBO (1024x1024), `computeLightSpaceMatrix` (orthographic projection from light direction), `beginShadowPass`/`endShadowPass` lifecycle
+- `SHADOW_DEPTH` builtin shader added to `shader_library.cpp` (GLSL 330 core, depth-only vertex transform)
+- Blinn-Phong fragment shader extended: PCF 3x3 sampling with configurable bias, `u_shadowMap` (texture unit 1), `u_lightSpaceMatrix`
+- `mesh_renderer.cpp`: two-pass rendering (shadow pass, then lit pass with shadow map bound)
+- 4 new Lua bindings: `ffe.enableShadows()`, `ffe.disableShadows()`, `ffe.setShadowBias(bias)`, `ffe.setShadowArea(size)`
+- 3D demo: ground plane entity added, shadow setup in `ffe.init`
+- 9 new Catch2 tests in `tests/renderer/test_shadow_map.cpp`
+
+**GLAD loader expansions:**
+- Added `glGenFramebuffers`, `glBindFramebuffer`, `glFramebufferTexture2D`, `glCheckFramebufferStatus`, `glDeleteFramebuffers` (framebuffer functions)
+- Added `GL_FRAMEBUFFER`, `GL_DEPTH_ATTACHMENT`, `GL_FRAMEBUFFER_COMPLETE`, `GL_DEPTH_COMPONENT`, `GL_TEXTURE1`, `GL_COMPARE_REF_TO_TEXTURE`, `GL_LEQUAL`, `GL_TEXTURE_COMPARE_MODE`, `GL_TEXTURE_COMPARE_FUNC` (depth/texture constants)
+
+**CI improvements:**
+- `paths-ignore` added to CI workflow: docs-only commits (`*.md`, `docs/**`) skip build
+- `concurrency` group added: stale runs cancelled when new commits push to the same branch/PR
+
+**Process:**
+- Parallel implementation splits added to CLAUDE.md (features touching different directories can be implemented simultaneously)
+- ROADMAP content integrated into `project-state.md` (single source of truth for current phase)
+
+**Build fix cycles (2):**
+1. `shadow_map.h` included `glad.h` directly, causing duplicate symbol issues — resolved by forward-declaring GL types and including glad only in `.cpp`
+2. `GL_TEXTURE1` and several GL constants missing from custom GLAD loader — added to `glad.h`/`glad.c`
+
+**Expert panel:**
+- performance-critic: PASS (shadow map resolution fixed at 1024x1024, no per-frame allocations)
+- security-auditor: not invoked (shadow mapping does not touch attack surface per CLAUDE.md Section 5)
+- api-designer: updated `engine/renderer/.context.md` and `engine/scripting/.context.md` with shadow bindings
+
+**Build results:**
+
+| Compiler | Tests | Warnings | Result |
+|----------|-------|----------|--------|
+| Clang-18 | 568/568 | 0 | PASS |
+| GCC-13 | 568/568 | 0 | PASS |
+
+### Combined Stats (Sessions 42-43)
+
+- 568 total tests (9 new shadow + 29 from Session 42)
+- 7 new Lua bindings (3 camera/texture + 4 shadow)
+- 23 files changed in shadow mapping commit
+- Zero warnings on both compilers
+- Commits: `7c22337` (Session 42), `81db188` (Session 43)
+
+### Next Session (44)
+
+Phase 2 remaining: materials system (specular/normal maps), skeletal animation, 3D physics, skybox, 3D audio, point lights. PM to select priority.
