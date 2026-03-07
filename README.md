@@ -62,7 +62,7 @@ All subsystems below are implemented and working together in four demo games: "C
 - **Logging** -- printf-style logging with compile-time macro filtering and minimal lock scope.
 - **Bitmap Text Rendering** -- Built-in 8x8 pixel font with screen-space HUD text. `ffe.drawText()` from Lua with position, scale, and color. No external font files needed.
 - **Texture Loading** -- stb_image-based loader with path traversal prevention, write-once asset root, and configurable filter/wrap modes (LINEAR or NEAREST for pixel art).
-- **3D Mesh Rendering** -- glTF (.glb) mesh loading via cgltf. Blinn-Phong lighting with directional and point lights (up to 4). Materials system with diffuse, specular, and normal maps. Shadow mapping with PCF 3x3 filtering.
+- **3D Mesh Rendering** -- glTF (.glb) mesh loading via cgltf. Blinn-Phong lighting with directional and point lights (up to 4). Materials system with diffuse, specular, and normal maps. Shadow mapping with PCF 3x3 filtering. Skybox / cubemap environment rendering.
 - **3D Camera** -- FPS (yaw/pitch) and orbit (target/radius) camera modes with Lua bindings.
 - **Gamepad Input** -- GLFW gamepad support for up to 4 controllers with button and axis state tracking.
 - **TTF Font Rendering** -- stb_truetype-based TrueType font loading with atlas generation. Up to 8 fonts loaded simultaneously.
@@ -152,7 +152,7 @@ cmake --build build-gcc
 
 ### Running Tests
 
-618 Catch2 tests covering core, renderer (2D and 3D), scripting, audio, physics, and texture loading:
+627 Catch2 tests covering core, renderer (2D and 3D), scripting, audio, physics, and texture loading:
 
 ```bash
 ctest --test-dir build --output-on-failure
@@ -218,7 +218,7 @@ Classic brick-breaking game with particle effects -- brick destruction particles
 
 ### 3D Demo
 
-A 3D scene demonstrating mesh loading, Blinn-Phong lighting with directional and point lights, materials (specular/normal maps), and shadow mapping.
+A 3D scene demonstrating mesh loading, Blinn-Phong lighting with directional and point lights, materials (specular/normal maps), shadow mapping, and skybox environment rendering.
 
 ```bash
 ./build/examples/3d_demo/ffe_3d_demo
@@ -255,7 +255,7 @@ engine/
   scripting/    Lua sandbox, ffe.* API bindings, instruction budget
   editor/       Dear ImGui overlay, entity inspector
 
-tests/          618 Catch2 tests (core, renderer, scripting, audio, physics)
+tests/          627 Catch2 tests (core, renderer, scripting, audio, physics)
 examples/       Demo games (lua_demo, pong, breakout, hello_sprites, interactive_demo, headless_test)
 assets/
   textures/     PNG textures and spritesheets
@@ -303,7 +303,7 @@ FastFreeEngine is licensed under the [MIT License](LICENSE). Free and open sourc
 
 ## Status
 
-Active development. Phase 2 (3D Foundation) is in progress. The engine supports 2D and 3D rendering, point lights, materials (specular/normal maps), shadow mapping, audio, physics, scripting, and an editor overlay -- demonstrated in four playable demos including a 3D scene. See `docs/devlog.md` for the full session-by-session development history.
+Active development. Phase 2 (3D Foundation) is in progress. The engine supports 2D and 3D rendering, point lights, materials (specular/normal maps), shadow mapping, skybox environment rendering, audio, physics, scripting, and an editor overlay -- demonstrated in four playable demos including a 3D scene. See `docs/devlog.md` for the full session-by-session development history.
 
 **Getting started?** Read the [Quick-Start Tutorial](docs/tutorial.md) to build your first game in Lua.
 

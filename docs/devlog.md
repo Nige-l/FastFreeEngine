@@ -877,6 +877,44 @@ ROADMAP Phase 2 remaining: materials system (specular maps, normal maps), skelet
 
 **Stats:** 50 new tests, 8 new Lua bindings (~95 total), zero build fix cycles
 
-### Next Session (45)
+### Session 45: Skybox / Cubemap Environment Rendering
 
-Phase 2 remaining: skeletal animation, 3D physics, skybox, 3D audio. PM to select priority.
+**Skybox implementation:**
+- `SkyboxConfig` singleton added to ECS context (cubemap handle, VAO/VBO, enabled flag)
+- `SKYBOX` builtin shader (enum value 5) in `shader_library.h/.cpp` — GLSL 330 core, depth trick (`gl_Position.z = gl_Position.w` for max-depth rendering)
+- `loadCubemap()` / `unloadCubemap()` in `texture_loader.h/.cpp` — loads 6 face textures into GL cubemap
+- Skybox rendering integrated into `mesh_renderer.cpp` (drawn after 3D scene with depth func `GL_LEQUAL`)
+- `application.h/.cpp` extended with skybox lifecycle management
+
+**Security hardening:**
+- Path separator check in `loadCubemap()` — rejects paths containing `/` or `\`
+- File-size and byte-count validation on cubemap face images
+- Security review: MINOR ISSUES (all fixed in Phase 4 remediation)
+
+**3 new Lua bindings:**
+- `ffe.loadSkybox(right, left, top, bottom, front, back)` — loads 6 face textures
+- `ffe.unloadSkybox()` — releases cubemap resources
+- `ffe.setSkyboxEnabled(bool)` — toggles skybox rendering
+
+**3D demo updated:** skybox setup added to `ffe.init`
+
+**Files modified:** `shader_library.h/.cpp`, `texture_loader.h/.cpp`, `mesh_renderer.h/.cpp`, `application.h/.cpp`, `script_engine.cpp`, `examples/3d_demo/game.lua`, `tests/CMakeLists.txt`, `engine/renderer/.context.md`, `engine/scripting/.context.md`
+**Files created:** `tests/renderer/test_skybox.cpp`, `tests/scripting/test_skybox_bindings.cpp`
+
+**Expert panel:**
+- performance-critic: PASS
+- security-auditor: MINOR ISSUES (fixed in Phase 4)
+- api-designer: PASS — updated `.context.md` files
+- game-dev-tester: SKIPPED (existing API pattern, no new paradigm)
+
+**Build results:**
+
+| Compiler | Tests | Warnings | Result |
+|----------|-------|----------|--------|
+| Clang-18 | 627/627 | 0 | PASS |
+
+**Stats:** 9 new tests, 3 new Lua bindings (~98 total), zero build fix cycles
+
+### Next Session (46)
+
+Phase 2 remaining: skeletal animation, 3D physics, 3D audio. PM to select priority.
