@@ -3,6 +3,40 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-34 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 47: 3D Positional Audio
+
+### Summary
+
+Session 47 delivered 3D positional audio — inverse-distance-clamped attenuation with stereo panning, implemented in the existing custom mixer callback. The listener auto-syncs with the 3D camera each frame, with manual override available. Fire-and-forget `playSound3D()` follows the same pattern as existing `playSound()`.
+
+### Features Implemented
+
+- **Spatial voice mixing** — inverse-distance-clamped attenuation + stereo panning in the mixer callback
+- **Listener sync** — auto-updates from 3D camera position/orientation each frame; manual `setListenerPosition()` override
+- **Global config** — `setSound3DMinDistance` / `setSound3DMaxDistance` (defaults 1.0 / 100.0)
+- **NaN/Inf guards** on all float parameters
+- **Headless mode** — all 3D audio functions are safe no-ops
+- **4 new Lua bindings**: `ffe.playSound3D`, `ffe.setListenerPosition`, `ffe.setSound3DMinDistance`, `ffe.setSound3DMaxDistance`
+- **22 new tests** (14 unit + 8 Lua binding tests)
+
+### Build Notes
+
+- Added `ffe_audio` to `ffe_tests` link dependencies — `application.cpp` now calls `audio::updateListenerFromCamera()`, creating a dependency from ffe_core to ffe_audio.
+
+### Reviews
+
+- **performance-critic:** PASS (1 MINOR — sqrt+div could use rsqrt, backlog)
+- **api-designer:** PASS (updated .context.md)
+- **game-dev-tester:** SKIPPED — follows existing `ffe.*` binding pattern
+
+### Metrics
+
+- **686 tests** passing (Clang-18, zero warnings)
+- **4 new Lua bindings** (~102 total)
+- **22 new tests** this session
+
+---
+
 ## 2026-03-07 — Session 46: Skeletal Animation System
 
 ### Summary
