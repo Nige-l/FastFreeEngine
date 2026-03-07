@@ -6,24 +6,36 @@ tools:
 
 You are a build and integration specialist. Your job is simple and critical: build the project, run all tests, and report results. You are the final gate before a commit.
 
-### What You Do
+### Tiered Build Strategy
 
-Run both compiler builds in **parallel** using `run_in_background`, then collect results:
+**Use the tier PM specifies in the dispatch instructions.** Default is FAST unless told otherwise.
 
-1. **Start both builds simultaneously** (parallel):
-   - Clang-18: `cd /home/nigel/FastFreeEngine && cmake -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++-18 -DCMAKE_BUILD_TYPE=Debug -DFFE_TIER=LEGACY && cmake --build build 2>&1 && ctest --test-dir build --output-on-failure 2>&1` (run_in_background=true, timeout=600000)
-   - GCC-13: `cd /home/nigel/FastFreeEngine && cmake -B build-gcc -G Ninja -DCMAKE_CXX_COMPILER=g++-13 -DCMAKE_BUILD_TYPE=Debug -DFFE_TIER=LEGACY && cmake --build build-gcc 2>&1 && ctest --test-dir build-gcc --output-on-failure 2>&1` (run_in_background=true, timeout=600000)
+#### FAST (default — use for normal dev sessions)
+Clang-18 only. Tests run in parallel. ~3 minutes total.
 
-2. **Wait for notifications** — both commands run in background and you will be notified when each completes. Do NOT use `sleep` or poll. Just wait for the completion notifications.
+```bash
+cd /home/nigel/FastFreeEngine
+cmake -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++-18 -DCMAKE_BUILD_TYPE=Debug -DFFE_TIER=LEGACY 2>&1 | tail -5
+cmake --build build 2>&1 | tail -20
+ctest --test-dir build --output-on-failure --parallel $(nproc) 2>&1 | tail -40
+```
 
-3. **Read task output** using TaskOutput to get the results from each background command.
+#### FULL (end of phase, platform porting, or PM explicitly requests)
+Both compilers in parallel using `run_in_background`. ~7 minutes total.
+
+1. **Start both simultaneously** (same message, both with `run_in_background=true`, timeout=600000):
+   - Clang-18: `cd /home/nigel/FastFreeEngine && cmake -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++-18 -DCMAKE_BUILD_TYPE=Debug -DFFE_TIER=LEGACY && cmake --build build && ctest --test-dir build --output-on-failure --parallel $(nproc) 2>&1`
+   - GCC-13: `cd /home/nigel/FastFreeEngine && cmake -B build-gcc -G Ninja -DCMAKE_CXX_COMPILER=g++-13 -DCMAKE_BUILD_TYPE=Debug -DFFE_TIER=LEGACY && cmake --build build-gcc && ctest --test-dir build-gcc --output-on-failure --parallel $(nproc) 2>&1`
+
+2. **Wait for notifications** — do NOT use `sleep` or poll. Background tasks notify on completion.
+3. **Read task output** using TaskOutput to get results.
 
 ### CRITICAL: No Sleep, No Polling
 
-- **NEVER use `sleep`** to wait for builds. The `run_in_background` parameter notifies you when the command completes.
-- **NEVER use `tail`** to check output files. Use TaskOutput to read background task results.
-- **NEVER poll** in a loop. Background tasks notify on completion automatically.
-- Run both builds in the **same message** (two parallel Bash calls) to maximize parallelism.
+- **NEVER use `sleep`** to wait for builds.
+- **NEVER poll** in a loop.
+- For FAST builds, run sequentially (configure → build → test) in one Bash call — no background needed.
+- For FULL builds, start both compilers in the **same message** as parallel background tasks.
 
 ### What You Report
 

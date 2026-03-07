@@ -270,11 +270,14 @@ Any feedback from api-designer (`.context.md` updates, doc fixes) is also addres
 
 #### Phase 5 — Build + Test (`build-engineer`)
 
-`build-engineer` is invoked **once** after all code writing and review feedback is complete:
+`build-engineer` is invoked **once** after all code writing and review feedback is complete.
 
-1. Build on Clang-18 + run all tests
-2. Build on GCC-13 + run all tests
-3. Report results (test count, warnings, pass/fail, exact errors if any)
+**Tiered build strategy — PM specifies which tier in the dispatch instructions:**
+
+- **FAST (default):** Clang-18 only, tests run with `--parallel $(nproc)`. Use for normal dev sessions. ~3 minutes.
+- **FULL:** Both Clang-18 and GCC-13 in parallel. Use at end of a phase, for platform-porting sessions, or when PM explicitly requests dual-compiler verification. ~7 minutes.
+
+PM defaults to FAST unless there is a specific reason to run FULL (e.g., end of phase, changes to CMake/compiler flags, new platform work).
 
 If build fails: `engine-dev` fixes -> `build-engineer` rebuilds (expect 0-1 fix cycles). `build-engineer` does NOT fix code — it only reports errors.
 
