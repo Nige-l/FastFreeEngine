@@ -4,6 +4,7 @@
 #include "renderer/render_system.h"
 #include "renderer/mesh_loader.h"
 #include "renderer/mesh_renderer.h"
+#include "renderer/shadow_map.h"
 #include "renderer/text_renderer.h"
 #include "physics/collider2d.h"
 #include "physics/collision_system.h"
@@ -340,6 +341,11 @@ Result Application::startup() {
     m_world.registry().ctx().emplace<renderer::Camera*>(&m_camera3d);
     m_world.registry().ctx().emplace<renderer::SceneLighting3D>(m_sceneLighting);
 
+    // Emplace shadow config and shadow map pointers into ECS context for Lua access.
+    // Shadow mapping is disabled by default (ShadowConfig::enabled = false).
+    m_world.registry().ctx().emplace<ShadowConfig*>(&m_shadowConfig);
+    m_world.registry().ctx().emplace<ShadowMap*>(&m_shadowMap);
+
     // 5e. Initialize render queue (pre-allocated, persistent — not from the frame arena)
     renderer::initRenderQueue(m_renderQueue, renderer::MAX_DRAW_COMMANDS_LEGACY);
 
@@ -408,6 +414,12 @@ void Application::shutdown() {
     // 8. (nothing)
     // 7. Unregister systems (clear handled by World destructor)
     // 6. Shutdown scripting — not yet implemented
+
+    // 5e1. Destroy shadow map GPU resources (if any) before RHI shutdown.
+    if (m_shadowMap.fbo != 0) {
+        destroyShadowMap(m_shadowMap);
+        m_shadowConfig.enabled = false;
+    }
 
     // 5e2. Unload all 3D meshes before shutting down the RHI
     renderer::unloadAllMeshes();
@@ -498,7 +510,7 @@ void Application::render(const float alpha) {
         // Sync the ECS context camera pointer with the current m_camera3d values
         // (Lua may have updated m_camera3d via ffe.set3DCamera — the pointer
         // in ctx points directly to m_camera3d so it's always current)
-        renderer::meshRenderSystem(m_world, m_camera3d);
+        renderer::meshRenderSystem(m_world, m_camera3d, m_shadowConfig, m_shadowMap);
     }
 
     // Apply camera shake (if active) and compute VP matrix.

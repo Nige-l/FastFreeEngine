@@ -103,6 +103,9 @@ int gladLoadGLLoader(GLADloadproc load);
 #define GL_DEPTH_ATTACHMENT               0x8D00
 #define GL_STENCIL_ATTACHMENT             0x8D20
 #define GL_FRAMEBUFFER_COMPLETE           0x8CD5
+#define GL_DEPTH_COMPONENT                0x1902
+#define GL_DEPTH_COMPONENT24              0x81A6
+#define GL_NONE                           0
 
 /* Texture */
 #define GL_TEXTURE_2D                     0x0DE1
@@ -117,7 +120,12 @@ int gladLoadGLLoader(GLADloadproc load);
 #define GL_LINEAR_MIPMAP_LINEAR           0x2703
 #define GL_REPEAT                         0x2901
 #define GL_CLAMP_TO_EDGE                  0x812F
+#define GL_CLAMP_TO_BORDER                0x812D
 #define GL_MIRRORED_REPEAT                0x8370
+#define GL_TEXTURE_BORDER_COLOR           0x1004
+#define GL_TEXTURE_COMPARE_MODE           0x884C
+#define GL_TEXTURE_COMPARE_FUNC           0x884D
+#define GL_COMPARE_REF_TO_TEXTURE         0x884E
 
 /* Texture formats */
 #define GL_RED                            0x1903
@@ -273,6 +281,16 @@ typedef void (GLAD_API_PTR *PFNGLUNIFORM4FVPROC)(GLint, GLsizei, const GLfloat*)
 typedef void (GLAD_API_PTR *PFNGLUNIFORMMATRIX3FVPROC)(GLint, GLsizei, GLboolean, const GLfloat*);
 typedef void (GLAD_API_PTR *PFNGLUNIFORMMATRIX4FVPROC)(GLint, GLsizei, GLboolean, const GLfloat*);
 
+/* Framebuffer object functions (core in GL 3.3) */
+typedef void     (GLAD_API_PTR *PFNGLGENFRAMEBUFFERSPROC)(GLsizei, GLuint*);
+typedef void     (GLAD_API_PTR *PFNGLDELETEFRAMEBUFFERSPROC)(GLsizei, const GLuint*);
+typedef void     (GLAD_API_PTR *PFNGLBINDFRAMEBUFFERPROC)(GLenum, GLuint);
+typedef void     (GLAD_API_PTR *PFNGLFRAMEBUFFERTEXTURE2DPROC)(GLenum, GLenum, GLenum, GLuint, GLint);
+typedef GLenum   (GLAD_API_PTR *PFNGLCHECKFRAMEBUFFERSTATUSPROC)(GLenum);
+typedef void     (GLAD_API_PTR *PFNGLDRAWBUFFERPROC)(GLenum);
+typedef void     (GLAD_API_PTR *PFNGLREADBUFFERPROC)(GLenum);
+typedef void     (GLAD_API_PTR *PFNGLTEXPARAMETERFVPROC)(GLenum, GLenum, const GLfloat*);
+
 /* Pixel read functions */
 typedef void (GLAD_API_PTR *PFNGLREADPIXELSPROC)(GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, void*);
 
@@ -347,6 +365,15 @@ extern PFNGLUNIFORM4FVPROC             glad_glUniform4fv;
 extern PFNGLUNIFORMMATRIX3FVPROC       glad_glUniformMatrix3fv;
 extern PFNGLUNIFORMMATRIX4FVPROC       glad_glUniformMatrix4fv;
 
+extern PFNGLGENFRAMEBUFFERSPROC         glad_glGenFramebuffers;
+extern PFNGLDELETEFRAMEBUFFERSPROC      glad_glDeleteFramebuffers;
+extern PFNGLBINDFRAMEBUFFERPROC         glad_glBindFramebuffer;
+extern PFNGLFRAMEBUFFERTEXTURE2DPROC    glad_glFramebufferTexture2D;
+extern PFNGLCHECKFRAMEBUFFERSTATUSPROC  glad_glCheckFramebufferStatus;
+extern PFNGLDRAWBUFFERPROC              glad_glDrawBuffer;
+extern PFNGLREADBUFFERPROC              glad_glReadBuffer;
+extern PFNGLTEXPARAMETERFVPROC          glad_glTexParameterfv;
+
 extern PFNGLREADPIXELSPROC              glad_glReadPixels;
 
 extern PFNGLDRAWARRAYSPROC              glad_glDrawArrays;
@@ -417,6 +444,15 @@ extern PFNGLDEBUGMESSAGECONTROLPROC     glad_glDebugMessageControl;
 #define glUniform4fv              glad_glUniform4fv
 #define glUniformMatrix3fv        glad_glUniformMatrix3fv
 #define glUniformMatrix4fv        glad_glUniformMatrix4fv
+
+#define glGenFramebuffers         glad_glGenFramebuffers
+#define glDeleteFramebuffers      glad_glDeleteFramebuffers
+#define glBindFramebuffer         glad_glBindFramebuffer
+#define glFramebufferTexture2D    glad_glFramebufferTexture2D
+#define glCheckFramebufferStatus  glad_glCheckFramebufferStatus
+#define glDrawBuffer              glad_glDrawBuffer
+#define glReadBuffer              glad_glReadBuffer
+#define glTexParameterfv          glad_glTexParameterfv
 
 #define glReadPixels              glad_glReadPixels
 

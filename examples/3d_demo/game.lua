@@ -125,6 +125,18 @@ if meshHandle == 0 then
 else
     ffe.log("cube.glb loaded (handle=" .. tostring(meshHandle) .. ")")
 
+    -- Enable shadow mapping for the 3D scene.
+    ffe.enableShadows(1024)
+    ffe.setShadowBias(0.005)
+    ffe.setShadowArea(20, 20, 0.1, 40)
+
+    -- Ground plane to receive shadows (reuses the cube mesh, scaled flat).
+    local ground = ffe.createEntity3D(meshHandle, 0, -1.5, 0)
+    if ground ~= 0 then
+        ffe.setMeshColor(ground, 0.45, 0.45, 0.45, 1.0)
+        ffe.setTransform3D(ground, 0, -1.5, 0,  0, 0, 0,  12, 0.15, 12)
+    end
+
     -- -----------------------------------------------------------------
     -- Entity A: red cube at the origin, spins on Y axis only
     -- -----------------------------------------------------------------
@@ -277,7 +289,7 @@ function update(entityId, dt)
 
     -- Status: mesh load result
     if meshLoaded then
-        local entStr = "Entities: 3  |  Mesh: cube.glb"
+        local entStr = "Entities: 4  |  Mesh: cube.glb  |  Shadows: ON"
         ffe.drawText(entStr, sw / 2 - (#entStr * 8), 8, 2, 0.6, 0.8, 1.0, 0.85)
     else
         ffe.drawText("cube.glb NOT FOUND -- HUD only mode", 12, 44, 2, 1, 0.4, 0.2, 1)
@@ -310,6 +322,9 @@ end
 function shutdown()
     -- Unload the mesh.  ffe.unloadMesh is a no-op when meshHandle == 0,
     -- but we guard anyway for clarity.
+    -- Disable shadows before unloading mesh to release GPU resources.
+    ffe.disableShadows()
+
     if meshHandle ~= 0 then
         ffe.unloadMesh(meshHandle)
         meshHandle = 0

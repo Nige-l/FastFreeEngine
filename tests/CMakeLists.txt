@@ -13,6 +13,7 @@ add_executable(ffe_tests
     renderer/test_ttf_font.cpp
     renderer/test_mesh_loader.cpp
     renderer/test_screenshot.cpp
+    renderer/test_shadow_map.cpp
 )
 
 target_link_libraries(ffe_tests

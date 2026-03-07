@@ -10,6 +10,7 @@ enum class BuiltinShader : u8 {
     TEXTURED         = 1,
     SPRITE           = 2,
     MESH_BLINN_PHONG = 3,  // 3D Blinn-Phong lighting shader (ADR-007)
+    SHADOW_DEPTH     = 4,  // Depth-only pass for directional light shadow mapping
     COUNT
 };
 

@@ -14,6 +14,7 @@ extern "C" {
 #include "renderer/render_system.h"
 #include "renderer/mesh_loader.h"
 #include "renderer/mesh_renderer.h"
+#include "renderer/shadow_map.h"
 #include "renderer/screenshot.h"
 #include "renderer/rhi.h"
 #include "renderer/texture_loader.h"
@@ -4272,6 +4273,161 @@ void ScriptEngine::registerEcsBindings() {
     };
     lua_pushcfunction(L, ffe_setAmbientColor);
     lua_setfield(L, -2, "setAmbientColor");
+
+    // ----------------------------------------------------------------
+    // Shadow mapping bindings
+    // ----------------------------------------------------------------
+
+    // ffe.enableShadows(size: int) -> boolean
+    // Enable shadow mapping with a shadow map of the given resolution.
+    // size must be a power of 2 in [256, 4096]. Default: 1024.
+    // Returns true on success, false on failure.
+    auto ffe_enableShadows = [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); lua_pushboolean(state, 0); return 1; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        auto** cfgPtr = world->registry().ctx().find<ffe::ShadowConfig*>();
+        auto** mapPtr = world->registry().ctx().find<ffe::ShadowMap*>();
+        if (cfgPtr == nullptr || mapPtr == nullptr) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.enableShadows: shadow context not in ECS");
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        ffe::ShadowConfig* cfg = *cfgPtr;
+        ffe::ShadowMap* sm     = *mapPtr;
+
+        const int size = static_cast<int>(luaL_optinteger(state, 1, 1024));
+
+        // Validate power of 2 in [256, 4096]
+        const bool isPow2 = (size > 0) && ((size & (size - 1)) == 0);
+        if (!isPow2 || size < 256 || size > 4096) {
+            FFE_LOG_WARN("ScriptEngine",
+                         "ffe.enableShadows: size must be power of 2 in [256, 4096] (got %d)", size);
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+
+        // Already enabled with same resolution — no-op success.
+        if (cfg->enabled && sm->resolution == size && sm->fbo != 0) {
+            lua_pushboolean(state, 1);
+            return 1;
+        }
+
+        // Destroy existing shadow map if resolution changed.
+        if (sm->fbo != 0) {
+            ffe::destroyShadowMap(*sm);
+        }
+
+        *sm = ffe::createShadowMap(size);
+        if (sm->fbo == 0) {
+            FFE_LOG_ERROR("ScriptEngine",
+                          "ffe.enableShadows: createShadowMap(%d) failed", size);
+            cfg->enabled = false;
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+
+        cfg->enabled    = true;
+        cfg->resolution = size;
+        lua_pushboolean(state, 1);
+        return 1;
+    };
+    lua_pushcfunction(L, ffe_enableShadows);
+    lua_setfield(L, -2, "enableShadows");
+
+    // ffe.disableShadows() -> nothing
+    // Disable shadow mapping and free GPU resources.
+    auto ffe_disableShadows = [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        auto** cfgPtr = world->registry().ctx().find<ffe::ShadowConfig*>();
+        auto** mapPtr = world->registry().ctx().find<ffe::ShadowMap*>();
+        if (cfgPtr == nullptr || mapPtr == nullptr) { return 0; }
+        ffe::ShadowConfig* cfg = *cfgPtr;
+        ffe::ShadowMap* sm     = *mapPtr;
+
+        if (!cfg->enabled) { return 0; }
+
+        ffe::destroyShadowMap(*sm);
+        cfg->enabled = false;
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_disableShadows);
+    lua_setfield(L, -2, "disableShadows");
+
+    // ffe.setShadowBias(bias: number) -> nothing
+    // Set the shadow depth bias. Clamped to [0, 0.1].
+    auto ffe_setShadowBias = [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        auto** cfgPtr = world->registry().ctx().find<ffe::ShadowConfig*>();
+        if (cfgPtr == nullptr) { return 0; }
+        ffe::ShadowConfig* cfg = *cfgPtr;
+
+        const float bias = static_cast<float>(luaL_optnumber(state, 1, 0.005));
+        if (!std::isfinite(bias)) {
+            FFE_LOG_WARN("ScriptEngine", "ffe.setShadowBias: non-finite value rejected");
+            return 0;
+        }
+        cfg->bias = std::clamp(bias, 0.0f, 0.1f);
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_setShadowBias);
+    lua_setfield(L, -2, "setShadowBias");
+
+    // ffe.setShadowArea(width, height, near, far: number) -> nothing
+    // Configure the orthographic frustum for the shadow light camera.
+    // All values must be positive, finite, and near < far.
+    auto ffe_setShadowArea = [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        auto** cfgPtr = world->registry().ctx().find<ffe::ShadowConfig*>();
+        if (cfgPtr == nullptr) { return 0; }
+        ffe::ShadowConfig* cfg = *cfgPtr;
+
+        const float width  = static_cast<float>(luaL_optnumber(state, 1, 20.0));
+        const float height = static_cast<float>(luaL_optnumber(state, 2, 20.0));
+        const float nearP  = static_cast<float>(luaL_optnumber(state, 3, 0.1));
+        const float farP   = static_cast<float>(luaL_optnumber(state, 4, 50.0));
+
+        if (!std::isfinite(width) || !std::isfinite(height) ||
+            !std::isfinite(nearP) || !std::isfinite(farP)) {
+            FFE_LOG_WARN("ScriptEngine", "ffe.setShadowArea: non-finite value rejected");
+            return 0;
+        }
+        if (width <= 0.0f || height <= 0.0f || nearP <= 0.0f || farP <= 0.0f) {
+            FFE_LOG_WARN("ScriptEngine", "ffe.setShadowArea: all values must be > 0");
+            return 0;
+        }
+        if (nearP >= farP) {
+            FFE_LOG_WARN("ScriptEngine", "ffe.setShadowArea: near (%.3f) must be < far (%.3f)",
+                         static_cast<double>(nearP), static_cast<double>(farP));
+            return 0;
+        }
+
+        cfg->areaWidth  = width;
+        cfg->areaHeight = height;
+        cfg->nearPlane  = nearP;
+        cfg->farPlane   = farP;
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_setShadowArea);
+    lua_setfield(L, -2, "setShadowArea");
 
     // Set the 'ffe' table as a global.
     // ----------------------------------------------------------------

@@ -72,6 +72,15 @@ PFNGLUNIFORM4FVPROC              glad_glUniform4fv = NULL;
 PFNGLUNIFORMMATRIX3FVPROC        glad_glUniformMatrix3fv = NULL;
 PFNGLUNIFORMMATRIX4FVPROC        glad_glUniformMatrix4fv = NULL;
 
+PFNGLGENFRAMEBUFFERSPROC         glad_glGenFramebuffers = NULL;
+PFNGLDELETEFRAMEBUFFERSPROC      glad_glDeleteFramebuffers = NULL;
+PFNGLBINDFRAMEBUFFERPROC         glad_glBindFramebuffer = NULL;
+PFNGLFRAMEBUFFERTEXTURE2DPROC    glad_glFramebufferTexture2D = NULL;
+PFNGLCHECKFRAMEBUFFERSTATUSPROC  glad_glCheckFramebufferStatus = NULL;
+PFNGLDRAWBUFFERPROC              glad_glDrawBuffer = NULL;
+PFNGLREADBUFFERPROC              glad_glReadBuffer = NULL;
+PFNGLTEXPARAMETERFVPROC          glad_glTexParameterfv = NULL;
+
 PFNGLREADPIXELSPROC              glad_glReadPixels = NULL;
 
 PFNGLDRAWARRAYSPROC              glad_glDrawArrays = NULL;
@@ -179,6 +188,15 @@ int gladLoadGLLoader(GLADloadproc load) {
     glad_glUniform4fv = (PFNGLUNIFORM4FVPROC)load("glUniform4fv");
     glad_glUniformMatrix3fv = (PFNGLUNIFORMMATRIX3FVPROC)load("glUniformMatrix3fv");
     glad_glUniformMatrix4fv = (PFNGLUNIFORMMATRIX4FVPROC)load("glUniformMatrix4fv");
+
+    glad_glGenFramebuffers = (PFNGLGENFRAMEBUFFERSPROC)load("glGenFramebuffers");
+    glad_glDeleteFramebuffers = (PFNGLDELETEFRAMEBUFFERSPROC)load("glDeleteFramebuffers");
+    glad_glBindFramebuffer = (PFNGLBINDFRAMEBUFFERPROC)load("glBindFramebuffer");
+    glad_glFramebufferTexture2D = (PFNGLFRAMEBUFFERTEXTURE2DPROC)load("glFramebufferTexture2D");
+    glad_glCheckFramebufferStatus = (PFNGLCHECKFRAMEBUFFERSTATUSPROC)load("glCheckFramebufferStatus");
+    glad_glDrawBuffer = (PFNGLDRAWBUFFERPROC)load("glDrawBuffer");
+    glad_glReadBuffer = (PFNGLREADBUFFERPROC)load("glReadBuffer");
+    glad_glTexParameterfv = (PFNGLTEXPARAMETERFVPROC)load("glTexParameterfv");
 
     glad_glReadPixels = (PFNGLREADPIXELSPROC)load("glReadPixels");
 

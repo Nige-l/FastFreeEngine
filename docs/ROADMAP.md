@@ -1,8 +1,8 @@
 # FastFreeEngine Roadmap
 
-This document defines the phased development plan for FFE. Each phase builds on the previous one. Phases are not calendar-bound — they are milestone-bound. A phase is complete when all its deliverables are working, tested, and documented.
+> **Archival reference.** Agents should NOT read this file every session. For current-phase status and remaining deliverables, read `docs/project-state.md` instead. This file is the full historical record of all phases and is only consulted when planning a phase transition or reviewing the overall project arc.
 
-The engine is developed in daily sessions. Each session should advance the current phase. `project-manager` plans sessions against this roadmap.
+This document defines the phased development plan for FFE. Each phase builds on the previous one. Phases are not calendar-bound — they are milestone-bound. A phase is complete when all its deliverables are working, tested, and documented.
 
 ---
 
@@ -161,10 +161,10 @@ These apply throughout development and are never "done":
 
 ## How Sessions Map to This Roadmap
 
-1. `project-manager` reads this roadmap at session start
-2. Sessions pick items from the **current phase's remaining list**
-3. If a phase is nearly complete, PM can start planning the next phase's architecture
+1. `project-manager` reads `docs/project-state.md` at session start — it contains the current phase's remaining deliverables
+2. PM only reads this full ROADMAP.md when planning a phase transition or when the user asks about long-term direction
+3. When a deliverable is completed, PM updates `project-state.md` (moves item from Remaining to Delivered)
 4. Phase transitions require a review: all exit criteria met, all tests passing, docs updated
-5. Daily alignment checks with the user keep the roadmap honest
+5. When a phase is completed, PM updates both this file and `project-state.md`
 
 This roadmap is a living document. Update it as priorities shift and new requirements emerge.

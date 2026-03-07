@@ -18,7 +18,7 @@ Claude has two jobs: (1) relay between the user and the agent team, and (2) disp
 
 ### The Plan-Dispatch-Relay Loop
 
-1. **PM plans.** Claude invokes `project-manager` with the user's goal. PM reads context (CLAUDE.md, `docs/project-state.md`, recent devlog, roadmap) and outputs an ordered plan: which agents to invoke, in what order, with what instructions, and which can run in parallel.
+1. **PM plans.** Claude invokes `project-manager` with the user's goal. PM reads context (CLAUDE.md, `docs/project-state.md` which includes current-phase roadmap items, and recent devlog if needed) and outputs an ordered plan: which agents to invoke, in what order, with what instructions, and which can run in parallel.
 2. **Claude dispatches.** Claude reads PM's plan and spawns agents exactly as specified. When PM says agents can run in parallel, Claude dispatches them simultaneously. When PM says sequential, Claude waits for each to complete before spawning the next.
 3. **Claude relays results.** After agents complete, Claude feeds their output back to PM for decisions (fix cycles, commit, devlog).
 4. **Repeat.** PM may issue follow-up dispatches based on results. Claude executes those too.
@@ -43,7 +43,7 @@ Claude must NEVER decide on its own which implementation, review, or design agen
 Claude must NOT:
 - Use `Edit` or `Write` to modify any engine, test, or example file in the repository
 - Use `Bash` to compile, build, run tests, or execute any program
-- Use `Read` or `Grep` to examine engine source code for the purpose of planning or implementing changes (reading CLAUDE.md, ROADMAP.md, devlog.md, and memory files for context is permitted)
+- Use `Read` or `Grep` to examine engine source code for the purpose of planning or implementing changes (reading CLAUDE.md, project-state.md, devlog.md, and memory files for context is permitted)
 - Make engineering decisions — which tier to target, which data structure to use, how to implement a feature
 - Reorder, skip, or modify PM's dispatch plan without user override
 - Act as a substitute for any agent — even if Claude "knows how" to do the work
@@ -63,7 +63,7 @@ When PM tried to dispatch agents itself, it could not — only Claude has access
 Every session follows this exact sequence:
 1. User states a goal
 2. Claude invokes `project-manager` with the goal and any relevant context
-3. PM reads context (CLAUDE.md, `docs/project-state.md`, recent devlog, roadmap) and produces a session plan with explicit agent dispatch instructions
+3. PM reads context (CLAUDE.md, `docs/project-state.md` which includes current-phase roadmap items) and produces a session plan with explicit agent dispatch instructions
 4. Claude dispatches agents according to PM's plan (parallel where PM says parallel, sequential where PM says sequential)
 5. Claude feeds agent results back to PM
 6. PM decides next steps: fix cycles, additional dispatches, or commit
@@ -253,6 +253,15 @@ Skip Phase 1 entirely for straightforward features where the implementation path
 
 `engine-dev` owns `tests/` and writes Catch2 tests alongside the implementation. There is no separate test-writing step.
 
+##### Parallel Implementation Splits
+
+For large features spanning 5+ files across independent subsystems, PM may split Phase 2 into a sequential foundation step followed by parallel workers:
+
+1. **Foundation (sequential):** One agent writes shared headers, types, and structs that other files depend on. This completes before parallel work begins.
+2. **Workers (parallel):** Multiple agents work simultaneously on independent file groups. Each agent gets an explicit file list. All agents may READ foundation files but no two agents edit the same file in the same round.
+
+This applies to any writing agent — `engine-dev`, `renderer-specialist`, `game-dev-tester`, `api-designer` — as long as file ownership does not conflict. PM specifies the split in the dispatch plan; Claude executes it. PM uses this when the work naturally divides into independent file groups, not as a default for every feature.
+
 #### Phase 3 — Expert Panel (parallel — MUST be dispatched simultaneously, NO build)
 
 All reviewers run in parallel with zero dependencies between them:
@@ -320,7 +329,8 @@ If `game-dev-tester` is not invoked, document the skip in the devlog.
 ### Multi-Feature Sessions
 
 When a session includes multiple features:
-- Parallelize Phase 2 if features touch different directories with no shared headers
+- Parallelize Phase 2 across features if they touch different directories with no shared headers
+- Within a single feature, use the Parallel Implementation Splits pattern (see Phase 2) when applicable
 - Phase 3 reviews everything in **one pass** (reviewers see all changes at once)
 - **One Phase 5** after all implementation and remediation completes
 
@@ -424,4 +434,4 @@ Performance is how we deliver on this mission. By running well on old hardware, 
 | Can Claude reorder or skip agents in PM's plan? | **No** — follow PM's plan exactly unless the user explicitly overrides |
 | Can Claude run builds or tests? | **No** — `build-engineer` does that; Claude only dispatches |
 | Who does git commits? | **`project-manager`** — no other agent commits |
-| Where do I get project context? | Read `docs/project-state.md` first, then recent `docs/devlog.md` if needed |
+| Where do I get project context? | Read `docs/project-state.md` first (includes current-phase roadmap), then recent `docs/devlog.md` if needed. Full roadmap at `docs/ROADMAP.md` is archival — only for phase transitions. |

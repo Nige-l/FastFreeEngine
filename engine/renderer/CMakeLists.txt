@@ -14,6 +14,7 @@ set(RENDERER_SOURCES
     font.cpp
     mesh_loader.cpp
     mesh_renderer.cpp
+    shadow_map.cpp
     screenshot.cpp
 )
 

@@ -8,6 +8,7 @@
 #include "renderer/mesh_renderer.h"
 #include "renderer/render_queue.h"
 #include "renderer/shader_library.h"
+#include "renderer/shadow_map.h"
 #include "renderer/sprite_batch.h"
 #include "renderer/text_renderer.h"
 
@@ -75,6 +76,8 @@ private:
     renderer::SpriteBatch m_spriteBatch;
     rhi::TextureHandle m_defaultWhiteTexture;
     renderer::TextRenderer m_textRenderer;
+    ShadowConfig m_shadowConfig;
+    ShadowMap m_shadowMap;
     glm::vec4 m_clearColor = {0.1f, 0.1f, 0.12f, 1.0f};
 
 #ifdef FFE_EDITOR

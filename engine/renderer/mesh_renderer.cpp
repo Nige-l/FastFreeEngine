@@ -4,6 +4,11 @@
 // Sets up depth test, uploads per-entity uniforms, and issues indexed draw calls.
 // After all mesh entities, restores 2D-compatible pipeline state.
 //
+// Shadow mapping: if shadowCfg.enabled and shadowMap.fbo != 0, a depth-only
+// pre-pass renders all mesh entities into the shadow FBO using the SHADOW_DEPTH
+// shader. The resulting depth texture is then bound to texture unit 1 during
+// the main Blinn-Phong pass and sampled with 3x3 PCF in the fragment shader.
+//
 // Tier: LEGACY (OpenGL 3.3 core). No DSA. No instancing.
 
 #include "renderer/mesh_renderer.h"
@@ -12,6 +17,7 @@
 #include "renderer/rhi.h"
 #include "renderer/rhi_types.h"
 #include "renderer/shader_library.h"
+#include "renderer/shadow_map.h"
 #include "renderer/camera.h"
 #include "core/logging.h"
 
@@ -23,7 +29,8 @@
 
 namespace ffe::renderer {
 
-void meshRenderSystem(World& world, const Camera& camera3d) {
+void meshRenderSystem(World& world, const Camera& camera3d,
+                      const ShadowConfig& shadowCfg, const ShadowMap& shadowMap) {
     // --- Retrieve shader library from ECS context ---
     const auto* shaderLib = world.registry().ctx().find<renderer::ShaderLibrary>();
     if (shaderLib == nullptr) {
@@ -60,6 +67,79 @@ void meshRenderSystem(World& world, const Camera& camera3d) {
         return;
     }
 
+    // --- Compute light-space matrix once (reused by shadow pre-pass and main pass) ---
+    glm::mat4 lightSpaceMat{1.0f};
+    if (shadowCfg.enabled) {
+        lightSpaceMat = computeLightSpaceMatrix(lighting->lightDir, shadowCfg);
+    }
+
+    // --- Shadow depth pre-pass ---
+    // Render all mesh entities from the light's perspective into the shadow FBO.
+    // Only executed when shadows are enabled and a valid shadow FBO exists.
+    if (shadowCfg.enabled && shadowMap.fbo != 0) {
+        const rhi::ShaderHandle shadowShader = getShader(*shaderLib, BuiltinShader::SHADOW_DEPTH);
+        if (rhi::isValid(shadowShader)) {
+            // Save the current viewport dimensions to restore after the shadow pass.
+            const i32 savedVpW = rhi::getViewportWidth();
+            const i32 savedVpH = rhi::getViewportHeight();
+
+            // Bind shadow FBO and set viewport to shadow map resolution.
+            glBindFramebuffer(GL_FRAMEBUFFER, shadowMap.fbo);
+            glViewport(0, 0,
+                       static_cast<GLsizei>(shadowMap.resolution),
+                       static_cast<GLsizei>(shadowMap.resolution));
+            glClear(GL_DEPTH_BUFFER_BIT);
+
+            // Enable depth test + write for the shadow pass.
+            glEnable(GL_DEPTH_TEST);
+            glDepthFunc(GL_LESS);
+            glDepthMask(GL_TRUE);
+
+            // Use front-face culling during shadow pass to reduce shadow acne
+            // (Peter Pan artifacts). Back faces write depth instead of front faces.
+            glEnable(GL_CULL_FACE);
+            glCullFace(GL_FRONT);
+
+            rhi::bindShader(shadowShader);
+
+            // Upload pre-computed light-space VP matrix.
+            rhi::setUniformMat4(shadowShader, "u_lightSpaceMatrix", lightSpaceMat);
+
+            // Per-entity: build model matrix and draw.
+            for (const auto [entity, transform3d, meshComp] : view.each()) {
+                const MeshHandle handle = meshComp.meshHandle;
+                if (!isValid(handle)) {
+                    continue;
+                }
+
+                const MeshGpuRecord* rec = getMeshGpuRecord(handle);
+                if (rec == nullptr) {
+                    continue;
+                }
+
+                // Build model matrix: translate * rotate * scale
+                glm::mat4 model = glm::mat4(1.0f);
+                model = glm::translate(model, transform3d.position);
+                model = model * glm::mat4_cast(transform3d.rotation);
+                model = glm::scale(model, transform3d.scale);
+
+                rhi::setUniformMat4(shadowShader, "u_model", model);
+
+                glBindVertexArray(rec->vaoId);
+                glDrawElements(GL_TRIANGLES,
+                               static_cast<GLsizei>(rec->indexCount),
+                               GL_UNSIGNED_INT,
+                               nullptr);
+            }
+            glBindVertexArray(0);
+
+            // Restore: unbind shadow FBO, restore viewport, reset cull face.
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glViewport(0, 0, static_cast<GLsizei>(savedVpW), static_cast<GLsizei>(savedVpH));
+            glCullFace(GL_BACK);
+        }
+    }
+
     // --- Set 3D pipeline state: depth test LESS, cull BACK, no blend ---
     rhi::PipelineState ps3d;
     ps3d.blend      = rhi::BlendMode::NONE;
@@ -85,6 +165,18 @@ void meshRenderSystem(World& world, const Camera& camera3d) {
     // u_viewProjection is uploaded by setViewProjection + bindShader above (cached in RHI).
     // Explicitly upload here too for clarity — the RHI caches it in the shader program.
     rhi::setUniformMat4(meshShader, "u_viewProjection", vpMatrix);
+
+    // --- Shadow map uniforms for the Blinn-Phong pass ---
+    if (shadowCfg.enabled && shadowMap.depthTexture != 0) {
+        glActiveTexture(GL_TEXTURE0 + 1);
+        glBindTexture(GL_TEXTURE_2D, shadowMap.depthTexture);
+        rhi::setUniformInt(meshShader, "u_shadowMap", 1);
+        rhi::setUniformInt(meshShader, "u_shadowsEnabled", 1);
+        rhi::setUniformFloat(meshShader, "u_shadowBias", shadowCfg.bias);
+        rhi::setUniformMat4(meshShader, "u_lightSpaceMatrix", lightSpaceMat);
+    } else {
+        rhi::setUniformInt(meshShader, "u_shadowsEnabled", 0);
+    }
 
     // --- Per-entity draw loop ---
     for (const auto [entity, transform3d, meshComp] : view.each()) {
@@ -140,7 +232,14 @@ void meshRenderSystem(World& world, const Camera& camera3d) {
                        static_cast<GLsizei>(rec->indexCount),
                        GL_UNSIGNED_INT,
                        nullptr);
-        glBindVertexArray(0);
+    }
+    glBindVertexArray(0);
+
+    // --- Unbind shadow texture from unit 1 after all entities drawn ---
+    if (shadowCfg.enabled && shadowMap.depthTexture != 0) {
+        glActiveTexture(GL_TEXTURE0 + 1);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glActiveTexture(GL_TEXTURE0);
     }
 
     // --- Restore 2D-compatible pipeline state ---

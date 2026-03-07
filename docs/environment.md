@@ -496,3 +496,34 @@ and was not changed.
 - File diff confirms all changes are scoped to the three targeted sections.
 - No engine source files were modified.
 - macOS configure step verified to already carry the toolchain file argument — no change needed.
+
+### 2026-03-07: CI workflow — paths-ignore and concurrency group
+
+**What changed:**
+
+File: `.github/workflows/ci.yml`
+
+1. Added `paths-ignore` to the `push` trigger so that docs-only commits do not trigger CI:
+   - `docs/**` — any file under the docs directory
+   - `*.md` — any Markdown file in the repo root (README.md, CONTRIBUTING.md, etc.)
+   - `.claude/**` — agent configuration files
+
+2. Added a `concurrency` block after `permissions:` and before `jobs:`:
+   ```yaml
+   concurrency:
+     group: ci-${{ github.ref }}
+     cancel-in-progress: true
+   ```
+   This cancels any in-flight CI run on the same branch when a new push arrives, avoiding
+   wasted runner minutes on superseded commits.
+
+**Why:**
+- Reduce email notification spam from CI runs triggered by documentation-only commits that
+  cannot possibly affect the build.
+- Avoid queueing redundant CI runs when rapid successive pushes occur on the same branch —
+  only the latest push matters.
+
+**Verification:**
+- YAML validated with `python3 -c "import yaml; yaml.safe_load(open(...))"` — valid.
+- `git diff` confirms only the two targeted additions; no other lines changed.
+- No engine source files were modified.
