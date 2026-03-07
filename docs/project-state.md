@@ -6,7 +6,7 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 70 |
+| Last session | 71 |
 | Total tests | 1005 (FAST build: Clang-18, zero warnings) |
 | Total Lua bindings | ~169 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
@@ -26,7 +26,7 @@
 3. **Breakout** -- brick-breaker 2D, Lua-only
 4. **3D Demo** -- mesh loading, Blinn-Phong, point lights, materials, shadows, skybox
 5. **Net Arena** -- 2D multiplayer arena, client-side prediction, server reconciliation
-6. **Echoes of the Ancients** -- 3D showcase (IN PROGRESS: Level 1+2 complete, Level 3 next)
+6. **Echoes of the Ancients** -- 3D showcase (IN PROGRESS: Levels 1-3 complete, polish pass next)
 
 ## Known Issues / Deferred Items
 
@@ -40,11 +40,11 @@
 
 | Session | Summary |
 |---------|---------|
-| 70 | Phase 6 M3 (part 2): Real CC0 3D models (7 .glb), Suno music integration, Level 2 gameplay (crystal puzzle, timed bridges, boss guardian, portal victory), GitHub Pages fix (deleted Jekyll workflow), macOS CI disabled. README update. 1005 tests (FAST). |
-| 69 | Phase 6 M3 (part 1): Level 2 "The Temple" (underground, dark lighting, lava pit, crystal pedestals, 2 purple guardians, artifact), macOS CI fix (always-on vcpkg overlay). 1005 tests (FAST). |
-| 68 | Phase 6 M2: Level 1 "The Courtyard" (push-block puzzle, 2 guardians, destructible wall, artifact, fog+shadows+4 lights), macOS CI fix (conditional overlay ports). 1005 tests (FAST). |
-| 67 | Phase 6 M1: linear fog shader (ffe.setFog/disableFog, 14 tests), "Echoes of the Ancients" scaffold (player, camera, HUD, combat, AI, test level). 1005 tests (FAST). |
-| 66 | Editor crash fix (ImGuiKey migration), macOS CI fix (LuaJIT arm64), README overhaul, Phase 6 ADR ("Echoes of the Ancients"). 991 tests (FAST). |
+| 71 | Phase 6 M4: Level 3 "The Summit" (floating platforms, moving platforms, sunset lighting, 4 guardians + boss, victory sequence with stats). 1005 tests (FAST). |
+| 70 | Phase 6 M3 (part 2): Real CC0 3D models (7 .glb), Suno music integration, Level 2 gameplay (crystal puzzle, timed bridges, boss guardian, portal victory), GitHub Pages fix, macOS CI disabled. README update. 1005 tests (FAST). |
+| 69 | Phase 6 M3 (part 1): Level 2 "The Temple" (underground, dark lighting, crystal puzzle, boss guardian, artifact). 1005 tests (FAST). |
+| 68 | Phase 6 M2: Level 1 "The Courtyard" (push-block puzzle, 2 guardians, destructible wall, artifact). 1005 tests (FAST). |
+| 67 | Phase 6 M1: Linear fog shader + "Echoes of the Ancients" scaffold. 1005 tests (FAST). |
 
 ## Phase 6 — Showcase Game: "Echoes of the Ancients" (IN PROGRESS)
 
@@ -54,8 +54,9 @@
 - [x] M1 (Session 67): Linear fog shader + project scaffold + player controller
 - [x] M2 (Session 68): Level 1 -- The Courtyard (outdoor, puzzles, guardians, artifacts)
 - [x] M3 (Sessions 69-70): Level 2 -- The Temple (underground, dark lighting, crystal puzzle, timed bridges, boss guardian, real 3D models, music)
-- [ ] M4 (Sessions 71-72): Level 3 -- The Summit (floating platforms, dramatic skybox, victory)
-- [ ] M5 (Sessions 73-74): Polish, main menu, screenshots, gamepad pass, README screenshots
+- [x] M4 (Session 71): Level 3 -- The Summit (floating platforms, moving platforms, sunset lighting, victory sequence)
+- [ ] M4b (Session 72): Polish pass, main menu, gamepad verification
+- [ ] M5 (Sessions 73-74): Screenshots, README update, final polish, Phase 6 close
 - [ ] Optional M6: Stretch goals (skeletal anim, minimap, time-of-day)
 
 ### Planned Future Phases (beyond Phase 6)

@@ -3,6 +3,50 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 71: Phase 6 M4 — Level 3 "The Summit" + Victory Sequence
+
+### Summary
+
+Session 71 delivered Phase 6 Milestone 4: Level 3 "The Summit" — the final level of "Echoes of the Ancients." Features floating platforms above the clouds, sine-oscillation moving platforms, sunset lighting, 4 guardians (including a boss), artifact collection, and a complete victory sequence with a stats screen showing completion time, enemies defeated, and artifacts collected. The game now has full 3-level progression through to a victory state. FAST build: 1005 tests, zero warnings. Reviews: performance PASS, api PASS.
+
+### Planned
+
+- Level 3 "The Summit" — floating platforms, moving platforms, sunset skybox, guardians, victory
+
+### Delivered
+
+- **Level 3 "The Summit"** — 700+ line final level with floating stone platforms, sine-driven moving platforms, sunset lighting (warm amber ambient, orange/gold point lights), 4 guardians across separate platforms (including gold boss with double HP), artifact collection on each platform, and final combined puzzle.
+- **Victory sequence** — Game transitions to victory state after Level 3 completion, displaying stats screen with total time, enemies defeated, artifacts collected, and "Press ENTER to play again" prompt.
+- **Game progression complete** — Full 3-level arc: The Courtyard (outdoor) -> The Temple (underground) -> The Summit (sky platforms) -> Victory.
+
+### Files Changed
+
+- `examples/showcase/levels/level3.lua` (CREATED — 700+ lines)
+- `examples/showcase/game.lua` (MODIFIED — Level 3 integration + victory state)
+
+### Reviews
+
+- performance-critic: PASS
+- api-designer: PASS
+- security-auditor: SKIPPED (no new attack surface)
+- game-dev-tester: SKIPPED (no new API paradigm)
+
+### Deferred
+
+- Level 3 gameplay polish (moved to Session 72)
+- Main menu screen (moved to Session 72)
+- Gamepad verification pass (moved to Session 72)
+
+### Next Session (72)
+
+Session 72 completes M4b polish and begins M5 work:
+1. Level 3 gameplay polish — balance guardian difficulty, moving platform timing, ensure all interactions feel good
+2. Main menu screen — title, "Press ENTER to start," controls help overlay
+3. Gamepad verification pass across all 3 levels — ensure all actions work with gamepad
+4. Quick polish items — any rough edges across levels
+
+---
+
 ## 2026-03-07 — Session 70: Phase 6 M3 Complete — Real Models, Music, Level 2 Gameplay, README Update
 
 ### Summary
