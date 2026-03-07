@@ -3,6 +3,53 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 91: Phase 9 M2 — Terrain Texturing
+
+### Summary
+
+Session 91 delivered Phase 9 M2: terrain texturing. RGBA splat map system where each channel (R/G/B/A) blends one of 4 terrain texture layers, enabling natural multi-texture terrain surfaces. Triplanar projection for steep surfaces -- blends XY/XZ/YZ projections weighted by surface normal, threshold-gated to avoid unnecessary computation on flat areas. New BuiltinShader::TERRAIN (GLSL 330 core) with full Blinn-Phong lighting, shadow PCF, point lights, fog, splat blending, and triplanar support. TerrainMaterial struct with splatTexture, 4 TerrainLayers (texture + uvScale), and triplanar enabled/threshold controls. Terrain renderer uses TERRAIN shader when splat map is set, falls back to MESH_BLINN_PHONG otherwise. 3 Lua bindings: ffe.setTerrainSplatMap, ffe.setTerrainLayer, ffe.setTerrainTriplanar. 16 new tests (8 terrain material + 8 Lua binding). Also fixed stale BuiltinShader::COUNT assertion (19->20) in test_gpu_instancing.cpp. Reviews: performance-critic MINOR ISSUES (triplanar threshold footgun, redundant uniform uploads -- non-blocking), api-designer PASS. 1269 tests, zero warnings, Clang-18. game-dev-tester: SKIPPED (setTerrainLayer follows existing setMeshTexture pattern).
+
+### Delivered
+
+- **Splat Map Texturing** -- RGBA splat map where each channel blends one of 4 terrain texture layers
+- **Triplanar Projection** -- For steep surfaces, blends XY/XZ/YZ projections weighted by surface normal, threshold-gated
+- **TERRAIN Shader** -- BuiltinShader::TERRAIN (GLSL 330 core), full Blinn-Phong + shadow PCF + point lights + fog + splat blending + triplanar
+- **TerrainMaterial** -- splatTexture, 4 TerrainLayers (texture + uvScale), triplanarEnabled/threshold
+- **Terrain Renderer Update** -- Uses TERRAIN shader when splat map set, falls back to MESH_BLINN_PHONG otherwise
+- **Lua Bindings (3)** -- ffe.setTerrainSplatMap, ffe.setTerrainLayer, ffe.setTerrainTriplanar
+- **Tests (16 new)** -- 8 terrain material tests + 8 terrain binding tests
+- **Fix** -- Updated stale BuiltinShader::COUNT assertion (19->20) in test_gpu_instancing.cpp
+
+### Reviews
+
+- performance-critic: **MINOR ISSUES** (triplanar threshold footgun, redundant uniform uploads -- non-blocking)
+- api-designer: **PASS**
+- game-dev-tester: SKIPPED (follows existing pattern)
+
+### Files Modified (12)
+
+- `engine/renderer/terrain.h` (TerrainMaterial, TerrainLayer, new API)
+- `engine/renderer/terrain.cpp` (material functions)
+- `engine/renderer/terrain_internal.h` (material field)
+- `engine/renderer/terrain_renderer.cpp` (TERRAIN shader path)
+- `engine/renderer/shader_library.h` (TERRAIN=19, COUNT=20)
+- `engine/renderer/shader_library.cpp` (TERRAIN vertex+fragment shaders)
+- `engine/scripting/script_engine.cpp` (3 bindings)
+- `engine/renderer/.context.md`
+- `docs/architecture/adr-phase9-terrain.md` (M2 section)
+- `tests/renderer/test_terrain.cpp` (8 new tests)
+- `tests/scripting/test_terrain_bindings.cpp` (8 new tests)
+- `tests/renderer/test_gpu_instancing.cpp` (COUNT fix 19->20)
+
+### Phase 9 Status
+
+- [x] M1: Heightmap Terrain Rendering (Session 90)
+- [x] M2: Terrain Texturing (Session 91)
+- [ ] M3: Terrain LOD (distance-based chunk detail, seamless stitching)
+- [ ] M4: World Streaming (async chunk loading/unloading)
+
+---
+
 ## 2026-03-07 — Session 90: Phase 9 M1 — Heightmap Terrain Rendering
 
 ### Summary
