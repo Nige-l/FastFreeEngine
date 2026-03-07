@@ -116,18 +116,26 @@ void showcaseSystem(ffe::World& world, const float dt)
     {
         ctx->scripts->setWorld(&world);
 
+        // Script root is the exe directory — CMake copies all Lua files there.
+        // We cannot use demoScriptRoot() because demoProjectRoot() finds
+        // the build-dir assets/ folder and builds a wrong nested path.
         static char scriptRootBuf[512];
-        if (!demoScriptRoot("showcase", scriptRootBuf, sizeof(scriptRootBuf))) {
+        if (!showcaseAssetRoot(scriptRootBuf, sizeof(scriptRootBuf))) {
             FFE_LOG_ERROR("Showcase", "Failed to resolve script root");
             return;
         }
+        // showcaseAssetRoot gives "<exeDir>/assets" — strip "/assets" to get exeDir.
+        char* lastSlash = nullptr;
+        for (char* p = scriptRootBuf; *p != '\0'; ++p) {
+            if (*p == '/') { lastSlash = p; }
+        }
+        if (lastSlash != nullptr) { *lastSlash = '\0'; }
         ctx->scripts->setScriptRoot(scriptRootBuf);
 
-        // Set save root to project root (saves go in <projectRoot>/saves/).
+        // Set save root to the exe directory (saves go next to the binary).
         static char saveRootBuf[512];
-        if (demoProjectRoot(saveRootBuf, sizeof(saveRootBuf))) {
-            ctx->scripts->setSaveRoot(saveRootBuf);
-        }
+        snprintf(saveRootBuf, sizeof(saveRootBuf), "%s", scriptRootBuf);
+        ctx->scripts->setSaveRoot(saveRootBuf);
 
         const bool ok = ctx->scripts->doFile("game.lua", scriptRootBuf);
         if (!ok) {
