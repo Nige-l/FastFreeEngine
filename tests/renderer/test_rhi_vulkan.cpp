@@ -10,10 +10,13 @@
 #include "renderer/vulkan/vk_texture.h"
 #include "renderer/vulkan/vk_descriptor.h"
 #include "renderer/vulkan/vk_uniform.h"
+#include "renderer/vulkan/vk_resource_manager.h"
 #include "renderer/vulkan/shaders/triangle_vert.h"
 #include "renderer/vulkan/shaders/triangle_frag.h"
 #include "renderer/vulkan/shaders/textured_vert.h"
 #include "renderer/vulkan/shaders/textured_frag.h"
+#include "renderer/vulkan/shaders/blinn_phong_vert.h"
+#include "renderer/vulkan/shaders/blinn_phong_frag.h"
 #endif
 
 using namespace ffe;
@@ -297,6 +300,157 @@ TEST_CASE("Textured quad vertex stride is 16 bytes", "[renderer][vulkan]") {
     // Total stride    = 16 bytes
     constexpr u32 expectedStride = 2 * sizeof(f32) + 2 * sizeof(f32);
     REQUIRE(expectedStride == 16);
+}
+
+// ============================================================================
+// M4 — Vulkan Mesh Rendering (CPU-only)
+// ============================================================================
+
+// --- ResourceManager Tests ---
+
+TEST_CASE("ResourceManager: allocBuffer returns valid handle", "[renderer][vulkan]") {
+    vk::ResourceManager rm{};
+    const u32 handle = rm.allocBuffer();
+    REQUIRE(handle != 0);
+    REQUIRE(handle < vk::MAX_RHI_BUFFERS);
+    REQUIRE(rm.buffers[handle].active == true);
+}
+
+TEST_CASE("ResourceManager: allocBuffer exhaustion returns 0", "[renderer][vulkan]") {
+    vk::ResourceManager rm{};
+    // Allocate all slots (1 through MAX_RHI_BUFFERS-1)
+    for (u32 i = 1; i < vk::MAX_RHI_BUFFERS; ++i) {
+        const u32 h = rm.allocBuffer();
+        REQUIRE(h != 0);
+    }
+    // Next allocation should fail
+    const u32 overflow = rm.allocBuffer();
+    REQUIRE(overflow == 0);
+}
+
+TEST_CASE("ResourceManager: freeBuffer makes slot reusable", "[renderer][vulkan]") {
+    vk::ResourceManager rm{};
+    const u32 h1 = rm.allocBuffer();
+    REQUIRE(h1 != 0);
+    rm.freeBuffer(h1);
+    REQUIRE(rm.buffers[h1].active == false);
+
+    // Should be able to allocate again and get the same slot
+    const u32 h2 = rm.allocBuffer();
+    REQUIRE(h2 == h1);
+}
+
+TEST_CASE("ResourceManager: allocTexture returns valid handle", "[renderer][vulkan]") {
+    vk::ResourceManager rm{};
+    const u32 handle = rm.allocTexture();
+    REQUIRE(handle != 0);
+    REQUIRE(handle < vk::MAX_RHI_TEXTURES);
+    REQUIRE(rm.textures[handle].active == true);
+}
+
+TEST_CASE("ResourceManager: allocShader returns valid handle", "[renderer][vulkan]") {
+    vk::ResourceManager rm{};
+    const u32 handle = rm.allocShader();
+    REQUIRE(handle != 0);
+    REQUIRE(handle < vk::MAX_RHI_SHADERS);
+    REQUIRE(rm.shaders[handle].active == true);
+}
+
+TEST_CASE("ResourceManager: freeBuffer with 0 is no-op", "[renderer][vulkan]") {
+    vk::ResourceManager rm{};
+    rm.freeBuffer(0);  // Should not crash
+    rm.freeTexture(0);
+    rm.freeShader(0);
+    REQUIRE(true);
+}
+
+// --- Pool capacity constants ---
+
+TEST_CASE("MAX_RHI_BUFFERS is 256", "[renderer][vulkan]") {
+    REQUIRE(vk::MAX_RHI_BUFFERS == 256);
+}
+
+TEST_CASE("MAX_RHI_TEXTURES is 256", "[renderer][vulkan]") {
+    REQUIRE(vk::MAX_RHI_TEXTURES == 256);
+}
+
+TEST_CASE("MAX_RHI_SHADERS is 32", "[renderer][vulkan]") {
+    REQUIRE(vk::MAX_RHI_SHADERS == 32);
+}
+
+// --- Blinn-Phong SPIR-V Tests ---
+
+TEST_CASE("Embedded Blinn-Phong vertex SPIR-V starts with magic number", "[renderer][vulkan]") {
+    REQUIRE(vk::spv::BLINN_PHONG_VERT_SPV[0] == 0x07230203);
+    REQUIRE(vk::spv::BLINN_PHONG_VERT_SPV_SIZE > 0);
+    REQUIRE(vk::spv::BLINN_PHONG_VERT_SPV_SIZE % 4 == 0);
+}
+
+TEST_CASE("Embedded Blinn-Phong fragment SPIR-V starts with magic number", "[renderer][vulkan]") {
+    REQUIRE(vk::spv::BLINN_PHONG_FRAG_SPV[0] == 0x07230203);
+    REQUIRE(vk::spv::BLINN_PHONG_FRAG_SPV_SIZE > 0);
+    REQUIRE(vk::spv::BLINN_PHONG_FRAG_SPV_SIZE % 4 == 0);
+}
+
+// --- UBO layout size tests ---
+// SceneUBO and LightUBO are internal to rhi_vulkan.cpp. These tests verify
+// the expected std140-compatible sizes based on GLM type sizes.
+
+TEST_CASE("SceneUBO expected size: 4 * mat4 = 256 bytes", "[renderer][vulkan]") {
+    // SceneUBO = model + view + projection + normalMatrix (all mat4)
+    constexpr u32 expectedSize = 4 * sizeof(glm::mat4);
+    REQUIRE(expectedSize == 256);
+}
+
+TEST_CASE("LightUBO expected size: 4 * vec4 = 64 bytes", "[renderer][vulkan]") {
+    // LightUBO = lightDir + lightColor + ambientColor + cameraPos (all vec4)
+    constexpr u32 expectedSize = 4 * sizeof(glm::vec4);
+    REQUIRE(expectedSize == 64);
+}
+
+// --- MeshVertex layout test ---
+
+TEST_CASE("MeshVertex stride is 32 bytes", "[renderer][vulkan]") {
+    // position(vec3) + normal(vec3) + texcoord(vec2) = 32 bytes
+    REQUIRE(sizeof(rhi::MeshVertex) == 32);
+}
+
+// --- ShaderSlot defaults ---
+
+TEST_CASE("ShaderSlot: default fields are null/inactive", "[renderer][vulkan]") {
+    const vk::ShaderSlot ss{};
+    REQUIRE(ss.pipeline == VK_NULL_HANDLE);
+    REQUIRE(ss.pipelineLayout == VK_NULL_HANDLE);
+    REQUIRE(ss.descriptorSetLayout == VK_NULL_HANDLE);
+    REQUIRE(ss.descriptorPool == VK_NULL_HANDLE);
+    REQUIRE(ss.active == false);
+    for (u32 i = 0; i < vk::ShaderSlot::MAX_FRAMES; ++i) {
+        REQUIRE(ss.descriptorSets[i] == VK_NULL_HANDLE);
+        REQUIRE(ss.sceneUboBuffers[i] == VK_NULL_HANDLE);
+        REQUIRE(ss.lightUboBuffers[i] == VK_NULL_HANDLE);
+        REQUIRE(ss.sceneUboMapped[i] == nullptr);
+        REQUIRE(ss.lightUboMapped[i] == nullptr);
+    }
+}
+
+// --- BufferSlot defaults ---
+
+TEST_CASE("BufferSlot: default fields are null/inactive", "[renderer][vulkan]") {
+    const vk::BufferSlot bs{};
+    REQUIRE(bs.buffer.buffer == VK_NULL_HANDLE);
+    REQUIRE(bs.hostVisible == false);
+    REQUIRE(bs.mappedPtr == nullptr);
+    REQUIRE(bs.sizeBytes == 0);
+    REQUIRE(bs.active == false);
+}
+
+// --- TextureSlot defaults ---
+
+TEST_CASE("TextureSlot: default fields are null/inactive", "[renderer][vulkan]") {
+    const vk::TextureSlot ts{};
+    REQUIRE(ts.texture.image == VK_NULL_HANDLE);
+    REQUIRE(ts.vramBytes == 0);
+    REQUIRE(ts.active == false);
 }
 
 #endif // FFE_BACKEND_VULKAN

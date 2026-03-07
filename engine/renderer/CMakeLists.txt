@@ -41,6 +41,7 @@ if(FFE_BACKEND STREQUAL "VULKAN")
         vulkan/vk_texture.cpp
         vulkan/vk_descriptor.cpp
         vulkan/vk_uniform.cpp
+        vulkan/vk_resource_manager.cpp
     )
 else()
     # OPENGL backend (default for RETRO, LEGACY, STANDARD)
