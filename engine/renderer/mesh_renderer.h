@@ -57,6 +57,22 @@ struct SkyboxConfig {
     bool enabled        = false;
 };
 
+// Fog configuration. Stored in the ECS registry context.
+// Settable from Lua via ffe.setFog / ffe.disableFog.
+// Linear fog: fogFactor = clamp((farDist - dist) / (farDist - nearDist), 0, 1)
+// Applied to 3D mesh fragments only (not skybox).
+// Default: disabled (no fog overhead — the uniform branch is free when disabled).
+//
+// Tier support: LEGACY (OpenGL 3.3). No additional texture or FBO required.
+struct FogParams {
+    f32  r        = 0.7f;    // Fog color red   [0, 1]
+    f32  g        = 0.7f;    // Fog color green  [0, 1]
+    f32  b        = 0.8f;    // Fog color blue   [0, 1]
+    f32  nearDist = 10.0f;   // Distance where fog starts (world units)
+    f32  farDist  = 100.0f;  // Distance where fog is fully opaque (world units)
+    bool enabled  = false;   // Master switch: no overhead when false
+};
+
 // Render the skybox cubemap.
 //
 // Must be called AFTER meshRenderSystem (so 3D geometry writes depth first)
@@ -89,6 +105,7 @@ void renderSkybox(World& world, const Camera& camera3d, const SkyboxConfig& skyb
 //
 // Not a per-frame allocation path — all data is read from ECS components.
 void meshRenderSystem(World& world, const Camera& camera3d,
-                      const ShadowConfig& shadowCfg, const ShadowMap& shadowMap);
+                      const ShadowConfig& shadowCfg, const ShadowMap& shadowMap,
+                      const FogParams& fog = FogParams{});
 
 } // namespace ffe::renderer

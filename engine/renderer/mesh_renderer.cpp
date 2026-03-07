@@ -173,7 +173,8 @@ void renderSkybox(World& world, const Camera& camera3d, const SkyboxConfig& skyb
 }
 
 void meshRenderSystem(World& world, const Camera& camera3d,
-                      const ShadowConfig& shadowCfg, const ShadowMap& shadowMap) {
+                      const ShadowConfig& shadowCfg, const ShadowMap& shadowMap,
+                      const FogParams& fog) {
     // --- Retrieve shader library from ECS context ---
     const auto* shaderLib = world.registry().ctx().find<renderer::ShaderLibrary>();
     if (shaderLib == nullptr) {
@@ -412,6 +413,26 @@ void meshRenderSystem(World& world, const Camera& camera3d,
             rhi::setUniformInt(skinnedShader, "u_shadowsEnabled", 0);
             rhi::bindShader(meshShader);
         }
+    }
+
+    // --- Fog uniforms for both static and skinned Blinn-Phong passes ---
+    {
+        const rhi::ShaderHandle fogShaders[] = { meshShader, skinnedShader };
+        const u32 fogShaderCount = rhi::isValid(skinnedShader) ? 2u : 1u;
+
+        for (u32 si = 0; si < fogShaderCount; ++si) {
+            const rhi::ShaderHandle sh = fogShaders[si];
+            rhi::bindShader(sh);
+            if (fog.enabled) {
+                rhi::setUniformInt(sh, "u_fogEnabled", 1);
+                rhi::setUniformVec3(sh, "u_fogColor", glm::vec3(fog.r, fog.g, fog.b));
+                rhi::setUniformFloat(sh, "u_fogNear", fog.nearDist);
+                rhi::setUniformFloat(sh, "u_fogFar", fog.farDist);
+            } else {
+                rhi::setUniformInt(sh, "u_fogEnabled", 0);
+            }
+        }
+        rhi::bindShader(meshShader);
     }
 
     // --- Per-entity draw loop ---

@@ -17,6 +17,7 @@ add_executable(ffe_tests
     renderer/test_point_lights_materials.cpp
     renderer/test_skybox.cpp
     renderer/test_skeleton.cpp
+    renderer/test_fog.cpp
 )
 
 target_link_libraries(ffe_tests

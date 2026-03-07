@@ -181,6 +181,12 @@ uniform vec3  u_pointLightPos[MAX_POINT_LIGHTS];
 uniform vec3  u_pointLightColor[MAX_POINT_LIGHTS];
 uniform float u_pointLightRadius[MAX_POINT_LIGHTS];
 
+// Linear fog — inactive when u_fogEnabled == 0
+uniform int   u_fogEnabled;
+uniform vec3  u_fogColor;
+uniform float u_fogNear;
+uniform float u_fogFar;
+
 out vec4 fragColor;
 
 vec3 getNormal() {
@@ -283,7 +289,16 @@ void main() {
     // Combine: ambient is never shadowed; directional + point lights
     vec4  texSample = texture(u_diffuseTexture, v_texcoord);
     vec3  lighting  = u_ambientColor + dirLighting + pointLighting;
-    fragColor       = vec4(lighting, 1.0) * texSample * u_diffuseColor;
+    vec3  finalColor = lighting * texSample.rgb * u_diffuseColor.rgb;
+
+    // Linear fog: blend towards fog color based on distance from camera
+    if (u_fogEnabled != 0) {
+        float dist = length(v_fragPos - u_viewPos);
+        float fogFactor = clamp((u_fogFar - dist) / (u_fogFar - u_fogNear), 0.0, 1.0);
+        finalColor = mix(u_fogColor, finalColor, fogFactor);
+    }
+
+    fragColor = vec4(finalColor, texSample.a * u_diffuseColor.a);
 }
 )glsl";
 

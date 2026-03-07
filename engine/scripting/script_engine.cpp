@@ -5020,6 +5020,74 @@ void ScriptEngine::registerEcsBindings() {
     lua_setfield(L, -2, "setSkyboxEnabled");
 
     // ----------------------------------------------------------------
+    // Fog bindings
+    // ----------------------------------------------------------------
+
+    // ffe.setFog(r, g, b, near, far) -> nothing
+    // Enable linear fog with the given color and distance range.
+    // Color components are clamped to [0, 1]. near must be < far, both > 0.
+    auto ffe_setFog = [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        auto** fogPtr = world->registry().ctx().find<ffe::renderer::FogParams*>();
+        if (fogPtr == nullptr) { return 0; }
+        ffe::renderer::FogParams* fog = *fogPtr;
+
+        const float r    = static_cast<float>(luaL_optnumber(state, 1, 0.7));
+        const float g    = static_cast<float>(luaL_optnumber(state, 2, 0.7));
+        const float b    = static_cast<float>(luaL_optnumber(state, 3, 0.8));
+        const float near = static_cast<float>(luaL_optnumber(state, 4, 10.0));
+        const float far  = static_cast<float>(luaL_optnumber(state, 5, 100.0));
+
+        if (!std::isfinite(r) || !std::isfinite(g) || !std::isfinite(b) ||
+            !std::isfinite(near) || !std::isfinite(far)) {
+            FFE_LOG_WARN("ScriptEngine", "ffe.setFog: non-finite value rejected");
+            return 0;
+        }
+        if (near <= 0.0f || far <= 0.0f) {
+            FFE_LOG_WARN("ScriptEngine", "ffe.setFog: near and far must be > 0");
+            return 0;
+        }
+        if (near >= far) {
+            FFE_LOG_WARN("ScriptEngine",
+                         "ffe.setFog: near (%.3f) must be < far (%.3f)",
+                         static_cast<double>(near), static_cast<double>(far));
+            return 0;
+        }
+
+        fog->r        = std::clamp(r, 0.0f, 1.0f);
+        fog->g        = std::clamp(g, 0.0f, 1.0f);
+        fog->b        = std::clamp(b, 0.0f, 1.0f);
+        fog->nearDist = near;
+        fog->farDist  = far;
+        fog->enabled  = true;
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_setFog);
+    lua_setfield(L, -2, "setFog");
+
+    // ffe.disableFog() -> nothing
+    // Disable fog rendering.
+    auto ffe_disableFog = [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        auto** fogPtr = world->registry().ctx().find<ffe::renderer::FogParams*>();
+        if (fogPtr == nullptr) { return 0; }
+        (*fogPtr)->enabled = false;
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_disableFog);
+    lua_setfield(L, -2, "disableFog");
+
+    // ----------------------------------------------------------------
     // Screenshot binding
     // ----------------------------------------------------------------
 

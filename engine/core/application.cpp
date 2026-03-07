@@ -354,6 +354,10 @@ Result Application::initSubsystemsInternal() {
     // Skybox rendering is disabled by default (SkyboxConfig::enabled = false).
     m_world.registry().ctx().emplace<renderer::SkyboxConfig*>(&m_skyboxConfig);
 
+    // Emplace fog params pointer into ECS context for Lua access.
+    // Fog is disabled by default (FogParams::enabled = false).
+    m_world.registry().ctx().emplace<renderer::FogParams*>(&m_fogParams);
+
     // 5e0. Initialize 3D physics (Jolt)
     if (!physics::initPhysics3D()) {
         FFE_LOG_WARN("Core", "3D physics initialization failed — physics disabled");
@@ -652,7 +656,7 @@ void Application::render(const float alpha) {
         // Sync the ECS context camera pointer with the current m_camera3d values
         // (Lua may have updated m_camera3d via ffe.set3DCamera — the pointer
         // in ctx points directly to m_camera3d so it's always current)
-        renderer::meshRenderSystem(m_world, m_camera3d, m_shadowConfig, m_shadowMap);
+        renderer::meshRenderSystem(m_world, m_camera3d, m_shadowConfig, m_shadowMap, m_fogParams);
     }
 
     // --- Skybox pass: render cubemap environment after 3D meshes, before 2D ---
