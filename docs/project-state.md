@@ -6,9 +6,9 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 91 |
-| Total tests | 1269 (Clang-18, zero warnings) |
-| Total Lua bindings | ~197 |
+| Last session | 92 |
+| Total tests | 1282 (Clang-18, zero warnings) |
+| Total Lua bindings | ~198 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
 | Phase 2 (3D Foundation) | COMPLETE |
 | Phase 3 (Standalone Editor) | MVP COMPLETE (6 milestones, Sessions 51-56) |
@@ -44,11 +44,11 @@
 
 | Session | Summary |
 |---------|---------|
+| 92 | Phase 9 M3: Terrain LOD + Frustum Culling — 3-level LOD per chunk (full/half/quarter), distance-based selection, reusable frustum culling (Griess-Hartmann, p-vertex AABB), 1 Lua binding, 13 new tests. 1282 tests (FAST). |
 | 91 | Phase 9 M2: Terrain Texturing — RGBA splat map blending (4 texture layers), triplanar projection for steep surfaces, TERRAIN shader (GLSL 330, Blinn-Phong+shadow+fog), TerrainMaterial struct, 3 Lua bindings, 16 new tests. 1269 tests (FAST). |
 | 90 | Phase 9 M1: Heightmap Terrain Rendering — chunked heightmap terrain (raw float + PNG loading), configurable chunk resolution, bilinear height queries, terrain renderer (Blinn-Phong, shadows, fog), 4 Lua bindings, 18 new tests. 1252 tests (FAST). |
 | 89 | Phase 8 M5 (PHASE CLOSE): Vulkan depth buffer + build-time SPIR-V — depth attachment (VMA, format selection), pipeline depth state, CMake glslc pipeline, embed_spirv.cmake, 6 GLSL 450 shaders, Blinn-Phong lighting. 10 new tests. FULL build: 1234 tests. Phase 8 COMPLETE. |
 | 88 | Phase 8 M4: Vulkan Mesh Rendering — resource manager (handle pools), full RHI impl (buffers/textures/shaders/uniforms/draw), Blinn-Phong SPIR-V, SceneUBO+LightUBO. 17 new tests. 1234 tests (FAST). |
-| 87 | Phase 8 M3: Vulkan Textures + Uniform Buffers — VkImage/VMA, descriptors, MVPUniform, textured quad rendering. 10 new tests. 1234 tests (FAST). |
 
 ## Phase 8 — Vulkan Backend (COMPLETE, Sessions 85-89)
 
@@ -70,7 +70,7 @@
 
 - [x] M1 (Session 90): Heightmap Terrain Rendering -- TerrainHandle, TerrainConfig, raw float + PNG heightmap loading (stb_image), chunked mesh generation (configurable resolution up to 128x128 per chunk), normal computation via finite differences, bilinear height queries, path security, NaN rejection, terrain renderer (MESH_BLINN_PHONG, directional + point lights, shadows, fog), Terrain ECS component (8B), 4 Lua bindings, 18 new tests.
 - [x] M2 (Session 91): Terrain Texturing -- RGBA splat map (4 texture layers), triplanar projection for steep surfaces (threshold-gated), TerrainMaterial struct (splatTexture + 4 TerrainLayers with uvScale), TERRAIN shader (GLSL 330 core, Blinn-Phong + shadow PCF + point lights + fog + splat blending + triplanar), 3 Lua bindings (setTerrainSplatMap, setTerrainLayer, setTerrainTriplanar), 16 new tests.
-- [ ] M3: Terrain LOD -- distance-based chunk detail levels, seamless stitching between LOD levels.
+- [x] M3 (Session 92): Terrain LOD + Frustum Culling -- 3 LOD levels per chunk (full/half/quarter resolution), pre-generated at load time, distance-based LOD selection with configurable distances, reusable frustum culling utility (Griess-Hartmann plane extraction, p-vertex AABB test, O(1) per chunk), TerrainLodConfig, 1 Lua binding (setTerrainLodDistances), 13 new tests.
 - [ ] M4: World Streaming -- chunk loading/unloading based on camera position, async loading.
 
 ## Build Commands

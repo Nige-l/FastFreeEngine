@@ -3,6 +3,59 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 92: Phase 9 M3 — Terrain LOD + Frustum Culling
+
+### Summary
+
+Session 92 delivered Phase 9 M3: terrain LOD and frustum culling. 3-level LOD system per terrain chunk (full/half/quarter vertex resolution), pre-generated at load time, with distance-based LOD selection using configurable distance thresholds. Reusable frustum culling utility using Griess-Hartmann plane extraction and p-vertex AABB test (O(1) per chunk). Frustum utility is decoupled from terrain and available for any AABB-based culling. TerrainLodConfig struct with configurable LOD distances. 1 Lua binding: ffe.setTerrainLodDistances. 13 new tests (7 frustum + 3 terrain LOD + 2 terrain bindings + 1 frustum edge case). Reviews: performance-critic PASS, api-designer PASS. 1282 tests, zero warnings, Clang-18. game-dev-tester: SKIPPED (setTerrainLodDistances follows existing terrain config pattern).
+
+### Delivered
+
+- **LOD System** -- 3 LOD levels per chunk (full/half/quarter resolution), pre-generated at terrain load time
+- **Distance-Based LOD Selection** -- Configurable distance thresholds (TerrainLodConfig), selects LOD level per chunk based on camera distance
+- **Frustum Culling** -- Griess-Hartmann plane extraction from VP matrix, p-vertex AABB test, O(1) per chunk, reusable utility (not terrain-specific)
+- **Lua Binding (1)** -- ffe.setTerrainLodDistances(lod1, lod2)
+- **Tests (13 new)** -- 7 frustum tests + 3 terrain LOD tests + 2 terrain binding tests + 1 frustum edge case
+- **Context.md** -- LOD config API + frustum utility section added
+
+### Reviews
+
+- performance-critic: **PASS**
+- api-designer: **PASS**
+- game-dev-tester: SKIPPED (follows existing pattern)
+
+### Files Created (3)
+
+- `engine/renderer/frustum.h`
+- `engine/renderer/frustum.cpp`
+- `tests/renderer/test_frustum.cpp`
+
+### Files Modified (8)
+
+- `engine/renderer/terrain_internal.h` (multi-LOD chunk structs)
+- `engine/renderer/terrain.h` (TerrainLodConfig, setTerrainLodDistances)
+- `engine/renderer/terrain.cpp` (LOD mesh generation)
+- `engine/renderer/terrain_renderer.cpp` (frustum cull + LOD select in render loop)
+- `engine/renderer/CMakeLists.txt` (frustum.cpp)
+- `engine/scripting/script_engine.cpp` (1 binding)
+- `engine/renderer/.context.md`
+- `tests/renderer/test_terrain.cpp` (3 new tests)
+- `tests/scripting/test_terrain_bindings.cpp` (2 new tests)
+- `tests/CMakeLists.txt`
+
+### Phase 9 Status
+
+- [x] M1: Heightmap Terrain Rendering (Session 90)
+- [x] M2: Terrain Texturing (Session 91)
+- [x] M3: Terrain LOD + Frustum Culling (Session 92)
+- [ ] M4: World Streaming (async chunk loading/unloading)
+
+### Session 93 Plan
+
+Phase 9 M4: Vegetation System -- grass rendering (instanced quads/billboards, wind sway shader), tree billboarding at distance, vegetation placement via density map, LOD transitions.
+
+---
+
 ## 2026-03-07 — Session 91: Phase 9 M2 — Terrain Texturing
 
 ### Summary
