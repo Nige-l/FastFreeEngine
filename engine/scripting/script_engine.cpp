@@ -7351,6 +7351,27 @@ void ScriptEngine::registerEcsBindings() {
     lua_pushcfunction(L, ffe_setTerrainTriplanar);
     lua_setfield(L, -2, "setTerrainTriplanar");
 
+    // ffe.setTerrainLodDistances(lod1Distance: number, lod2Distance: number) -> nothing
+    // Set LOD transition distances for the first active terrain.
+    // lod1Distance: distance beyond which chunks switch from full to half resolution.
+    // lod2Distance: distance beyond which chunks switch from half to quarter resolution.
+    auto ffe_setTerrainLodDistances = [](lua_State* state) -> int {
+        const ffe::renderer::TerrainHandle terrain =
+            ffe::renderer::getFirstActiveTerrain();
+        if (!ffe::renderer::isValid(terrain)) { return 0; }
+
+        const double rawLod1 = lua_tonumber(state, 1);
+        const double rawLod2 = lua_tonumber(state, 2);
+
+        const ffe::f32 lod1 = (rawLod1 > 0.0) ? static_cast<ffe::f32>(rawLod1) : 100.0f;
+        const ffe::f32 lod2 = (rawLod2 > 0.0) ? static_cast<ffe::f32>(rawLod2) : 200.0f;
+
+        ffe::renderer::setTerrainLodDistances(terrain, lod1, lod2);
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_setTerrainLodDistances);
+    lua_setfield(L, -2, "setTerrainLodDistances");
+
     lua_setglobal(L, "ffe");
 }
 

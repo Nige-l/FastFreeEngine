@@ -132,3 +132,24 @@ TEST_CASE("BuiltinShader::TERRAIN exists at index 19", "[terrain]") {
 TEST_CASE("BuiltinShader::COUNT is 20 after TERRAIN addition", "[terrain]") {
     CHECK(static_cast<ffe::u32>(ffe::renderer::BuiltinShader::COUNT) == 20);
 }
+
+// -----------------------------------------------------------------------
+// LOD configuration (M3 — public API types only)
+// -----------------------------------------------------------------------
+
+TEST_CASE("TerrainLodConfig default distances are 100, 200, 400", "[terrain][lod]") {
+    const ffe::renderer::TerrainLodConfig cfg;
+    CHECK(cfg.lodDistances[0] == 100.0f);
+    CHECK(cfg.lodDistances[1] == 200.0f);
+    CHECK(cfg.lodDistances[2] == 400.0f);
+}
+
+TEST_CASE("TerrainLodConfig is small and POD-like", "[terrain][lod]") {
+    CHECK(sizeof(ffe::renderer::TerrainLodConfig) <= 16);
+}
+
+TEST_CASE("setTerrainLodDistances is safe on invalid handle", "[terrain][lod]") {
+    // Should not crash when called with invalid handle.
+    ffe::renderer::setTerrainLodDistances(ffe::renderer::TerrainHandle{0}, 50.0f, 150.0f);
+    ffe::renderer::setTerrainLodDistances(ffe::renderer::TerrainHandle{99}, 50.0f, 150.0f);
+}

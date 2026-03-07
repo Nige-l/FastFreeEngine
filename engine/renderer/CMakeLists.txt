@@ -14,6 +14,7 @@ set(RENDERER_SOURCES
     text_renderer.cpp
     font.cpp
     animation_system.cpp
+    frustum.cpp
 )
 
 # Sources that currently use OpenGL directly (GL calls, glad includes).

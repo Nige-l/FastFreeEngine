@@ -130,6 +130,22 @@ void setTerrainLayer(TerrainHandle handle, u32 layerIndex,
 // Clamped to (0.0, 1.0].
 void setTerrainTriplanar(TerrainHandle handle, bool enabled, f32 threshold = 0.7f);
 
+// --- LOD Configuration (M3) ---
+
+// Distance-based LOD configuration for terrain chunks.
+// lodDistances[i] = camera distance beyond which LOD i+1 is used.
+// Beyond lodDistances[1], chunks render at the lowest LOD (never culled by distance).
+struct TerrainLodConfig {
+    f32 lodDistances[3] = {100.0f, 200.0f, 400.0f};
+};
+
+// Set LOD transition distances for a terrain.
+// lod1Distance: distance beyond which chunks switch from LOD 0 (full) to LOD 1 (half).
+// lod2Distance: distance beyond which chunks switch from LOD 1 (half) to LOD 2 (quarter).
+// Both values must be positive and finite. lod2Distance should be >= lod1Distance.
+// Cold path only.
+void setTerrainLodDistances(TerrainHandle handle, f32 lod1Distance, f32 lod2Distance);
+
 // --- Convenience ---
 
 // Get the first active terrain handle (for Lua convenience).

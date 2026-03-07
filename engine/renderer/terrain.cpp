@@ -131,18 +131,18 @@ static f32 sampleHeight(const float* data, const u32 w, const u32 h,
 // Chunk mesh generation
 // ---------------------------------------------------------------------------
 
-static bool generateChunk(TerrainChunkGpu& chunk,
-                           const float* heightData, const u32 dataW, const u32 dataH,
-                           const TerrainConfig& cfg,
-                           const u32 chunkX, const u32 chunkZ) {
-    // Guard: no GL context in headless mode.
-    if (glad_glGenVertexArrays == nullptr) {
-        return true; // Not an error -- just no GPU resources in headless.
-    }
-
-    const u32 res = cfg.chunkResolution;
-    const u32 vertexCount = res * res;
-    const u32 quadCount = (res - 1) * (res - 1);
+// Generate vertices and indices for a single LOD level of a terrain chunk.
+// lodRes is the vertex resolution at this LOD level (e.g., 64 for LOD 0, 32 for LOD 1).
+// Returns false on GPU upload failure.
+// outMinY / outMaxY are updated with the min/max Y values found (for AABB computation).
+static bool generateChunkLod(TerrainChunkLod& lod,
+                              const float* heightData, const u32 dataW, const u32 dataH,
+                              const TerrainConfig& cfg,
+                              const u32 chunkX, const u32 chunkZ,
+                              const u32 lodRes,
+                              f32& outMinY, f32& outMaxY) {
+    const u32 vertexCount = lodRes * lodRes;
+    const u32 quadCount = (lodRes - 1) * (lodRes - 1);
     const u32 indexCount = quadCount * 6; // 2 triangles per quad, 3 indices each
 
     // Compute world-space bounds for this chunk
@@ -155,17 +155,14 @@ static bool generateChunk(TerrainChunkGpu& chunk,
     auto vertices = std::make_unique<rhi::MeshVertex[]>(vertexCount);
     auto indices  = std::make_unique<u32[]>(indexCount);
 
-    f32 minY =  1e30f;
-    f32 maxY = -1e30f;
-
     // Generate vertices
-    for (u32 vz = 0; vz < res; ++vz) {
-        for (u32 vx = 0; vx < res; ++vx) {
-            const u32 vi = vz * res + vx;
+    for (u32 vz = 0; vz < lodRes; ++vz) {
+        for (u32 vx = 0; vx < lodRes; ++vx) {
+            const u32 vi = vz * lodRes + vx;
 
             // World position within chunk
-            const f32 localX = (static_cast<f32>(vx) / static_cast<f32>(res - 1)) * chunkWorldW;
-            const f32 localZ = (static_cast<f32>(vz) / static_cast<f32>(res - 1)) * chunkWorldD;
+            const f32 localX = (static_cast<f32>(vx) / static_cast<f32>(lodRes - 1)) * chunkWorldW;
+            const f32 localZ = (static_cast<f32>(vz) / static_cast<f32>(lodRes - 1)) * chunkWorldD;
             const f32 worldX = chunkOriginX + localX;
             const f32 worldZ = chunkOriginZ + localZ;
 
@@ -183,12 +180,12 @@ static bool generateChunk(TerrainChunkGpu& chunk,
             vertices[vi].u  = u;
             vertices[vi].v  = v;
 
-            if (worldY < minY) { minY = worldY; }
-            if (worldY > maxY) { maxY = worldY; }
+            if (worldY < outMinY) { outMinY = worldY; }
+            if (worldY > outMaxY) { outMaxY = worldY; }
 
             // Compute normal via finite differences
-            const f32 cellSizeX = chunkWorldW / static_cast<f32>(res - 1);
-            const f32 cellSizeZ = chunkWorldD / static_cast<f32>(res - 1);
+            const f32 cellSizeX = chunkWorldW / static_cast<f32>(lodRes - 1);
+            const f32 cellSizeZ = chunkWorldD / static_cast<f32>(lodRes - 1);
 
             // Sample neighbors for central differences (forward/backward at edges)
             f32 hLeft  = 0.0f;
@@ -245,12 +242,12 @@ static bool generateChunk(TerrainChunkGpu& chunk,
 
     // Generate indices (two triangles per quad)
     u32 idx = 0;
-    for (u32 iz = 0; iz < res - 1; ++iz) {
-        for (u32 ix = 0; ix < res - 1; ++ix) {
-            const u32 topLeft     = iz * res + ix;
-            const u32 topRight    = iz * res + ix + 1;
-            const u32 bottomLeft  = (iz + 1) * res + ix;
-            const u32 bottomRight = (iz + 1) * res + ix + 1;
+    for (u32 iz = 0; iz < lodRes - 1; ++iz) {
+        for (u32 ix = 0; ix < lodRes - 1; ++ix) {
+            const u32 topLeft     = iz * lodRes + ix;
+            const u32 topRight    = iz * lodRes + ix + 1;
+            const u32 bottomLeft  = (iz + 1) * lodRes + ix;
+            const u32 bottomRight = (iz + 1) * lodRes + ix + 1;
 
             // Triangle 1
             indices[idx++] = topLeft;
@@ -268,14 +265,14 @@ static bool generateChunk(TerrainChunkGpu& chunk,
     const u64 vboSize = static_cast<u64>(vertexCount) * sizeof(rhi::MeshVertex);
     const u64 iboSize = static_cast<u64>(indexCount) * sizeof(u32);
 
-    glGenVertexArrays(1, &chunk.vaoId);
-    glGenBuffers(1, &chunk.vboId);
-    glGenBuffers(1, &chunk.iboId);
+    glGenVertexArrays(1, &lod.vaoId);
+    glGenBuffers(1, &lod.vboId);
+    glGenBuffers(1, &lod.iboId);
 
-    glBindVertexArray(chunk.vaoId);
+    glBindVertexArray(lod.vaoId);
 
     // VBO
-    glBindBuffer(GL_ARRAY_BUFFER, chunk.vboId);
+    glBindBuffer(GL_ARRAY_BUFFER, lod.vboId);
     glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(vboSize),
                  vertices.get(), GL_STATIC_DRAW);
 
@@ -284,12 +281,12 @@ static bool generateChunk(TerrainChunkGpu& chunk,
         const GLenum err = glGetError();
         if (err != GL_NO_ERROR) {
             FFE_LOG_ERROR("terrain", "VBO upload failed (GL error 0x%X)", err);
-            glDeleteBuffers(1, &chunk.vboId);
-            glDeleteBuffers(1, &chunk.iboId);
-            glDeleteVertexArrays(1, &chunk.vaoId);
-            chunk.vaoId = 0;
-            chunk.vboId = 0;
-            chunk.iboId = 0;
+            glDeleteBuffers(1, &lod.vboId);
+            glDeleteBuffers(1, &lod.iboId);
+            glDeleteVertexArrays(1, &lod.vaoId);
+            lod.vaoId = 0;
+            lod.vboId = 0;
+            lod.iboId = 0;
             return false;
         }
     }
@@ -312,7 +309,7 @@ static bool generateChunk(TerrainChunkGpu& chunk,
                           reinterpret_cast<const void*>(24));
 
     // IBO
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, chunk.iboId);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, lod.iboId);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, static_cast<GLsizeiptr>(iboSize),
                  indices.get(), GL_STATIC_DRAW);
 
@@ -321,12 +318,12 @@ static bool generateChunk(TerrainChunkGpu& chunk,
         const GLenum err = glGetError();
         if (err != GL_NO_ERROR) {
             FFE_LOG_ERROR("terrain", "IBO upload failed (GL error 0x%X)", err);
-            glDeleteBuffers(1, &chunk.vboId);
-            glDeleteBuffers(1, &chunk.iboId);
-            glDeleteVertexArrays(1, &chunk.vaoId);
-            chunk.vaoId = 0;
-            chunk.vboId = 0;
-            chunk.iboId = 0;
+            glDeleteBuffers(1, &lod.vboId);
+            glDeleteBuffers(1, &lod.iboId);
+            glDeleteVertexArrays(1, &lod.vaoId);
+            lod.vaoId = 0;
+            lod.vboId = 0;
+            lod.iboId = 0;
             return false;
         }
     }
@@ -335,27 +332,89 @@ static bool generateChunk(TerrainChunkGpu& chunk,
     glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-    chunk.indexCount = indexCount;
+    lod.indexCount = indexCount;
+    return true;
+}
+
+// Generate all LOD levels for a single chunk.
+// LOD 0 = full resolution, LOD 1 = half, LOD 2 = quarter (min 4).
+// AABB and center are computed from the full-resolution (LOD 0) pass.
+static bool generateChunk(TerrainChunkGpu& chunk,
+                           const float* heightData, const u32 dataW, const u32 dataH,
+                           const TerrainConfig& cfg,
+                           const u32 chunkX, const u32 chunkZ) {
+    // Guard: no GL context in headless mode.
+    if (glad_glGenVertexArrays == nullptr) {
+        return true; // Not an error -- just no GPU resources in headless.
+    }
+
+    const u32 baseRes = cfg.chunkResolution;
+
+    // Determine LOD resolutions: full, half, quarter (minimum 4 vertices per side)
+    static constexpr u32 MIN_LOD_RES = 4;
+    u32 lodResolutions[MAX_LOD_LEVELS];
+    lodResolutions[0] = baseRes;
+    lodResolutions[1] = (baseRes / 2 >= MIN_LOD_RES) ? baseRes / 2 : MIN_LOD_RES;
+    lodResolutions[2] = (baseRes / 4 >= MIN_LOD_RES) ? baseRes / 4 : MIN_LOD_RES;
+
+    // Determine how many distinct LOD levels we can generate
+    u32 lodCount = 1;
+    if (lodResolutions[1] < lodResolutions[0]) { lodCount = 2; }
+    if (lodCount == 2 && lodResolutions[2] < lodResolutions[1]) { lodCount = 3; }
+
+    // Compute world-space bounds for this chunk (needed for AABB/center)
+    const f32 chunkWorldW = cfg.worldWidth / static_cast<f32>(cfg.chunkCountX);
+    const f32 chunkWorldD = cfg.worldDepth / static_cast<f32>(cfg.chunkCountZ);
+    const f32 chunkOriginX = static_cast<f32>(chunkX) * chunkWorldW;
+    const f32 chunkOriginZ = static_cast<f32>(chunkZ) * chunkWorldD;
+
+    f32 minY =  1e30f;
+    f32 maxY = -1e30f;
+
+    for (u32 lod = 0; lod < lodCount; ++lod) {
+        if (!generateChunkLod(chunk.lods[lod], heightData, dataW, dataH, cfg,
+                              chunkX, chunkZ, lodResolutions[lod], minY, maxY)) {
+            // Clean up any already-generated LODs for this chunk
+            for (u32 j = 0; j < lod; ++j) {
+                TerrainChunkLod& prev = chunk.lods[j];
+                if (prev.vaoId != 0) { glDeleteVertexArrays(1, &prev.vaoId); prev.vaoId = 0; }
+                if (prev.vboId != 0) { glDeleteBuffers(1, &prev.vboId); prev.vboId = 0; }
+                if (prev.iboId != 0) { glDeleteBuffers(1, &prev.iboId); prev.iboId = 0; }
+                prev.indexCount = 0;
+            }
+            return false;
+        }
+    }
+
+    chunk.lodCount = lodCount;
     chunk.aabbMin = {chunkOriginX, minY, chunkOriginZ};
     chunk.aabbMax = {chunkOriginX + chunkWorldW, maxY, chunkOriginZ + chunkWorldD};
+    chunk.center = (chunk.aabbMin + chunk.aabbMax) * 0.5f;
 
     return true;
 }
 
+static void destroyChunkLod(TerrainChunkLod& lod) {
+    if (lod.vaoId != 0) {
+        glDeleteVertexArrays(1, &lod.vaoId);
+        lod.vaoId = 0;
+    }
+    if (lod.vboId != 0) {
+        glDeleteBuffers(1, &lod.vboId);
+        lod.vboId = 0;
+    }
+    if (lod.iboId != 0) {
+        glDeleteBuffers(1, &lod.iboId);
+        lod.iboId = 0;
+    }
+    lod.indexCount = 0;
+}
+
 static void destroyChunk(TerrainChunkGpu& chunk) {
-    if (chunk.vaoId != 0) {
-        glDeleteVertexArrays(1, &chunk.vaoId);
-        chunk.vaoId = 0;
+    for (u32 lod = 0; lod < chunk.lodCount; ++lod) {
+        destroyChunkLod(chunk.lods[lod]);
     }
-    if (chunk.vboId != 0) {
-        glDeleteBuffers(1, &chunk.vboId);
-        chunk.vboId = 0;
-    }
-    if (chunk.iboId != 0) {
-        glDeleteBuffers(1, &chunk.iboId);
-        chunk.iboId = 0;
-    }
-    chunk.indexCount = 0;
+    chunk.lodCount = 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -533,6 +592,7 @@ void unloadTerrain(const TerrainHandle handle) {
     asset.chunkCount = 0;
     asset.diffuseTexture = rhi::TextureHandle{0};
     asset.material = TerrainMaterial{};
+    asset.lodConfig = TerrainLodConfig{};
 
     FFE_LOG_INFO("terrain", "Unloaded terrain handle=%u", handle.id);
 }
@@ -626,6 +686,27 @@ void setTerrainTriplanar(const TerrainHandle handle, const bool enabled, f32 thr
 
     asset.material.triplanarEnabled = enabled;
     asset.material.triplanarThreshold = threshold;
+}
+
+void setTerrainLodDistances(const TerrainHandle handle, const f32 lod1Distance, const f32 lod2Distance) {
+    if (!isValid(handle)) { return; }
+    if (handle.id > MAX_TERRAIN_ASSETS) { return; }
+
+    TerrainAsset& asset = s_terrains[handle.id - 1];
+    if (!asset.active) { return; }
+
+    if (!isFinite(lod1Distance) || lod1Distance <= 0.0f) {
+        FFE_LOG_ERROR("terrain", "setTerrainLodDistances: lod1Distance must be positive and finite");
+        return;
+    }
+    if (!isFinite(lod2Distance) || lod2Distance <= 0.0f) {
+        FFE_LOG_ERROR("terrain", "setTerrainLodDistances: lod2Distance must be positive and finite");
+        return;
+    }
+
+    asset.lodConfig.lodDistances[0] = lod1Distance;
+    asset.lodConfig.lodDistances[1] = lod2Distance;
+    // lodDistances[2] is not directly configurable via this API; keep default.
 }
 
 TerrainHandle getFirstActiveTerrain() {

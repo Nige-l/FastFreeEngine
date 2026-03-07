@@ -26,6 +26,7 @@ add_executable(ffe_tests
     renderer/test_texture_atlas.cpp
     renderer/test_rhi_vulkan.cpp
     renderer/test_terrain.cpp
+    renderer/test_frustum.cpp
 )
 
 target_link_libraries(ffe_tests

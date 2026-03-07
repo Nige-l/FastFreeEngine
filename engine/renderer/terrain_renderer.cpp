@@ -14,6 +14,7 @@
 #include "renderer/terrain_renderer.h"
 #include "renderer/terrain_internal.h"
 #include "renderer/terrain.h"
+#include "renderer/frustum.h"
 #include "renderer/render_system.h"
 #include "renderer/rhi.h"
 #include "renderer/rhi_types.h"
@@ -25,6 +26,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+#include <algorithm>
 #include <cstdio>
 
 namespace ffe::renderer {
@@ -36,6 +38,17 @@ static glm::mat4 buildTerrainModelMatrix(const Transform3D& t) {
     m = m * glm::mat4_cast(t.rotation);
     m = glm::scale(m, t.scale);
     return m;
+}
+
+// Helper: select LOD level for a chunk based on camera distance.
+// Returns the LOD index (0 = highest detail, lodCount-1 = lowest).
+static u32 selectLod(const TerrainChunkGpu& chunk, const TerrainLodConfig& lodConfig,
+                     const glm::vec3& cameraPos) {
+    const f32 dist = glm::length(cameraPos - chunk.center);
+    u32 lod = 0;
+    if (dist > lodConfig.lodDistances[0] && chunk.lodCount > 1) { lod = 1; }
+    if (dist > lodConfig.lodDistances[1] && chunk.lodCount > 2) { lod = 2; }
+    return std::min(lod, chunk.lodCount - 1);
 }
 
 void terrainRenderSystem(World& world, const Camera& camera3d,
@@ -114,11 +127,14 @@ void terrainRenderSystem(World& world, const Camera& camera3d,
 
                 for (u32 ci = 0; ci < asset->chunkCount; ++ci) {
                     const TerrainChunkGpu& chunk = asset->chunks[ci];
-                    if (chunk.vaoId == 0 || chunk.indexCount == 0) { continue; }
+                    if (chunk.lodCount == 0) { continue; }
+                    // Shadow pass uses LOD 0 (full detail) for accuracy.
+                    const TerrainChunkLod& lod = chunk.lods[0];
+                    if (lod.vaoId == 0 || lod.indexCount == 0) { continue; }
 
-                    glBindVertexArray(chunk.vaoId);
+                    glBindVertexArray(lod.vaoId);
                     glDrawElements(GL_TRIANGLES,
-                                   static_cast<GLsizei>(chunk.indexCount),
+                                   static_cast<GLsizei>(lod.indexCount),
                                    GL_UNSIGNED_INT, nullptr);
                 }
             }
@@ -205,6 +221,9 @@ void terrainRenderSystem(World& world, const Camera& camera3d,
 
     // --- Retrieve TERRAIN shader for splat-map path ---
     const rhi::ShaderHandle terrainShader = getShader(*shaderLib, BuiltinShader::TERRAIN);
+
+    // --- Extract view frustum for culling ---
+    const Frustum frustum = extractFrustum(vpMatrix);
 
     // --- Draw terrain entities ---
     for (const auto [entity, transform3d, terrainComp] : view.each()) {
@@ -317,14 +336,22 @@ void terrainRenderSystem(World& world, const Camera& camera3d,
             rhi::setUniformFloat(terrainShader, "u_triplanarThreshold",
                                  asset->material.triplanarThreshold);
 
-            // Draw all chunks
+            // Draw visible chunks with LOD selection
             for (u32 ci = 0; ci < asset->chunkCount; ++ci) {
                 const TerrainChunkGpu& chunk = asset->chunks[ci];
-                if (chunk.vaoId == 0 || chunk.indexCount == 0) { continue; }
+                if (chunk.lodCount == 0) { continue; }
 
-                glBindVertexArray(chunk.vaoId);
+                // Frustum cull
+                if (!isAABBVisible(frustum, chunk.aabbMin, chunk.aabbMax)) { continue; }
+
+                // LOD selection based on distance
+                const u32 lodIdx = selectLod(chunk, asset->lodConfig, camera3d.position);
+                const TerrainChunkLod& lod = chunk.lods[lodIdx];
+                if (lod.vaoId == 0 || lod.indexCount == 0) { continue; }
+
+                glBindVertexArray(lod.vaoId);
                 glDrawElements(GL_TRIANGLES,
-                               static_cast<GLsizei>(chunk.indexCount),
+                               static_cast<GLsizei>(lod.indexCount),
                                GL_UNSIGNED_INT, nullptr);
             }
 
@@ -359,14 +386,22 @@ void terrainRenderSystem(World& world, const Camera& camera3d,
             rhi::setUniformInt(meshShader, "u_hasNormalMap", 0);
             rhi::setUniformInt(meshShader, "u_hasSpecularMap", 0);
 
-            // Draw all chunks
+            // Draw visible chunks with LOD selection
             for (u32 ci = 0; ci < asset->chunkCount; ++ci) {
                 const TerrainChunkGpu& chunk = asset->chunks[ci];
-                if (chunk.vaoId == 0 || chunk.indexCount == 0) { continue; }
+                if (chunk.lodCount == 0) { continue; }
 
-                glBindVertexArray(chunk.vaoId);
+                // Frustum cull
+                if (!isAABBVisible(frustum, chunk.aabbMin, chunk.aabbMax)) { continue; }
+
+                // LOD selection based on distance
+                const u32 lodIdx = selectLod(chunk, asset->lodConfig, camera3d.position);
+                const TerrainChunkLod& lod = chunk.lods[lodIdx];
+                if (lod.vaoId == 0 || lod.indexCount == 0) { continue; }
+
+                glBindVertexArray(lod.vaoId);
                 glDrawElements(GL_TRIANGLES,
-                               static_cast<GLsizei>(chunk.indexCount),
+                               static_cast<GLsizei>(lod.indexCount),
                                GL_UNSIGNED_INT, nullptr);
             }
         }

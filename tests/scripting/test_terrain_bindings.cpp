@@ -153,3 +153,17 @@ TEST_CASE("setTerrainTriplanar with false is callable", "[scripting][terrain]") 
     TerrainBindingFixture fix;
     CHECK(fix.engine.doString("ffe.setTerrainTriplanar(false, 0.5)"));
 }
+
+// =============================================================================
+// ffe.setTerrainLodDistances — binding registration (M3)
+// =============================================================================
+
+TEST_CASE("setTerrainLodDistances is callable", "[scripting][terrain]") {
+    TerrainBindingFixture fix;
+    CHECK(fix.engine.doString("ffe.setTerrainLodDistances(100, 200)"));
+}
+
+TEST_CASE("setTerrainLodDistances with valid distances", "[scripting][terrain]") {
+    TerrainBindingFixture fix;
+    CHECK(fix.engine.doString("ffe.setTerrainLodDistances(50.0, 150.0)"));
+}
