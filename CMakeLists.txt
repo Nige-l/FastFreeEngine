@@ -34,6 +34,7 @@ include(cmake/TierDefinitions.cmake)
 # --- Build options (declared before subdirectories so all targets see them) ---
 option(FFE_BUILD_EXAMPLES "Build example programs" ON)
 option(FFE_BUILD_TESTS "Build unit tests" ON)
+option(FFE_BUILD_EDITOR "Build the standalone editor application" ON)
 
 # --- Find dependencies ---
 find_package(EnTT CONFIG REQUIRED)
@@ -54,6 +55,11 @@ add_subdirectory(engine)
 # --- Examples ---
 if(FFE_BUILD_EXAMPLES)
     add_subdirectory(examples)
+endif()
+
+# --- Standalone editor ---
+if(FFE_BUILD_EDITOR)
+    add_subdirectory(editor)
 endif()
 
 # --- Tests ---

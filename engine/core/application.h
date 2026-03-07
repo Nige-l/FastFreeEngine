@@ -50,6 +50,34 @@ public:
     // Request shutdown at end of current frame
     void requestShutdown();
 
+    // --- Editor-hosted mode ---
+    // These methods allow the editor to own the main loop while reusing
+    // the engine's subsystem initialisation and per-frame logic.
+    // The standalone init()/run() path is unchanged; these are additive.
+
+    // Initialise all subsystems (ECS, renderer, audio, physics, scripting)
+    // WITHOUT opening a window or entering a main loop. The caller must
+    // create and manage the GLFW window before calling this.
+    // Call setWindow() first if a window has already been created externally.
+    bool initSubsystems();
+
+    // Clean shutdown of all subsystems (reverse of initSubsystems).
+    void shutdownSubsystems();
+
+    // Run one fixed-timestep tick (the body that normally runs inside run()).
+    void tickOnce(float dt);
+
+    // Render one frame (the render portion from run()).
+    // alpha is the interpolation factor [0, 1) for lerping between physics states.
+    void renderOnce(float alpha);
+
+    // Getter for the GLFW window pointer (editor needs it for ImGui init).
+    GLFWwindow* window() const;
+
+    // Set an externally-created window (editor-hosted mode).
+    // Must be called before initSubsystems() if the editor created the window.
+    void setWindow(GLFWwindow* win);
+
     // Access subsystems
     World& world();
     ArenaAllocator& frameAllocator();
@@ -57,6 +85,7 @@ public:
 
 private:
     Result startup();
+    Result initSubsystemsInternal(); // Shared init logic (no window creation)
     void shutdown();
     void tick(float dt);      // Fixed-rate update
     void render(float alpha); // Variable-rate render with interpolation factor

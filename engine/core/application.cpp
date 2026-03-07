@@ -170,7 +170,52 @@ const ApplicationConfig& Application::config() const {
     return m_config;
 }
 
-Result Application::startup() {
+GLFWwindow* Application::window() const {
+    return m_window;
+}
+
+void Application::setWindow(GLFWwindow* win) {
+    m_window = win;
+}
+
+bool Application::initSubsystems() {
+    const Result result = initSubsystemsInternal();
+    if (!result) {
+        FFE_LOG_FATAL("Core", "initSubsystems failed: %s", result.message());
+        return false;
+    }
+    m_running.store(true, std::memory_order_relaxed);
+    return true;
+}
+
+void Application::shutdownSubsystems() {
+    shutdown();
+}
+
+void Application::tickOnce(const float dt) {
+    tick(dt);
+}
+
+void Application::renderOnce(const float alpha) {
+    // Reset render queue for this frame
+    m_renderQueue.clear();
+
+    // Clear text glyph buffer for fresh text this frame
+    renderer::beginText(m_textRenderer);
+
+    render(alpha);
+
+    // Per-frame cleanup
+    m_frameAllocator.reset();
+}
+
+// ---------------------------------------------------------------------------
+// initSubsystemsInternal — shared implementation for both standalone startup()
+// and editor-hosted initSubsystems(). Initialises all engine subsystems
+// (renderer, audio, physics, ECS context, built-in systems) assuming that
+// a GLFW window (if needed) already exists in m_window.
+// ---------------------------------------------------------------------------
+Result Application::initSubsystemsInternal() {
     // 1. Initialize logging (must be first — everything else logs)
     initLogging();
 
@@ -184,69 +229,6 @@ Result Application::startup() {
 
     // 3. Initialize the frame allocator (already constructed, just log)
     FFE_LOG_INFO("Core", "Frame arena: %zu bytes", m_frameAllocator.capacity());
-
-    // 4. Create the window (unless headless)
-    if (!m_config.headless) {
-        if (glfwInit() == GLFW_FALSE) {
-            return Result::fail("GLFW initialization failed");
-        }
-
-        // OpenGL 3.3 core profile for LEGACY tier
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-        glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
-        glfwWindowHint(GLFW_SAMPLES, 0);
-        glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-        // Explicitly request a 24-bit depth buffer for the 3D pass (ADR-007 Section 7.1).
-        // GLFW defaults to 24 on most platforms for GL 3.3 core, but explicit is safer.
-        glfwWindowHint(GLFW_DEPTH_BITS, 24);
-
-#ifdef __APPLE__
-        // Disable Retina framebuffer scaling. Without this, a 1280×720 window
-        // gets a 2560×1440 framebuffer on Retina displays, breaking the 2D
-        // coordinate system (all positions appear at half their expected location).
-        glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_FALSE);
-#endif
-
-        m_window = glfwCreateWindow(
-            m_config.windowWidth,
-            m_config.windowHeight,
-            m_config.windowTitle,
-            nullptr,
-            nullptr
-        );
-
-        if (m_window == nullptr) {
-            glfwTerminate();
-            return Result::fail("Failed to create GLFW window");
-        }
-
-        glfwMakeContextCurrent(m_window);
-
-        // VSync ON by default
-        glfwSwapInterval(1);
-
-        // Set window close callback
-        glfwSetWindowUserPointer(m_window, this);
-        glfwSetWindowCloseCallback(m_window, glfwWindowCloseCallback);
-
-        // Load OpenGL function pointers via glad
-        if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress))) {
-            glfwDestroyWindow(m_window);
-            m_window = nullptr;
-            glfwTerminate();
-            return Result::fail("Failed to load OpenGL function pointers via glad");
-        }
-
-        if (GLVersion_major < 3 || (GLVersion_major == 3 && GLVersion_minor < 3)) {
-            FFE_LOG_FATAL("Renderer", "OpenGL 3.3 required, got %d.%d", GLVersion_major, GLVersion_minor);
-            glfwDestroyWindow(m_window);
-            m_window = nullptr;
-            glfwTerminate();
-            return Result::fail("OpenGL version too low");
-        }
-    }
 
     // 4b. Initialize the input system (handles nullptr window in headless mode)
     initInput(m_window);
@@ -442,6 +424,74 @@ Result Application::startup() {
     // 9. Call user init callback (if any) — not yet implemented
 
     return Result::ok();
+}
+
+Result Application::startup() {
+    // 4. Create the window (unless headless)
+    if (!m_config.headless) {
+        if (glfwInit() == GLFW_FALSE) {
+            return Result::fail("GLFW initialization failed");
+        }
+
+        // OpenGL 3.3 core profile for LEGACY tier
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+        glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
+        glfwWindowHint(GLFW_SAMPLES, 0);
+        glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+        // Explicitly request a 24-bit depth buffer for the 3D pass (ADR-007 Section 7.1).
+        // GLFW defaults to 24 on most platforms for GL 3.3 core, but explicit is safer.
+        glfwWindowHint(GLFW_DEPTH_BITS, 24);
+
+#ifdef __APPLE__
+        // Disable Retina framebuffer scaling. Without this, a 1280×720 window
+        // gets a 2560×1440 framebuffer on Retina displays, breaking the 2D
+        // coordinate system (all positions appear at half their expected location).
+        glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_FALSE);
+#endif
+
+        m_window = glfwCreateWindow(
+            m_config.windowWidth,
+            m_config.windowHeight,
+            m_config.windowTitle,
+            nullptr,
+            nullptr
+        );
+
+        if (m_window == nullptr) {
+            glfwTerminate();
+            return Result::fail("Failed to create GLFW window");
+        }
+
+        glfwMakeContextCurrent(m_window);
+
+        // VSync ON by default
+        glfwSwapInterval(1);
+
+        // Set window close callback
+        glfwSetWindowUserPointer(m_window, this);
+        glfwSetWindowCloseCallback(m_window, glfwWindowCloseCallback);
+
+        // Load OpenGL function pointers via glad
+        if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress))) {
+            glfwDestroyWindow(m_window);
+            m_window = nullptr;
+            glfwTerminate();
+            return Result::fail("Failed to load OpenGL function pointers via glad");
+        }
+
+        if (GLVersion_major < 3 || (GLVersion_major == 3 && GLVersion_minor < 3)) {
+            FFE_LOG_FATAL("Renderer", "OpenGL 3.3 required, got %d.%d", GLVersion_major, GLVersion_minor);
+            glfwDestroyWindow(m_window);
+            m_window = nullptr;
+            glfwTerminate();
+            return Result::fail("OpenGL version too low");
+        }
+    }
+
+    // Delegate to shared subsystem init (renderer, audio, physics, ECS, systems)
+    return initSubsystemsInternal();
 }
 
 void Application::shutdown() {

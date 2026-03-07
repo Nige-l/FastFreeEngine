@@ -109,3 +109,46 @@ target_link_libraries(ffe_tests_audio
 )
 
 catch_discover_tests(ffe_tests_audio)
+
+# --- Scene serialiser tests ---
+# Separate executable because ffe_scene links nlohmann-json privately
+# and scene serialisation is independent of renderer/audio state.
+add_executable(ffe_tests_scene
+    test_main.cpp
+    scene/test_scene_serialiser.cpp
+)
+
+target_link_libraries(ffe_tests_scene
+    PRIVATE
+        ffe_scene
+        ffe_renderer
+        Catch2::Catch2WithMain
+)
+
+catch_discover_tests(ffe_tests_scene)
+
+# --- Editor tests ---
+# Separate executable for editor command system tests (undo/redo, entity commands).
+# Does not link ImGui — tests only exercise the command/ECS logic, not UI panels.
+add_executable(ffe_tests_editor
+    test_main.cpp
+    editor/test_command_history.cpp
+    editor/test_entity_commands.cpp
+    ${CMAKE_SOURCE_DIR}/editor/commands/command_history.cpp
+    ${CMAKE_SOURCE_DIR}/editor/commands/entity_commands.cpp
+)
+
+target_link_libraries(ffe_tests_editor
+    PRIVATE
+        ffe_core
+        ffe_renderer
+        Catch2::Catch2WithMain
+)
+
+target_include_directories(ffe_tests_editor
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/editor
+)
+
+catch_discover_tests(ffe_tests_editor)

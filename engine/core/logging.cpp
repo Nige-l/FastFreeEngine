@@ -72,7 +72,7 @@ void logMessage(const LogLevel level, const char* system, const char* fmt, ...) 
         auto& entry = s_ringBuffer.entries[s_ringBuffer.writeIndex];
         entry.level = level;
         snprintf(entry.system, LogEntry::MAX_SYS_LEN, "%s", system);
-        snprintf(entry.message, LogEntry::MAX_MSG_LEN, "%s", messageBuffer);
+        snprintf(entry.message, LogEntry::MAX_MSG_LEN, "%.255s", messageBuffer);
         s_ringBuffer.writeIndex = (s_ringBuffer.writeIndex + 1u) % LOG_RING_CAPACITY;
         if (s_ringBuffer.count < LOG_RING_CAPACITY) {
             ++s_ringBuffer.count;

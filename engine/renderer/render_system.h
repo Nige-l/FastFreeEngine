@@ -8,6 +8,7 @@
 #include "renderer/skeleton.h"
 #include "renderer/sprite_batch.h"
 
+#include <entt/entt.hpp>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <new>
@@ -83,6 +84,28 @@ struct AnimationState {
     u8   _pad[2]    = {};     // explicit padding
 };
 static_assert(sizeof(AnimationState) == 16, "AnimationState must be 16 bytes");
+
+// --- Name component — human-readable entity label for the editor ---
+// Fixed-size char array (no heap allocation). Default name is "Entity".
+struct Name {
+    char name[64] = "Entity";
+};
+static_assert(sizeof(Name) == 64, "Name must be 64 bytes");
+
+// --- Parent component — references this entity's parent in the scene hierarchy ---
+// Used by the editor's scene tree and hierarchy panel. entt::null means no parent.
+struct Parent {
+    entt::entity parent = entt::null;
+};
+
+// --- Children component — fixed-size list of child entities ---
+// Max 32 children per entity. This avoids heap allocation in the component.
+// The editor uses this alongside Parent for hierarchy traversal.
+struct Children {
+    entt::entity children[32] = {};
+    uint32_t count = 0;
+};
+static_assert(sizeof(Children) <= 132, "Children must not exceed 132 bytes");
 
 // --- Transform component (needed by render system) ---
 // Defined here because the render system needs it and it is not yet in core.
