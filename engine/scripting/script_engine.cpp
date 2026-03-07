@@ -24,6 +24,8 @@ extern "C" {
 #include "audio/audio.h"
 #include "renderer/text_renderer.h"
 #include "physics/collider2d.h"
+#include "physics/physics3d.h"
+#include "physics/physics3d_system.h"
 
 #include <glm/gtc/quaternion.hpp>
 
@@ -5228,6 +5230,320 @@ void ScriptEngine::registerEcsBindings() {
     };
     lua_pushcfunction(L, ffe_getAnimationCount);
     lua_setfield(L, -2, "getAnimationCount3D");
+
+    // ----------------------------------------------------------------
+    // 3D physics bindings (Session 48)
+    // ----------------------------------------------------------------
+
+    // ffe.createPhysicsBody(entityId: integer, defTable: table) -> boolean
+    // Parse a Lua table describing the body, create a Jolt body, attach RigidBody3D.
+    // Returns true on success.
+    auto ffe_createPhysicsBody = [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TNUMBER) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.createPhysicsBody: argument 1 (entityId) must be a number");
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        if (lua_type(state, 2) != LUA_TTABLE) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.createPhysicsBody: argument 2 must be a table");
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); lua_pushboolean(state, 0); return 1; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = lua_tointeger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) { lua_pushboolean(state, 0); return 1; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.createPhysicsBody: invalid entity ID %" PRId64,
+                          static_cast<long long>(rawId));
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+
+        // Parse the definition table
+        ffe::physics::BodyDef3D def;
+
+        // shape = "box" | "sphere" | "capsule"
+        lua_getfield(state, 2, "shape");
+        if (lua_type(state, -1) == LUA_TSTRING) {
+            const char* shapeStr = lua_tostring(state, -1);
+            if (shapeStr[0] == 's' || shapeStr[0] == 'S') {
+                def.shapeType = ffe::physics::ShapeType3D::SPHERE;
+            } else if (shapeStr[0] == 'c' || shapeStr[0] == 'C') {
+                def.shapeType = ffe::physics::ShapeType3D::CAPSULE;
+            } else {
+                def.shapeType = ffe::physics::ShapeType3D::BOX;
+            }
+        }
+        lua_pop(state, 1);
+
+        // motion = "static" | "kinematic" | "dynamic"
+        lua_getfield(state, 2, "motion");
+        if (lua_type(state, -1) == LUA_TSTRING) {
+            const char* motionStr = lua_tostring(state, -1);
+            if (motionStr[0] == 's' || motionStr[0] == 'S') {
+                def.motionType = ffe::physics::MotionType3D::STATIC;
+            } else if (motionStr[0] == 'k' || motionStr[0] == 'K') {
+                def.motionType = ffe::physics::MotionType3D::KINEMATIC;
+            } else {
+                def.motionType = ffe::physics::MotionType3D::DYNAMIC;
+            }
+        }
+        lua_pop(state, 1);
+
+        // halfExtents = {x, y, z}
+        lua_getfield(state, 2, "halfExtents");
+        if (lua_type(state, -1) == LUA_TTABLE) {
+            lua_rawgeti(state, -1, 1); def.halfExtents.x = static_cast<ffe::f32>(luaL_optnumber(state, -1, 0.5)); lua_pop(state, 1);
+            lua_rawgeti(state, -1, 2); def.halfExtents.y = static_cast<ffe::f32>(luaL_optnumber(state, -1, 0.5)); lua_pop(state, 1);
+            lua_rawgeti(state, -1, 3); def.halfExtents.z = static_cast<ffe::f32>(luaL_optnumber(state, -1, 0.5)); lua_pop(state, 1);
+        }
+        lua_pop(state, 1);
+
+        // Scalar fields
+        lua_getfield(state, 2, "radius");
+        if (lua_type(state, -1) == LUA_TNUMBER) { def.radius = static_cast<ffe::f32>(lua_tonumber(state, -1)); }
+        lua_pop(state, 1);
+
+        lua_getfield(state, 2, "height");
+        if (lua_type(state, -1) == LUA_TNUMBER) { def.height = static_cast<ffe::f32>(lua_tonumber(state, -1)); }
+        lua_pop(state, 1);
+
+        lua_getfield(state, 2, "mass");
+        if (lua_type(state, -1) == LUA_TNUMBER) { def.mass = static_cast<ffe::f32>(lua_tonumber(state, -1)); }
+        lua_pop(state, 1);
+
+        lua_getfield(state, 2, "friction");
+        if (lua_type(state, -1) == LUA_TNUMBER) { def.friction = static_cast<ffe::f32>(lua_tonumber(state, -1)); }
+        lua_pop(state, 1);
+
+        lua_getfield(state, 2, "restitution");
+        if (lua_type(state, -1) == LUA_TNUMBER) { def.restitution = static_cast<ffe::f32>(lua_tonumber(state, -1)); }
+        lua_pop(state, 1);
+
+        // Use the entity's Transform3D position if it exists
+        const auto* t3d = world->registry().try_get<ffe::Transform3D>(
+            static_cast<entt::entity>(entityId));
+        if (t3d != nullptr) {
+            def.position = t3d->position;
+            def.rotation = t3d->rotation;
+        }
+
+        // NaN/Inf guard — all floats are sanitised inside createBody()
+        const ffe::physics::BodyHandle3D handle = ffe::physics::createBody(def);
+        if (!ffe::physics::isValid(handle)) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.createPhysicsBody: body creation failed");
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+
+        // Attach RigidBody3D component
+        ffe::RigidBody3D rb;
+        rb.handle      = handle;
+        rb.initialized = true;
+        world->registry().emplace_or_replace<ffe::RigidBody3D>(
+            static_cast<entt::entity>(entityId), rb);
+
+        lua_pushboolean(state, 1);
+        return 1;
+    };
+    lua_pushcfunction(L, ffe_createPhysicsBody);
+    lua_setfield(L, -2, "createPhysicsBody");
+
+    // ffe.destroyPhysicsBody(entityId: integer) -> nothing
+    auto ffe_destroyPhysicsBody = [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TNUMBER) { return 0; }
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = lua_tointeger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) { return 0; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) { return 0; }
+
+        auto* rb = world->registry().try_get<ffe::RigidBody3D>(
+            static_cast<entt::entity>(entityId));
+        if (rb != nullptr && rb->initialized) {
+            ffe::physics::destroyBody(rb->handle);
+            rb->handle = ffe::physics::BodyHandle3D{};
+            rb->initialized = false;
+        }
+        world->registry().remove<ffe::RigidBody3D>(static_cast<entt::entity>(entityId));
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_destroyPhysicsBody);
+    lua_setfield(L, -2, "destroyPhysicsBody");
+
+    // ffe.applyForce(entityId, fx, fy, fz) -> nothing
+    auto ffe_applyForce3D = [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TNUMBER) { return 0; }
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = lua_tointeger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) { return 0; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) { return 0; }
+
+        const auto* rb = world->registry().try_get<ffe::RigidBody3D>(
+            static_cast<entt::entity>(entityId));
+        if (rb == nullptr || !rb->initialized) { return 0; }
+
+        const ffe::f32 fx = static_cast<ffe::f32>(luaL_optnumber(state, 2, 0.0));
+        const ffe::f32 fy = static_cast<ffe::f32>(luaL_optnumber(state, 3, 0.0));
+        const ffe::f32 fz = static_cast<ffe::f32>(luaL_optnumber(state, 4, 0.0));
+        if (!std::isfinite(fx) || !std::isfinite(fy) || !std::isfinite(fz)) {
+            FFE_LOG_WARN("ScriptEngine", "ffe.applyForce: non-finite input ignored");
+            return 0;
+        }
+        ffe::physics::applyForce(rb->handle, {fx, fy, fz});
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_applyForce3D);
+    lua_setfield(L, -2, "applyForce");
+
+    // ffe.applyImpulse(entityId, ix, iy, iz) -> nothing
+    auto ffe_applyImpulse3D = [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TNUMBER) { return 0; }
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = lua_tointeger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) { return 0; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) { return 0; }
+
+        const auto* rb = world->registry().try_get<ffe::RigidBody3D>(
+            static_cast<entt::entity>(entityId));
+        if (rb == nullptr || !rb->initialized) { return 0; }
+
+        const ffe::f32 ix = static_cast<ffe::f32>(luaL_optnumber(state, 2, 0.0));
+        const ffe::f32 iy = static_cast<ffe::f32>(luaL_optnumber(state, 3, 0.0));
+        const ffe::f32 iz = static_cast<ffe::f32>(luaL_optnumber(state, 4, 0.0));
+        if (!std::isfinite(ix) || !std::isfinite(iy) || !std::isfinite(iz)) {
+            FFE_LOG_WARN("ScriptEngine", "ffe.applyImpulse: non-finite input ignored");
+            return 0;
+        }
+        ffe::physics::applyImpulse(rb->handle, {ix, iy, iz});
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_applyImpulse3D);
+    lua_setfield(L, -2, "applyImpulse");
+
+    // ffe.setLinearVelocity(entityId, vx, vy, vz) -> nothing
+    auto ffe_setLinearVelocity3D = [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TNUMBER) { return 0; }
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = lua_tointeger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) { return 0; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) { return 0; }
+
+        const auto* rb = world->registry().try_get<ffe::RigidBody3D>(
+            static_cast<entt::entity>(entityId));
+        if (rb == nullptr || !rb->initialized) { return 0; }
+
+        const ffe::f32 vx = static_cast<ffe::f32>(luaL_optnumber(state, 2, 0.0));
+        const ffe::f32 vy = static_cast<ffe::f32>(luaL_optnumber(state, 3, 0.0));
+        const ffe::f32 vz = static_cast<ffe::f32>(luaL_optnumber(state, 4, 0.0));
+        if (!std::isfinite(vx) || !std::isfinite(vy) || !std::isfinite(vz)) {
+            FFE_LOG_WARN("ScriptEngine", "ffe.setLinearVelocity: non-finite input ignored");
+            return 0;
+        }
+        ffe::physics::setLinearVelocity(rb->handle, {vx, vy, vz});
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_setLinearVelocity3D);
+    lua_setfield(L, -2, "setLinearVelocity");
+
+    // ffe.getLinearVelocity(entityId) -> vx, vy, vz
+    auto ffe_getLinearVelocity3D = [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TNUMBER) {
+            lua_pushnumber(state, 0); lua_pushnumber(state, 0); lua_pushnumber(state, 0);
+            return 3;
+        }
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            lua_pushnumber(state, 0); lua_pushnumber(state, 0); lua_pushnumber(state, 0);
+            return 3;
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = lua_tointeger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) {
+            lua_pushnumber(state, 0); lua_pushnumber(state, 0); lua_pushnumber(state, 0);
+            return 3;
+        }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) {
+            lua_pushnumber(state, 0); lua_pushnumber(state, 0); lua_pushnumber(state, 0);
+            return 3;
+        }
+
+        const auto* rb = world->registry().try_get<ffe::RigidBody3D>(
+            static_cast<entt::entity>(entityId));
+        if (rb == nullptr || !rb->initialized) {
+            lua_pushnumber(state, 0); lua_pushnumber(state, 0); lua_pushnumber(state, 0);
+            return 3;
+        }
+
+        const glm::vec3 vel = ffe::physics::getLinearVelocity(rb->handle);
+        lua_pushnumber(state, static_cast<double>(vel.x));
+        lua_pushnumber(state, static_cast<double>(vel.y));
+        lua_pushnumber(state, static_cast<double>(vel.z));
+        return 3;
+    };
+    lua_pushcfunction(L, ffe_getLinearVelocity3D);
+    lua_setfield(L, -2, "getLinearVelocity");
+
+    // ffe.setGravity(gx, gy, gz) -> nothing
+    auto ffe_setGravity3D = [](lua_State* state) -> int {
+        const ffe::f32 gx = static_cast<ffe::f32>(luaL_optnumber(state, 1, 0.0));
+        const ffe::f32 gy = static_cast<ffe::f32>(luaL_optnumber(state, 2, -9.81));
+        const ffe::f32 gz = static_cast<ffe::f32>(luaL_optnumber(state, 3, 0.0));
+        if (!std::isfinite(gx) || !std::isfinite(gy) || !std::isfinite(gz)) {
+            FFE_LOG_WARN("ScriptEngine", "ffe.setGravity: non-finite input ignored");
+            return 0;
+        }
+        ffe::physics::setGravity({gx, gy, gz});
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_setGravity3D);
+    lua_setfield(L, -2, "setGravity");
+
+    // ffe.getGravity() -> gx, gy, gz
+    auto ffe_getGravity3D = [](lua_State* state) -> int {
+        const glm::vec3 g = ffe::physics::getGravity();
+        lua_pushnumber(state, static_cast<double>(g.x));
+        lua_pushnumber(state, static_cast<double>(g.y));
+        lua_pushnumber(state, static_cast<double>(g.z));
+        return 3;
+    };
+    lua_pushcfunction(L, ffe_getGravity3D);
+    lua_setfield(L, -2, "getGravity");
 
     lua_setglobal(L, "ffe");
 }

@@ -928,7 +928,7 @@ MeshHandle loadMesh(const char* const path) {
                      path, vertexCount, indexCount,
                      parsedSkeleton.boneCount, s_animationPool[slot]->clipCount, slot);
     } else {
-        s_skeletonPool[slot]  = SkeletonData{};
+        s_skeletonPool[slot]  = SkeletonData();
         s_animationPool[slot].reset();
 
         FFE_LOG_INFO("MeshLoader",
@@ -980,7 +980,7 @@ void unloadMesh(const MeshHandle handle) {
     rec.hasSkeleton  = false;
 
     // Clear skeleton and animation data for this slot
-    s_skeletonPool[handle.id]  = SkeletonData{};
+    s_skeletonPool[handle.id]  = SkeletonData();
     s_animationPool[handle.id].reset();
 }
 

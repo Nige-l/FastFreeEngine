@@ -10,6 +10,8 @@
 #include "renderer/texture_loader.h"
 #include "physics/collider2d.h"
 #include "physics/collision_system.h"
+#include "physics/physics3d.h"
+#include "physics/physics3d_system.h"
 #include "audio/audio.h"
 
 #include <chrono>
@@ -353,6 +355,11 @@ Result Application::startup() {
     // Skybox rendering is disabled by default (SkyboxConfig::enabled = false).
     m_world.registry().ctx().emplace<renderer::SkyboxConfig*>(&m_skyboxConfig);
 
+    // 5e0. Initialize 3D physics (Jolt)
+    if (!physics::initPhysics3D()) {
+        FFE_LOG_WARN("Core", "3D physics initialization failed — physics disabled");
+    }
+
     // 5e. Initialize render queue (pre-allocated, persistent — not from the frame arena)
     renderer::initRenderQueue(m_renderQueue, renderer::MAX_DRAW_COMMANDS_LEGACY);
 
@@ -400,6 +407,14 @@ Result Application::startup() {
         renderer::particleUpdateSystem,
         renderer::PARTICLE_UPDATE_PRIORITY
     ));
+    // Physics3DSyncSystem runs at priority 60, after animation (50, 52) and
+    // particles (55), before gameplay systems (>= 100). Syncs Jolt body
+    // transforms into ECS Transform3D components.
+    m_world.registerSystem(FFE_SYSTEM(
+        "Physics3DSync",
+        physics3dSyncSystem,
+        PHYSICS_3D_SYNC_PRIORITY
+    ));
     // CollisionSystem runs at priority 200 (physics band), after gameplay
     // systems have moved entities. Detects overlaps and writes CollisionEventList
     // to ECS context for Lua callback delivery.
@@ -429,6 +444,10 @@ void Application::shutdown() {
     // 8. (nothing)
     // 7. Unregister systems (clear handled by World destructor)
     // 6. Shutdown scripting — not yet implemented
+
+    // 5d0. Shutdown 3D physics (before RHI shutdown — physics has no GPU deps,
+    // but clean teardown order is important).
+    physics::shutdownPhysics3D();
 
     // 5e0. Destroy skybox cubemap texture (if any) before RHI shutdown.
     if (m_skyboxConfig.cubemapTexture != 0) {
@@ -490,6 +509,10 @@ void Application::shutdown() {
 }
 
 void Application::tick(const float dt) {
+    // Step 3D physics simulation before ECS systems run.
+    // physics3dSyncSystem (priority 60) will read back the results.
+    physics::stepPhysics3D(dt);
+
     for (const auto& system : m_world.systems()) {
         ZoneScoped;
         ZoneName(system.name, system.nameLength);

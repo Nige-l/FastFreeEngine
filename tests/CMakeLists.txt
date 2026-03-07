@@ -44,6 +44,7 @@ add_executable(ffe_tests_scripting
     scripting/test_skybox_bindings.cpp
     scripting/test_animation3d_bindings.cpp
     scripting/test_audio3d_bindings.cpp
+    scripting/test_physics3d_bindings.cpp
 )
 
 target_link_libraries(ffe_tests_scripting
@@ -53,6 +54,23 @@ target_link_libraries(ffe_tests_scripting
 )
 
 catch_discover_tests(ffe_tests_scripting)
+
+# --- 3D Physics tests ---
+# Separate executable because Jolt Physics init/shutdown mutate global state
+# (Factory, RegisterTypes, PhysicsSystem). Isolation prevents cross-contamination
+# with ffe_tests which may not have Jolt initialized.
+add_executable(ffe_tests_physics
+    test_main.cpp
+    physics/test_physics3d.cpp
+)
+
+target_link_libraries(ffe_tests_physics
+    PRIVATE
+        ffe_physics
+        Catch2::Catch2WithMain
+)
+
+catch_discover_tests(ffe_tests_physics)
 
 # --- Texture loader tests ---
 # Separate executable because texture_loader tests mutate global static state
