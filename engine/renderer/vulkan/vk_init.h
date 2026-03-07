@@ -104,6 +104,11 @@ struct VulkanContext {
     VkPipeline       trianglePipeline       = VK_NULL_HANDLE;
     VkPipelineLayout trianglePipelineLayout  = VK_NULL_HANDLE;
 
+    // M3: Descriptor management
+    VkDescriptorPool      descriptorPool      = VK_NULL_HANDLE;
+    VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
+    VkDescriptorSet       descriptorSets[MAX_FRAMES_IN_FLIGHT] = {};
+
     // Config snapshot
     bool vsync = true;
     bool debugEnabled = false;

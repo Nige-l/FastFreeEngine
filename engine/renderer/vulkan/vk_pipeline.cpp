@@ -113,9 +113,15 @@ VkPipeline createGraphicsPipeline(VkDevice device,
     dynamicState.dynamicStateCount = 2;
     dynamicState.pDynamicStates    = dynamicStates;
 
-    // --- Pipeline layout (empty — no descriptors yet) ---
+    // --- Pipeline layout ---
     VkPipelineLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+
+    // If a descriptor set layout is provided, attach it to the pipeline layout
+    if (config.descriptorSetLayout != VK_NULL_HANDLE) {
+        layoutInfo.setLayoutCount = 1;
+        layoutInfo.pSetLayouts    = &config.descriptorSetLayout;
+    }
 
     VkResult vkr = vkCreatePipelineLayout(device, &layoutInfo, nullptr, &outLayout);
     if (vkr != VK_SUCCESS) {

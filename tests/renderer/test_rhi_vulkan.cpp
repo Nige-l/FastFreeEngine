@@ -7,8 +7,13 @@
 #include "renderer/vulkan/vk_buffer.h"
 #include "renderer/vulkan/vk_shader.h"
 #include "renderer/vulkan/vk_pipeline.h"
+#include "renderer/vulkan/vk_texture.h"
+#include "renderer/vulkan/vk_descriptor.h"
+#include "renderer/vulkan/vk_uniform.h"
 #include "renderer/vulkan/shaders/triangle_vert.h"
 #include "renderer/vulkan/shaders/triangle_frag.h"
+#include "renderer/vulkan/shaders/textured_vert.h"
+#include "renderer/vulkan/shaders/textured_frag.h"
 #endif
 
 using namespace ffe;
@@ -205,6 +210,93 @@ TEST_CASE("Triangle vertex stride matches expected layout", "[renderer][vulkan]"
     REQUIRE(expectedStride == 20);
     // This value must match the vertexStride used in pipeline configuration
     // and the TriangleVertex struct defined in rhi_vulkan.cpp
+}
+
+// ============================================================================
+// M3 — Vulkan Textures, Descriptors, Uniforms (CPU-only)
+// ============================================================================
+
+// --- Texture Tests ---
+
+TEST_CASE("VkManagedTexture: default fields are null/zero", "[renderer][vulkan]") {
+    const vk::VkManagedTexture tex{};
+    REQUIRE(tex.image      == VK_NULL_HANDLE);
+    REQUIRE(tex.imageView  == VK_NULL_HANDLE);
+    REQUIRE(tex.sampler    == VK_NULL_HANDLE);
+    REQUIRE(tex.allocation == VK_NULL_HANDLE);
+    REQUIRE(tex.width  == 0);
+    REQUIRE(tex.height == 0);
+}
+
+TEST_CASE("VkManagedTexture: struct stores width and height", "[renderer][vulkan]") {
+    vk::VkManagedTexture tex{};
+    tex.width  = 512;
+    tex.height = 256;
+    REQUIRE(tex.width  == 512);
+    REQUIRE(tex.height == 256);
+}
+
+// --- Uniform Tests ---
+
+TEST_CASE("MVPUniform: size is 192 bytes (3 * mat4)", "[renderer][vulkan]") {
+    static_assert(sizeof(vk::MVPUniform) == 192, "MVPUniform must be 3 * mat4 = 192 bytes");
+    REQUIRE(sizeof(vk::MVPUniform) == 192);
+}
+
+TEST_CASE("MVPUniform: identity matrices", "[renderer][vulkan]") {
+    vk::MVPUniform mvp{};
+    mvp.model = glm::mat4(1.0f);
+    mvp.view  = glm::mat4(1.0f);
+    mvp.proj  = glm::mat4(1.0f);
+
+    REQUIRE(mvp.model[0][0] == 1.0f);
+    REQUIRE(mvp.model[3][3] == 1.0f);
+    REQUIRE(mvp.view[1][1]  == 1.0f);
+    REQUIRE(mvp.proj[2][2]  == 1.0f);
+}
+
+TEST_CASE("VkManagedUniform: default arrays are null", "[renderer][vulkan]") {
+    const vk::VkManagedUniform uniform{};
+    for (u32 i = 0; i < vk::MAX_FRAMES_IN_FLIGHT; ++i) {
+        REQUIRE(uniform.buffers[i]     == VK_NULL_HANDLE);
+        REQUIRE(uniform.allocations[i] == VK_NULL_HANDLE);
+        REQUIRE(uniform.mappedPtrs[i]  == nullptr);
+    }
+}
+
+// --- Descriptor Tests ---
+
+TEST_CASE("MAX_DESCRIPTOR_SETS is 16", "[renderer][vulkan]") {
+    REQUIRE(vk::MAX_DESCRIPTOR_SETS == 16);
+}
+
+TEST_CASE("DescriptorSetLayout UBO binding is 0, sampler binding is 1", "[renderer][vulkan]") {
+    REQUIRE(vk::DESCRIPTOR_UBO_BINDING     == 0);
+    REQUIRE(vk::DESCRIPTOR_SAMPLER_BINDING == 1);
+}
+
+// --- Textured Shader SPIR-V Tests ---
+
+TEST_CASE("Embedded textured vertex SPIR-V starts with magic number", "[renderer][vulkan]") {
+    REQUIRE(vk::spv::TEXTURED_VERT_SPV[0] == 0x07230203);
+    REQUIRE(vk::spv::TEXTURED_VERT_SPV_SIZE > 0);
+    REQUIRE(vk::spv::TEXTURED_VERT_SPV_SIZE % 4 == 0);
+}
+
+TEST_CASE("Embedded textured fragment SPIR-V starts with magic number", "[renderer][vulkan]") {
+    REQUIRE(vk::spv::TEXTURED_FRAG_SPV[0] == 0x07230203);
+    REQUIRE(vk::spv::TEXTURED_FRAG_SPV_SIZE > 0);
+    REQUIRE(vk::spv::TEXTURED_FRAG_SPV_SIZE % 4 == 0);
+}
+
+// --- Textured Quad Layout Tests ---
+
+TEST_CASE("Textured quad vertex stride is 16 bytes", "[renderer][vulkan]") {
+    // vec2 (position) = 2 * sizeof(float) = 8 bytes
+    // vec2 (texcoord) = 2 * sizeof(float) = 8 bytes
+    // Total stride    = 16 bytes
+    constexpr u32 expectedStride = 2 * sizeof(f32) + 2 * sizeof(f32);
+    REQUIRE(expectedStride == 16);
 }
 
 #endif // FFE_BACKEND_VULKAN

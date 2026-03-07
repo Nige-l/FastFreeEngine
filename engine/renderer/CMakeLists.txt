@@ -38,6 +38,9 @@ if(FFE_BACKEND STREQUAL "VULKAN")
         vulkan/vk_buffer.cpp
         vulkan/vk_shader.cpp
         vulkan/vk_pipeline.cpp
+        vulkan/vk_texture.cpp
+        vulkan/vk_descriptor.cpp
+        vulkan/vk_uniform.cpp
     )
 else()
     # OPENGL backend (default for RETRO, LEGACY, STANDARD)

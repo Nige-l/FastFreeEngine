@@ -5,15 +5,23 @@
 #include "renderer/vulkan/vk_buffer.h"
 #include "renderer/vulkan/vk_shader.h"
 #include "renderer/vulkan/vk_pipeline.h"
+#include "renderer/vulkan/vk_texture.h"
+#include "renderer/vulkan/vk_descriptor.h"
+#include "renderer/vulkan/vk_uniform.h"
 #include "renderer/vulkan/shaders/triangle_vert.h"
 #include "renderer/vulkan/shaders/triangle_frag.h"
+#include "renderer/vulkan/shaders/textured_vert.h"
+#include "renderer/vulkan/shaders/textured_frag.h"
 #include "core/logging.h"
 
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <tracy/Tracy.hpp>
 #include <cstddef>
+#include <cstring>
 
 namespace ffe::rhi {
 
@@ -37,21 +45,32 @@ static u32 s_headlessBufferNext = 1;
 static u32 s_headlessTextureNext = 1;
 static u32 s_headlessShaderNext = 1;
 
-// --- M2 triangle demo resources ---
-static vk::VkManagedBuffer s_triangleVB{};
-static vk::VkManagedShader s_triangleShader{};
+// --- M3 textured quad demo resources ---
+static vk::VkManagedBuffer  s_quadVB{};
+static vk::VkManagedBuffer  s_quadIB{};
+static vk::VkManagedShader  s_quadShader{};
+static vk::VkManagedTexture s_quadTexture{};
+static vk::VkManagedUniform s_quadUniforms{};
 
-// Triangle vertex: position (vec2) + color (vec3) = 20 bytes
-struct TriangleVertex {
+// Textured quad vertex: position (vec2) + texcoord (vec2) = 16 bytes
+struct TexturedVertex {
     f32 x, y;
-    f32 r, g, b;
+    f32 u, v;
 };
-static_assert(sizeof(TriangleVertex) == 20);
+static_assert(sizeof(TexturedVertex) == 16);
 
-static constexpr TriangleVertex TRIANGLE_VERTICES[] = {
-    {  0.0f, -0.5f,   1.0f, 0.0f, 0.0f },  // top (red)
-    {  0.5f,  0.5f,   0.0f, 1.0f, 0.0f },  // bottom-right (green)
-    { -0.5f,  0.5f,   0.0f, 0.0f, 1.0f },  // bottom-left (blue)
+// Quad vertices: centered, half-size 0.5, CCW winding
+static constexpr TexturedVertex QUAD_VERTICES[] = {
+    { -0.5f, -0.5f,   0.0f, 0.0f },  // bottom-left
+    {  0.5f, -0.5f,   1.0f, 0.0f },  // bottom-right
+    {  0.5f,  0.5f,   1.0f, 1.0f },  // top-right
+    { -0.5f,  0.5f,   0.0f, 1.0f },  // top-left
+};
+
+// Two triangles forming the quad
+static constexpr u16 QUAD_INDICES[] = {
+    0, 1, 2,
+    2, 3, 0,
 };
 
 // ==================== RHI Implementation ====================
@@ -155,36 +174,96 @@ RhiResult init(const RhiConfig& config) {
         }
     }
 
-    // 9. Create M2 triangle demo resources
+    // 9. Create M3 textured quad demo resources
     {
-        // Vertex buffer
-        s_triangleVB = vk::createVertexBuffer(
+        // --- Create 2x2 checkerboard texture (no file I/O) ---
+        // RGBA pixels: white, magenta, magenta, white
+        static constexpr u8 checkerPixels[] = {
+            255, 255, 255, 255,   255,   0, 255, 255,
+            255,   0, 255, 255,   255, 255, 255, 255,
+        };
+        s_quadTexture = vk::createTexture2D(
             s_vk.allocator, s_vk.device, s_vk.commandPool, s_vk.graphicsQueue,
-            TRIANGLE_VERTICES, sizeof(TRIANGLE_VERTICES));
-        if (s_triangleVB.buffer == VK_NULL_HANDLE) {
-            FFE_LOG_ERROR("Renderer", "Failed to create triangle vertex buffer");
+            checkerPixels, 2, 2, 4);
+        if (s_quadTexture.image == VK_NULL_HANDLE) {
+            FFE_LOG_ERROR("Renderer", "Failed to create checkerboard texture");
             vk::shutdownVulkan(s_vk);
             return RhiResult::ERROR_UNSUPPORTED;
         }
 
-        // Shader modules from embedded SPIR-V
-        s_triangleShader = vk::createShaderModules(
+        // --- Create uniform buffers (one per frame in flight) ---
+        s_quadUniforms = vk::createUniformBuffers(s_vk.allocator);
+        if (s_quadUniforms.buffers[0] == VK_NULL_HANDLE) {
+            FFE_LOG_ERROR("Renderer", "Failed to create uniform buffers");
+            vk::destroyTexture(s_vk.allocator, s_vk.device, s_quadTexture);
+            vk::shutdownVulkan(s_vk);
+            return RhiResult::ERROR_UNSUPPORTED;
+        }
+
+        // --- Create descriptor pool ---
+        s_vk.descriptorPool = vk::createDescriptorPool(
+            s_vk.device, vk::MAX_DESCRIPTOR_SETS,
+            vk::VulkanContext::MAX_FRAMES_IN_FLIGHT,   // UBO count
+            vk::VulkanContext::MAX_FRAMES_IN_FLIGHT);  // sampler count
+        if (s_vk.descriptorPool == VK_NULL_HANDLE) {
+            FFE_LOG_ERROR("Renderer", "Failed to create descriptor pool");
+            vk::destroyUniformBuffers(s_vk.allocator, s_quadUniforms);
+            vk::destroyTexture(s_vk.allocator, s_vk.device, s_quadTexture);
+            vk::shutdownVulkan(s_vk);
+            return RhiResult::ERROR_UNSUPPORTED;
+        }
+
+        // --- Create descriptor set layout ---
+        s_vk.descriptorSetLayout = vk::createDescriptorSetLayout(
+            s_vk.device, vk::DESCRIPTOR_UBO_BINDING, vk::DESCRIPTOR_SAMPLER_BINDING);
+        if (s_vk.descriptorSetLayout == VK_NULL_HANDLE) {
+            FFE_LOG_ERROR("Renderer", "Failed to create descriptor set layout");
+            vkDestroyDescriptorPool(s_vk.device, s_vk.descriptorPool, nullptr);
+            vk::destroyUniformBuffers(s_vk.allocator, s_quadUniforms);
+            vk::destroyTexture(s_vk.allocator, s_vk.device, s_quadTexture);
+            vk::shutdownVulkan(s_vk);
+            return RhiResult::ERROR_UNSUPPORTED;
+        }
+
+        // --- Allocate and update descriptor sets ---
+        vk::allocateDescriptorSets(s_vk.device, s_vk.descriptorPool,
+                                   s_vk.descriptorSetLayout,
+                                   s_vk.descriptorSets,
+                                   vk::VulkanContext::MAX_FRAMES_IN_FLIGHT);
+
+        for (u32 i = 0; i < vk::VulkanContext::MAX_FRAMES_IN_FLIGHT; ++i) {
+            vk::updateDescriptorSetUBO(s_vk.device, s_vk.descriptorSets[i],
+                                       vk::DESCRIPTOR_UBO_BINDING,
+                                       s_quadUniforms.buffers[i],
+                                       sizeof(vk::MVPUniform));
+            vk::updateDescriptorSetTexture(s_vk.device, s_vk.descriptorSets[i],
+                                           vk::DESCRIPTOR_SAMPLER_BINDING,
+                                           s_quadTexture.imageView,
+                                           s_quadTexture.sampler);
+        }
+
+        // --- Create shader modules from embedded SPIR-V ---
+        s_quadShader = vk::createShaderModules(
             s_vk.device,
-            vk::spv::TRIANGLE_VERT_SPV, vk::spv::TRIANGLE_VERT_SPV_SIZE,
-            vk::spv::TRIANGLE_FRAG_SPV, vk::spv::TRIANGLE_FRAG_SPV_SIZE);
-        if (s_triangleShader.vertModule == VK_NULL_HANDLE) {
-            FFE_LOG_ERROR("Renderer", "Failed to create triangle shader modules");
-            vk::destroyBuffer(s_vk.allocator, s_triangleVB);
+            vk::spv::TEXTURED_VERT_SPV, vk::spv::TEXTURED_VERT_SPV_SIZE,
+            vk::spv::TEXTURED_FRAG_SPV, vk::spv::TEXTURED_FRAG_SPV_SIZE);
+        if (s_quadShader.vertModule == VK_NULL_HANDLE) {
+            FFE_LOG_ERROR("Renderer", "Failed to create textured quad shader modules");
+            vkDestroyDescriptorSetLayout(s_vk.device, s_vk.descriptorSetLayout, nullptr);
+            vkDestroyDescriptorPool(s_vk.device, s_vk.descriptorPool, nullptr);
+            vk::destroyUniformBuffers(s_vk.allocator, s_quadUniforms);
+            vk::destroyTexture(s_vk.allocator, s_vk.device, s_quadTexture);
             vk::shutdownVulkan(s_vk);
             return RhiResult::ERROR_UNSUPPORTED;
         }
 
-        // Graphics pipeline
+        // --- Create graphics pipeline with descriptor set layout ---
         vk::PipelineConfig pipeConfig{};
-        pipeConfig.renderPass   = s_vk.clearPass;
-        pipeConfig.extent       = s_vk.swapchainExtent;
-        pipeConfig.vertexStride = sizeof(TriangleVertex);
-        pipeConfig.attrCount    = 2;
+        pipeConfig.renderPass          = s_vk.clearPass;
+        pipeConfig.extent              = s_vk.swapchainExtent;
+        pipeConfig.vertexStride        = sizeof(TexturedVertex);
+        pipeConfig.descriptorSetLayout = s_vk.descriptorSetLayout;
+        pipeConfig.attrCount           = 2;
 
         // location 0: vec2 inPos
         pipeConfig.attrs[0].binding  = 0;
@@ -192,25 +271,63 @@ RhiResult init(const RhiConfig& config) {
         pipeConfig.attrs[0].format   = VK_FORMAT_R32G32_SFLOAT;
         pipeConfig.attrs[0].offset   = 0;
 
-        // location 1: vec3 inColor
+        // location 1: vec2 inUV
         pipeConfig.attrs[1].binding  = 0;
         pipeConfig.attrs[1].location = 1;
-        pipeConfig.attrs[1].format   = VK_FORMAT_R32G32B32_SFLOAT;
-        pipeConfig.attrs[1].offset   = static_cast<u32>(offsetof(TriangleVertex, r));
+        pipeConfig.attrs[1].format   = VK_FORMAT_R32G32_SFLOAT;
+        pipeConfig.attrs[1].offset   = static_cast<u32>(offsetof(TexturedVertex, u));
 
         s_vk.trianglePipeline = vk::createGraphicsPipeline(
-            s_vk.device, s_triangleShader, pipeConfig, s_vk.trianglePipelineLayout);
+            s_vk.device, s_quadShader, pipeConfig, s_vk.trianglePipelineLayout);
         if (s_vk.trianglePipeline == VK_NULL_HANDLE) {
-            FFE_LOG_ERROR("Renderer", "Failed to create triangle graphics pipeline");
-            vk::destroyShaderModules(s_vk.device, s_triangleShader);
-            vk::destroyBuffer(s_vk.allocator, s_triangleVB);
+            FFE_LOG_ERROR("Renderer", "Failed to create textured quad graphics pipeline");
+            vk::destroyShaderModules(s_vk.device, s_quadShader);
+            vkDestroyDescriptorSetLayout(s_vk.device, s_vk.descriptorSetLayout, nullptr);
+            vkDestroyDescriptorPool(s_vk.device, s_vk.descriptorPool, nullptr);
+            vk::destroyUniformBuffers(s_vk.allocator, s_quadUniforms);
+            vk::destroyTexture(s_vk.allocator, s_vk.device, s_quadTexture);
+            vk::shutdownVulkan(s_vk);
+            return RhiResult::ERROR_UNSUPPORTED;
+        }
+
+        // --- Create vertex buffer ---
+        s_quadVB = vk::createVertexBuffer(
+            s_vk.allocator, s_vk.device, s_vk.commandPool, s_vk.graphicsQueue,
+            QUAD_VERTICES, sizeof(QUAD_VERTICES));
+        if (s_quadVB.buffer == VK_NULL_HANDLE) {
+            FFE_LOG_ERROR("Renderer", "Failed to create quad vertex buffer");
+            vkDestroyPipeline(s_vk.device, s_vk.trianglePipeline, nullptr);
+            vkDestroyPipelineLayout(s_vk.device, s_vk.trianglePipelineLayout, nullptr);
+            vk::destroyShaderModules(s_vk.device, s_quadShader);
+            vkDestroyDescriptorSetLayout(s_vk.device, s_vk.descriptorSetLayout, nullptr);
+            vkDestroyDescriptorPool(s_vk.device, s_vk.descriptorPool, nullptr);
+            vk::destroyUniformBuffers(s_vk.allocator, s_quadUniforms);
+            vk::destroyTexture(s_vk.allocator, s_vk.device, s_quadTexture);
+            vk::shutdownVulkan(s_vk);
+            return RhiResult::ERROR_UNSUPPORTED;
+        }
+
+        // --- Create index buffer ---
+        s_quadIB = vk::createIndexBuffer(
+            s_vk.allocator, s_vk.device, s_vk.commandPool, s_vk.graphicsQueue,
+            QUAD_INDICES, sizeof(QUAD_INDICES));
+        if (s_quadIB.buffer == VK_NULL_HANDLE) {
+            FFE_LOG_ERROR("Renderer", "Failed to create quad index buffer");
+            vk::destroyBuffer(s_vk.allocator, s_quadVB);
+            vkDestroyPipeline(s_vk.device, s_vk.trianglePipeline, nullptr);
+            vkDestroyPipelineLayout(s_vk.device, s_vk.trianglePipelineLayout, nullptr);
+            vk::destroyShaderModules(s_vk.device, s_quadShader);
+            vkDestroyDescriptorSetLayout(s_vk.device, s_vk.descriptorSetLayout, nullptr);
+            vkDestroyDescriptorPool(s_vk.device, s_vk.descriptorPool, nullptr);
+            vk::destroyUniformBuffers(s_vk.allocator, s_quadUniforms);
+            vk::destroyTexture(s_vk.allocator, s_vk.device, s_quadTexture);
             vk::shutdownVulkan(s_vk);
             return RhiResult::ERROR_UNSUPPORTED;
         }
     }
 
     s_initialized = true;
-    FFE_LOG_INFO("Renderer", "RHI initialized (Vulkan backend, %ux%u)",
+    FFE_LOG_INFO("Renderer", "RHI initialized (Vulkan backend, %ux%u, textured quad demo)",
                  s_vk.swapchainExtent.width, s_vk.swapchainExtent.height);
     return RhiResult::OK;
 }
@@ -224,7 +341,10 @@ void shutdown() {
             vkDeviceWaitIdle(s_vk.device);
         }
 
-        // Destroy M2 triangle demo resources
+        // Destroy M3 textured quad demo resources
+        vk::destroyBuffer(s_vk.allocator, s_quadIB);
+        vk::destroyBuffer(s_vk.allocator, s_quadVB);
+
         if (s_vk.trianglePipeline != VK_NULL_HANDLE) {
             vkDestroyPipeline(s_vk.device, s_vk.trianglePipeline, nullptr);
             s_vk.trianglePipeline = VK_NULL_HANDLE;
@@ -233,8 +353,20 @@ void shutdown() {
             vkDestroyPipelineLayout(s_vk.device, s_vk.trianglePipelineLayout, nullptr);
             s_vk.trianglePipelineLayout = VK_NULL_HANDLE;
         }
-        vk::destroyShaderModules(s_vk.device, s_triangleShader);
-        vk::destroyBuffer(s_vk.allocator, s_triangleVB);
+        vk::destroyShaderModules(s_vk.device, s_quadShader);
+
+        // Descriptor pool destruction implicitly frees all allocated sets
+        if (s_vk.descriptorSetLayout != VK_NULL_HANDLE) {
+            vkDestroyDescriptorSetLayout(s_vk.device, s_vk.descriptorSetLayout, nullptr);
+            s_vk.descriptorSetLayout = VK_NULL_HANDLE;
+        }
+        if (s_vk.descriptorPool != VK_NULL_HANDLE) {
+            vkDestroyDescriptorPool(s_vk.device, s_vk.descriptorPool, nullptr);
+            s_vk.descriptorPool = VK_NULL_HANDLE;
+        }
+
+        vk::destroyUniformBuffers(s_vk.allocator, s_quadUniforms);
+        vk::destroyTexture(s_vk.allocator, s_vk.device, s_quadTexture);
 
         vk::shutdownVulkan(s_vk);
         s_vk = vk::VulkanContext{};
@@ -449,6 +581,23 @@ void beginFrame(const glm::vec4& clearColor) {
     vkResetFences(s_vk.device, 1, &s_vk.inFlightFences[frame]);
     vkResetCommandBuffer(s_vk.commandBuffers[frame], 0);
 
+    // --- Update MVP uniform for this frame ---
+    {
+        vk::MVPUniform mvp{};
+        mvp.model = glm::mat4(1.0f);
+        mvp.view  = glm::mat4(1.0f);
+
+        // Simple orthographic projection: maps [-1, 1] to clip space
+        const f32 aspect = static_cast<f32>(s_vk.swapchainExtent.width) /
+                           static_cast<f32>(s_vk.swapchainExtent.height);
+        mvp.proj = glm::ortho(-aspect, aspect, -1.0f, 1.0f, -1.0f, 1.0f);
+
+        // Vulkan clip space has Y inverted compared to OpenGL
+        mvp.proj[1][1] *= -1.0f;
+
+        vk::updateUniform(s_quadUniforms, frame, mvp);
+    }
+
     // Begin command buffer
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -477,11 +626,18 @@ void beginFrame(const glm::vec4& clearColor) {
 
     vkCmdBeginRenderPass(s_vk.commandBuffers[frame], &rpBegin, VK_SUBPASS_CONTENTS_INLINE);
 
-    // M2: draw the triangle demo
-    if (s_vk.trianglePipeline != VK_NULL_HANDLE && s_triangleVB.buffer != VK_NULL_HANDLE) {
+    // M3: draw the textured quad
+    if (s_vk.trianglePipeline != VK_NULL_HANDLE &&
+        s_quadVB.buffer != VK_NULL_HANDLE &&
+        s_quadIB.buffer != VK_NULL_HANDLE) {
         const VkCommandBuffer cmd = s_vk.commandBuffers[frame];
 
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, s_vk.trianglePipeline);
+
+        // Bind descriptor set for this frame
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                s_vk.trianglePipelineLayout, 0, 1,
+                                &s_vk.descriptorSets[frame], 0, nullptr);
 
         // Set dynamic viewport and scissor
         VkViewport viewport{};
@@ -498,12 +654,14 @@ void beginFrame(const glm::vec4& clearColor) {
         scissor.extent = s_vk.swapchainExtent;
         vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-        // Bind vertex buffer and draw
-        const VkBuffer vertexBuffers[] = {s_triangleVB.buffer};
+        // Bind vertex buffer and index buffer
+        const VkBuffer vertexBuffers[] = {s_quadVB.buffer};
         const VkDeviceSize offsets[] = {0};
         vkCmdBindVertexBuffers(cmd, 0, 1, vertexBuffers, offsets);
+        vkCmdBindIndexBuffer(cmd, s_quadIB.buffer, 0, VK_INDEX_TYPE_UINT16);
 
-        vkCmdDraw(cmd, 3, 1, 0, 0);
+        // Draw indexed quad (6 indices = 2 triangles)
+        vkCmdDrawIndexed(cmd, 6, 1, 0, 0, 0);
     }
 
     vkCmdEndRenderPass(s_vk.commandBuffers[frame]);

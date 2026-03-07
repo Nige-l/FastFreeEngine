@@ -22,6 +22,11 @@ struct PipelineConfig {
     static constexpr u32 MAX_ATTRS = 8;
     VkVertexInputAttributeDescription attrs[MAX_ATTRS] = {};
     u32 attrCount = 0;
+
+    /// Optional descriptor set layout for the pipeline layout.
+    /// When non-null, the pipeline layout is created with this descriptor set layout.
+    /// When null (VK_NULL_HANDLE), the pipeline layout has no descriptor sets (M2 style).
+    VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
 };
 
 /// Create a graphics pipeline with the given shader modules and configuration.
