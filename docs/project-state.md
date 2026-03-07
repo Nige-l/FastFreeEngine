@@ -6,9 +6,9 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 45 |
-| Total tests | 627 (Clang-18 passing, zero warnings) |
-| Total Lua bindings | ~98 |
+| Last session | 46 |
+| Total tests | 664 (Clang-18 passing, zero warnings) |
+| Total Lua bindings | ~106 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
 | Phase 2 (3D Foundation) | IN PROGRESS (see current phase section below) |
 | Windows build | DONE (MinGW-w64 cross-compilation) |
@@ -21,7 +21,7 @@
 |-----------|--------|----------|
 | ECS | Stable | World, createEntity/destroyEntity, function-pointer systems |
 | Renderer (2D) | Stable | OpenGL 3.3, sprite batching (2048/batch), render queue, rotation+flip |
-| Renderer (3D) | Stable | cgltf .glb, Blinn-Phong, Transform3D/Mesh/Material3D, point lights (4 max), specular/normal maps |
+| Renderer (3D) | Stable | cgltf .glb, Blinn-Phong, Transform3D/Mesh/Material3D, point lights (4 max), specular/normal maps, skeletal animation |
 | Shadow Mapping | Stable | Depth FBO, PCF 3x3, enableShadows/disableShadows/setShadowBias/setShadowArea |
 | Skybox | Stable | Cubemap loading (6-face), SKYBOX shader, loadSkybox/unloadSkybox/setSkyboxEnabled |
 | Text (bitmap) | Stable | 8x8 bitmap font atlas, drawText, drawRect |
@@ -56,11 +56,11 @@
 
 | Session | Summary |
 |---------|---------|
+| 46 | Skeletal animation (bone hierarchy, GPU skinning, 8 Lua bindings), 1.37 GB static array fix, 664 tests |
 | 45 | Skybox / cubemap environment rendering, 3 new Lua bindings, security hardening, 627 tests |
 | 44 | Point lights (4 max) + materials system (specular, normal maps), 8 new Lua bindings, 618 tests |
 | 43 | Shadow mapping (depth FBO, PCF 3x3, 4 Lua bindings), CI improvements (paths-ignore, concurrency), 568 tests |
 | 42 | 3D camera modes (FPS/orbit), mesh texture binding, process restructuring, 559 tests |
-| 41 | CI fix (vcpkg toolchain, X11 deps), GLAD glReadPixels fix, screenshot tests pass, 530 tests |
 
 ## Current Phase: Phase 2 — 3D Foundation (IN PROGRESS)
 
@@ -81,11 +81,11 @@
 - [x] Skybox / cubemap environment rendering (3 Lua bindings)
 
 ### Remaining
-- [ ] Skeletal animation (bone hierarchy, skinning)
+- [x] Skeletal animation (bone hierarchy, GPU skinning, 8 Lua bindings)
 - [ ] 3D physics integration (Bullet, Jolt, or similar)
 - [ ] 3D audio (positional sound sources)
 
-### Next Session (46) — PM to select from remaining items above
+### Next Session (47) — PM to select from remaining items above
 
 ## Build Commands
 

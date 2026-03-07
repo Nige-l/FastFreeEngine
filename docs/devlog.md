@@ -3,6 +3,43 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-34 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 46: Skeletal Animation System
+
+### Summary
+
+Session 46 delivered skeletal animation — bone hierarchies, animation clip playback, and GPU skinning. This is the largest single feature in Phase 2, touching the mesh loader, renderer, shader library, scripting layer, and GLAD bindings. The session also produced a memorable build war story: a 1.37 GB static array that exhausted compiler memory.
+
+### Features Implemented
+
+#### Skeletal Animation
+- **Skeleton data model** — max 64 bones per mesh, 16 animation clips, 256 keyframes per bone
+- **Animation playback** — linear interpolation of position, rotation (quaternion slerp), and scale; looping and speed control
+- **GPU skinning** — bone matrices uploaded as uniform array; new `SKINNED_MESH` shader with vertex bone weights/indices
+- **glTF parsing** — `cgltf` skin and animation data extraction in mesh_loader
+- **GLAD extension** — added `glVertexAttribIPointer` typedef, extern, and runtime loader for integer vertex attributes (bone joint indices)
+- **8 new Lua bindings**: `playAnimation`, `stopAnimation`, `pauseAnimation`, `resumeAnimation`, `setAnimationSpeed`, `isAnimationPlaying`, `getAnimationNames`, `setAnimationLooping`
+- **37 new tests** (skeleton data model, animation system, Lua bindings)
+
+### Build Issues and Fixes
+
+#### 1.37 GB Static Array — Compiler OOM
+The original implementation declared `s_animationPool[101]` as a static array. Each `MeshAnimations` struct is ~13.6 MB due to nested fixed arrays (16 clips x 64 bones x 256 keyframes). Total: 1.37 GB of static storage. The compiler ran out of memory (16 GB RAM + swap exhaustion).
+
+**Fix:** Changed to `std::unique_ptr<MeshAnimations>` per pool slot — heap-allocate only when a skinned mesh is loaded. This is a cold path (asset loading), so it complies with Section 3's no-heap-in-hot-paths rule. The same pattern was applied to a local `parsedAnimations` variable that was putting 13.6 MB on the stack, and to test code that stack-allocated these large structs.
+
+#### Missing GLAD Function
+`glVertexAttribIPointer` (note the `I` — integer variant) was not in our GLAD build. Required for uploading integer bone joint indices to the GPU. Added the typedef, extern declaration, and runtime loader to `glad.h` and `glad.c`.
+
+### Process Improvement
+Updated the `performance-critic` agent definition to flag oversized static/stack allocations (>1 MB = BLOCK). This class of bug should be caught in review going forward.
+
+### Metrics
+- **664 tests** passing (Clang-18, zero warnings)
+- **8 new Lua bindings** (~106 total)
+- **37 new tests** this session
+
+---
+
 ## 2026-03-06 — Session 35: Phase 1 Feature-Complete — Gamepad, Save/Load, TTF Fonts
 
 ### Summary
