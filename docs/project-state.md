@@ -6,9 +6,9 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 65 |
-| Total tests | 991 (FULL build: Clang-18 + GCC-13, zero warnings) |
-| Total Lua bindings | ~152 |
+| Last session | 66 |
+| Total tests | 991 (FAST build: Clang-18, zero warnings) |
+| Total Lua bindings | ~167 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
 | Phase 2 (3D Foundation) | COMPLETE |
 | Phase 3 (Standalone Editor) | MVP COMPLETE (6 milestones, Sessions 51-56) |
@@ -67,11 +67,11 @@
 
 | Session | Summary |
 |---------|---------|
+| 66 | Editor crash fix (ImGuiKey migration), macOS CI fix (LuaJIT arm64), README overhaul, Phase 6 ADR ("Echoes of the Ancients"). 991 tests (FAST). |
 | 65 | **Phase 5 COMPLETE.** "Build Your Own Engine" learning track (ECS from Scratch tutorial), community game showcase, nav updates. All 5 phases complete. 991 tests. |
 | 64 | Phase 5 deep dives — ECS, renderer, networking "How It Works" pages (~1243 lines total), GitHub Pages deployment workflow, Mermaid diagram support. 991 tests (FAST). |
 | 63 | Phase 5 tutorials — 3 complete tutorials (first 2D game, first 3D game, multiplayer basics), ffe.drawRect docs, review fixes (os.time sandbox violation, broken links). 991 tests (FAST). |
 | 62 | Phase 5 kickoff — website scaffolding (MkDocs + Material theme), Getting Started guide, API extraction pipeline (8 .context.md pages), 21 pages total. 991 tests (FAST). |
-| 61 | Phase 4 closeout. Skeletal animation .context.md update, architecture-map update. **Phase 4 (Networking) COMPLETE.** NAT traversal deferred to backlog. Phase 5 begins next. 991 tests (FULL). |
 
 ## Phase 2 — 3D Foundation: COMPLETE
 
@@ -169,12 +169,17 @@ All 5 phases of the FFE roadmap have been delivered:
 4. **Phase 4 (Networking)** — COMPLETE
 5. **Phase 5 (Website/Learning)** — COMPLETE
 
-### What Comes Next
-- Ongoing maintenance and bug fixes
-- Community growth and content creation (website backlog)
-- Backlog items from all phases (editor polish, NAT traversal, video content)
-- Community contributions and feature requests
-- Potential Phase 6 planning based on user feedback
+## Phase 6 — Showcase Game: "Echoes of the Ancients" (IN PROGRESS)
+
+**Goal:** A multi-level 3D showcase game proving FFE can ship real, playable games. ADR: `docs/architecture/adr-phase6-showcase.md`
+
+### Planned (8-10 sessions)
+- [ ] M1 (Session 67): Linear fog shader + project scaffold + player controller
+- [ ] M2 (Sessions 68-69): Level 1 — The Courtyard (outdoor, puzzles, guardians)
+- [ ] M3 (Sessions 70-71): Level 2 — The Temple (underground, dark lighting, boss)
+- [ ] M4 (Sessions 72-73): Level 3 — The Summit (floating platforms, victory)
+- [ ] M5 (Sessions 74-75): Polish, screenshots, gamepad pass, README update
+- [ ] Optional M6: Stretch goals (skeletal anim, minimap, time-of-day)
 
 ## Build Commands
 
