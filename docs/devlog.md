@@ -3,6 +3,51 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-34 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 54: Editor Milestone 4 — Gizmos, Keyboard Shortcuts, Component Add/Remove
+
+### Summary
+
+Session 54 delivered Editor Milestone 4: viewport gizmos for translate/rotate/scale with full undo integration, a keyboard shortcut system with 7 default bindings, and undoable component add/remove from the inspector. FAST build passed: 810 tests on Clang-18, zero warnings.
+
+### New Features
+
+- **GizmoRenderer** (`editor/gizmos/gizmo_renderer.cpp/.h`) — draws translate/rotate/scale handles as an ImDrawList overlay in the viewport. Axis-colored (red/green/blue for X/Y/Z) with visual feedback for hover and active states.
+- **GizmoSystem** (`editor/gizmos/gizmo_system.cpp/.h`) — hit testing against gizmo handles, drag logic with axis constraints, undo integration (each gizmo drag creates a ModifyComponentCommand). Supports translate, rotate, and scale modes.
+- **ShortcutManager** (`editor/input/shortcut_manager.cpp/.h`) — keybinding system with 7 default shortcuts: Ctrl+Z (undo), Ctrl+Shift+Z (redo), Ctrl+S (save), Delete (delete entity), G (translate gizmo), R (rotate gizmo), S (scale gizmo).
+- **AddComponentCommand<T> / RemoveComponentCommand<T>** (`editor/commands/component_commands.h`) — templated undo/redo commands for adding and removing ECS components. Inspector now has an "Add Component" dropdown and per-section remove buttons.
+- **Camera accessors** — `Application::camera3d()` and `Application::camera2d()` exposed for gizmo projection calculations.
+- **Edit menu** — Undo/Redo menu items with shortcut hint text.
+
+### Tests
+
+- **17 new tests** (810 total, up from 793)
+- Shortcut tests: registration, default bindings, modifier key handling
+- Component add/remove tests: add command, remove command, undo/redo for both
+
+### Reviews
+
+- **performance-critic:** PASS
+- **api-designer:** Updated `editor/.context.md` with gizmo, shortcut, and add/remove documentation
+- **game-dev-tester:** SKIP (editor internals, not game developer API)
+
+### Files Changed
+
+- `editor/gizmos/gizmo_renderer.cpp`, `editor/gizmos/gizmo_renderer.h` (new)
+- `editor/gizmos/gizmo_system.cpp`, `editor/gizmos/gizmo_system.h` (new)
+- `editor/input/shortcut_manager.cpp`, `editor/input/shortcut_manager.h` (new)
+- `editor/commands/component_commands.h` (modified — add/remove templates)
+- `editor/panels/inspector_panel.cpp`, `editor/panels/inspector_panel.h` (modified — add/remove UI)
+- `editor/panels/viewport_panel.cpp`, `editor/panels/viewport_panel.h` (modified — gizmo integration)
+- `editor/editor_app.cpp`, `editor/editor_app.h` (modified — shortcut + gizmo wiring)
+- `editor/CMakeLists.txt` (modified — new source files)
+- `engine/core/application.cpp`, `engine/core/application.h` (modified — camera accessors)
+- `editor/.context.md` (updated)
+- `tests/editor/test_shortcuts.cpp` (new)
+- `tests/editor/test_component_add_remove.cpp` (new)
+- `tests/CMakeLists.txt` (modified)
+
+---
+
 ## 2026-03-07 — Session 53: Editor Milestone 3 — Play-in-Editor, Inspector Undo, Asset Browser
 
 ### Summary

@@ -6,12 +6,12 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 53 |
-| Total tests | 793 (Clang-18 passing, zero warnings) |
+| Last session | 54 |
+| Total tests | 810 (Clang-18 passing, zero warnings) |
 | Total Lua bindings | ~115 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
 | Phase 2 (3D Foundation) | COMPLETE |
-| Phase 3 (Standalone Editor) | IN PROGRESS — Milestone 3 delivered |
+| Phase 3 (Standalone Editor) | IN PROGRESS — Milestone 4 delivered |
 | Windows build | DONE (MinGW-w64 cross-compilation) |
 | macOS build | DONE (arm64 + x86_64) |
 | GitHub Actions CI | DONE (Linux Clang-18, Linux GCC-13, macOS arm64) |
@@ -31,7 +31,7 @@
 | Tilemap | Stable | Tilemap component, renderTilemaps, 1024x1024 max |
 | Particles | Stable | ParticleEmitter, 128 inline pool, gravity/color/size interp |
 | Scene Serialisation | Stable | SceneSerialiser — saveScene/loadScene (JSON), entity count limits, NaN rejection, path traversal rejection |
-| Editor | Milestone 3 | Standalone binary, ImGui dockspace, scene hierarchy, inspector, undo/redo (entity + component + inspector fields), FBO viewport, file dialogs, play-in-editor (snapshot/restore), asset browser |
+| Editor | Milestone 4 | Standalone binary, ImGui dockspace, scene hierarchy, inspector, undo/redo (entity + component + inspector fields + add/remove), FBO viewport, file dialogs, play-in-editor (snapshot/restore), asset browser, viewport gizmos (translate/rotate/scale), keyboard shortcuts, component add/remove |
 | Scene Mgmt | Stable | destroyAllEntities, cancelAllTimers, loadScene |
 | Input | Stable | keyboard+mouse+gamepad, pressed/held/released, action bindings |
 | Audio | Stable | miniaudio, WAV/OGG, playSound/playMusic, streaming, headless, 3D positional (playSound3D, listener sync) |
@@ -60,11 +60,11 @@
 
 | Session | Summary |
 |---------|---------|
+| 54 | Viewport gizmos, keyboard shortcuts, component add/remove from inspector. 810 tests. Milestone 4 delivered. |
 | 53 | Play-in-editor (snapshot/restore), inspector undo integration, asset browser panel. 793 tests. Milestone 3 delivered. |
 | 52 | FBO viewport, component-modify commands, file dialogs (Open/Save/Save As). 780 tests. Milestone 2 delivered. |
 | 51 | Phase 3 kickoff — standalone editor scaffold, scene serialisation, inspector, undo/redo commands. 766 tests. Milestone 1 delivered. |
 | 50 | Text flicker fix (fixed-timestep gating), macOS CI fix (LINK_GROUP + vcpkg pin), 3 new TTF tests, README update. 738 tests. |
-| 49 | 3D physics gameplay layer — collision callbacks, raycasting, entity mapping, 5 Lua bindings, 735 tests. Phase 2 COMPLETE. |
 
 ## Phase 2 — 3D Foundation: COMPLETE
 
@@ -93,16 +93,22 @@ All deliverables met:
 - [x] Standalone editor application (separate binary from the game runtime) — Milestone 1
 - [x] Scene serialisation (save/load scene files) — Milestone 1
 - [x] Entity inspector (create, modify, delete entities and components) — Milestone 1 (basic)
-- [x] Undo/redo system — Milestone 1 (entity create/destroy), Milestone 2 (component modify), Milestone 3 (inspector fields)
+- [x] Undo/redo system — Milestone 1 (entity create/destroy), Milestone 2 (component modify), Milestone 3 (inspector fields), Milestone 4 (add/remove)
 - [x] Scene view with 2D and 3D viewport (FBO rendering) — Milestone 2
 - [x] Play-in-editor (snapshot/restore, Play/Pause/Resume/Stop) — Milestone 3
 - [x] File dialogs for Open/Save Scene — Milestone 2
 - [x] Asset browser (directory traversal, file type indicators, security boundary) — Milestone 3
+- [x] Viewport gizmos (translate/rotate/scale, axis constraints, undo integration) — Milestone 4
+- [x] Keyboard shortcuts (ShortcutManager, 7 default bindings) — Milestone 4
+- [x] Component add/remove from inspector (undoable) — Milestone 4
+- [ ] Scene hierarchy tree (parent/child relationships, drag reorder)
+- [ ] Drag-and-drop (asset browser to inspector for texture/mesh assignment)
+- [ ] Editor preferences persistence
 - [ ] Build pipeline (export game as standalone executable)
 - [ ] Project creation wizard
 - [ ] LLM integration panel (connect AI assistant, generate code, explain systems)
 
-### Next Session (54) — Milestone 4: Gizmos, keyboard shortcuts, component add/remove from inspector
+### Next Session (55) — TBD (see Session 54 devlog for plan)
 
 ## Build Commands
 
