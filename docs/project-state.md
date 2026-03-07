@@ -6,9 +6,9 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 66 |
-| Total tests | 991 (FAST build: Clang-18, zero warnings) |
-| Total Lua bindings | ~167 |
+| Last session | 67 |
+| Total tests | 1005 (FAST build: Clang-18, zero warnings) |
+| Total Lua bindings | ~169 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
 | Phase 2 (3D Foundation) | COMPLETE |
 | Phase 3 (Standalone Editor) | MVP COMPLETE (6 milestones, Sessions 51-56) |
@@ -24,7 +24,7 @@
 |-----------|--------|----------|
 | ECS | Stable | World, createEntity/destroyEntity, function-pointer systems |
 | Renderer (2D) | Stable | OpenGL 3.3, sprite batching (2048/batch), render queue, rotation+flip |
-| Renderer (3D) | Stable | cgltf .glb, Blinn-Phong, Transform3D/Mesh/Material3D, point lights (4 max), specular/normal maps, skeletal animation |
+| Renderer (3D) | Stable | cgltf .glb, Blinn-Phong, Transform3D/Mesh/Material3D, point lights (4 max), specular/normal maps, skeletal animation, linear fog |
 | Shadow Mapping | Stable | Depth FBO, PCF 3x3, enableShadows/disableShadows/setShadowBias/setShadowArea |
 | Skybox | Stable | Cubemap loading (6-face), SKYBOX shader, loadSkybox/unloadSkybox/setSkyboxEnabled |
 | Text (bitmap) | Stable | 8x8 bitmap font atlas, drawText, drawRect |
@@ -55,6 +55,7 @@
 3. **Breakout** — brick-breaker 2D, Lua-only
 4. **3D Demo** — mesh loading, Blinn-Phong, point lights, materials, shadows, skybox
 5. **Net Arena** — 2D multiplayer arena, client-side prediction, server reconciliation
+6. **Echoes of the Ancients** — 3D showcase (IN PROGRESS, scaffold + test level)
 
 ## Known Issues / Deferred Items
 
@@ -67,11 +68,11 @@
 
 | Session | Summary |
 |---------|---------|
+| 67 | Phase 6 M1: linear fog shader (ffe.setFog/disableFog, 14 tests), "Echoes of the Ancients" scaffold (player, camera, HUD, combat, AI, test level). 1005 tests (FAST). |
 | 66 | Editor crash fix (ImGuiKey migration), macOS CI fix (LuaJIT arm64), README overhaul, Phase 6 ADR ("Echoes of the Ancients"). 991 tests (FAST). |
 | 65 | **Phase 5 COMPLETE.** "Build Your Own Engine" learning track (ECS from Scratch tutorial), community game showcase, nav updates. All 5 phases complete. 991 tests. |
 | 64 | Phase 5 deep dives — ECS, renderer, networking "How It Works" pages (~1243 lines total), GitHub Pages deployment workflow, Mermaid diagram support. 991 tests (FAST). |
 | 63 | Phase 5 tutorials — 3 complete tutorials (first 2D game, first 3D game, multiplayer basics), ffe.drawRect docs, review fixes (os.time sandbox violation, broken links). 991 tests (FAST). |
-| 62 | Phase 5 kickoff — website scaffolding (MkDocs + Material theme), Getting Started guide, API extraction pipeline (8 .context.md pages), 21 pages total. 991 tests (FAST). |
 
 ## Phase 2 — 3D Foundation: COMPLETE
 
@@ -174,7 +175,7 @@ All 5 phases of the FFE roadmap have been delivered:
 **Goal:** A multi-level 3D showcase game proving FFE can ship real, playable games. ADR: `docs/architecture/adr-phase6-showcase.md`
 
 ### Planned (8-10 sessions)
-- [ ] M1 (Session 67): Linear fog shader + project scaffold + player controller
+- [x] M1 (Session 67): Linear fog shader + project scaffold + player controller
 - [ ] M2 (Sessions 68-69): Level 1 — The Courtyard (outdoor, puzzles, guardians)
 - [ ] M3 (Sessions 70-71): Level 2 — The Temple (underground, dark lighting, boss)
 - [ ] M4 (Sessions 72-73): Level 3 — The Summit (floating platforms, victory)
