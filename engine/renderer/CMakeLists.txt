@@ -23,6 +23,8 @@ set(RENDERER_GL_DEPENDENT_SOURCES
     texture_loader.cpp
     mesh_loader.cpp
     mesh_renderer.cpp
+    terrain.cpp
+    terrain_renderer.cpp
     shadow_map.cpp
     screenshot.cpp
     post_process.cpp

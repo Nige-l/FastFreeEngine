@@ -24,6 +24,7 @@ extern "C" {
 #include "renderer/pbr_material.h"
 #include "renderer/post_process.h"
 #include "renderer/ssao.h"
+#include "renderer/terrain.h"
 
 #include "audio/audio.h"
 #include "renderer/text_renderer.h"
@@ -7190,6 +7191,103 @@ void ScriptEngine::registerEcsBindings() {
         return 0;
     });
     lua_setfield(L, -2, "onGameStart");
+
+    // ----------------------------------------------------------------
+    // Terrain bindings (Phase 9 M1)
+    // ----------------------------------------------------------------
+
+    // ffe.loadTerrain(path: string, width: number, depth: number, heightScale: number) -> integer
+    // Load terrain from a PNG heightmap. Returns terrain handle ID (0 on failure).
+    // Cold path only — do NOT call per frame.
+    auto ffe_loadTerrain = [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TSTRING) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.loadTerrain: argument 1 must be a string (path)");
+            lua_pushinteger(state, 0);
+            return 1;
+        }
+        const char* const path = lua_tostring(state, 1);
+        if (path == nullptr || path[0] == '\0') {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.loadTerrain: path is null or empty");
+            lua_pushinteger(state, 0);
+            return 1;
+        }
+
+        if (lua_type(state, 2) != LUA_TNUMBER ||
+            lua_type(state, 3) != LUA_TNUMBER ||
+            lua_type(state, 4) != LUA_TNUMBER) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.loadTerrain: arguments 2-4 must be numbers (width, depth, heightScale)");
+            lua_pushinteger(state, 0);
+            return 1;
+        }
+
+        const double width      = lua_tonumber(state, 2);
+        const double depth       = lua_tonumber(state, 3);
+        const double heightScale = lua_tonumber(state, 4);
+
+        if (width <= 0.0 || depth <= 0.0 || !std::isfinite(width) ||
+            !std::isfinite(depth) || !std::isfinite(heightScale)) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.loadTerrain: width/depth must be positive, heightScale must be finite");
+            lua_pushinteger(state, 0);
+            return 1;
+        }
+
+        ffe::renderer::TerrainConfig cfg;
+        cfg.worldWidth      = static_cast<ffe::f32>(width);
+        cfg.worldDepth      = static_cast<ffe::f32>(depth);
+        cfg.heightScale     = static_cast<ffe::f32>(heightScale);
+        cfg.chunkResolution = 64;
+        cfg.chunkCountX     = 16;
+        cfg.chunkCountZ     = 16;
+
+        const ffe::renderer::TerrainHandle handle =
+            ffe::renderer::loadTerrainFromImage(path, cfg);
+        lua_pushinteger(state, static_cast<lua_Integer>(handle.id));
+        return 1;
+    };
+    lua_pushcfunction(L, ffe_loadTerrain);
+    lua_setfield(L, -2, "loadTerrain");
+
+    // ffe.getTerrainHeight(x: number, z: number) -> number
+    // Get interpolated terrain height at world position.
+    // Returns 0 if no terrain is loaded.
+    auto ffe_getTerrainHeight = [](lua_State* state) -> int {
+        const ffe::renderer::TerrainHandle terrain =
+            ffe::renderer::getFirstActiveTerrain();
+
+        const double x = lua_tonumber(state, 1);
+        const double z = lua_tonumber(state, 2);
+
+        const ffe::f32 height = ffe::renderer::getTerrainHeight(
+            terrain, static_cast<ffe::f32>(x), static_cast<ffe::f32>(z));
+        lua_pushnumber(state, static_cast<double>(height));
+        return 1;
+    };
+    lua_pushcfunction(L, ffe_getTerrainHeight);
+    lua_setfield(L, -2, "getTerrainHeight");
+
+    // ffe.unloadTerrain() -> nothing
+    // Unload all terrains and free GPU resources.
+    auto ffe_unloadTerrain = [](lua_State* /*state*/) -> int {
+        ffe::renderer::unloadAllTerrains();
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_unloadTerrain);
+    lua_setfield(L, -2, "unloadTerrain");
+
+    // ffe.setTerrainTexture(textureId: integer) -> nothing
+    // Set the diffuse texture for the first active terrain.
+    auto ffe_setTerrainTexture = [](lua_State* state) -> int {
+        const ffe::renderer::TerrainHandle terrain =
+            ffe::renderer::getFirstActiveTerrain();
+        if (!ffe::renderer::isValid(terrain)) { return 0; }
+
+        const lua_Integer rawId = lua_tointeger(state, 1);
+        const ffe::rhi::TextureHandle tex{static_cast<ffe::u32>(rawId > 0 ? rawId : 0)};
+        ffe::renderer::setTerrainTexture(terrain, tex);
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_setTerrainTexture);
+    lua_setfield(L, -2, "setTerrainTexture");
 
     lua_setglobal(L, "ffe");
 }

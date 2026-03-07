@@ -8,6 +8,7 @@
 #include "renderer/render_queue.h"
 #include "renderer/skeleton.h"
 #include "renderer/sprite_batch.h"
+#include "renderer/terrain.h"
 
 #include <entt/entt.hpp>
 #include <glm/glm.hpp>
@@ -35,6 +36,16 @@ struct Mesh {
     u32                  _pad = 0;    // 4 bytes — explicit padding
 };
 static_assert(sizeof(Mesh) == 8, "Mesh component must be 8 bytes");
+
+// --- Terrain ECS component — references a loaded terrain asset ---
+// The GPU resources (VAOs, VBOs, IBOs) are owned by the terrain asset cache,
+// not by the component. An entity with Transform3D + Terrain is rendered by
+// terrainRenderSystem. The Transform3D provides the world-space origin.
+struct Terrain {
+    renderer::TerrainHandle terrainHandle;  // 4 bytes — which loaded terrain to render
+    u32                     _pad = 0;       // 4 bytes — explicit padding
+};
+static_assert(sizeof(Terrain) == 8, "Terrain component must be 8 bytes");
 
 // --- Material3D ECS component — per-entity 3D material override ---
 // Optional: if not present on a 3D entity, the mesh renderer uses default values

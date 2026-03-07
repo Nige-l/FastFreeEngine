@@ -6,6 +6,8 @@
 #ifndef FFE_BACKEND_VULKAN
 #include "renderer/mesh_loader.h"
 #include "renderer/mesh_renderer.h"
+#include "renderer/terrain.h"
+#include "renderer/terrain_renderer.h"
 #include "renderer/shadow_map.h"
 #include "renderer/post_process.h"
 #include "renderer/ssao.h"
@@ -635,6 +637,9 @@ void Application::shutdown() {
         m_shadowConfig.enabled = false;
     }
 
+    // 5e1b. Unload all terrains before shutting down the RHI
+    renderer::unloadAllTerrains();
+
     // 5e2. Unload all 3D meshes before shutting down the RHI
     renderer::unloadAllMeshes();
 #endif
@@ -787,6 +792,9 @@ void Application::render(const float alpha) {
         // (Lua may have updated m_camera3d via ffe.set3DCamera — the pointer
         // in ctx points directly to m_camera3d so it's always current)
         renderer::meshRenderSystem(m_world, m_camera3d, m_shadowConfig, m_shadowMap, m_fogParams);
+
+        // --- Terrain pass: render heightmap terrain chunks after meshes ---
+        renderer::terrainRenderSystem(m_world, m_camera3d, m_shadowConfig, m_shadowMap, m_fogParams);
     }
 
     // --- Skybox pass: render cubemap environment after 3D meshes, before 2D ---
