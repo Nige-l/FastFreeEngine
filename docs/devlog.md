@@ -3,6 +3,67 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 88: Phase 8 M4 — Vulkan Mesh Rendering
+
+### Summary
+
+Session 88 delivered Phase 8 M4: Vulkan mesh rendering through the full RHI interface. Resource manager (`vk_resource_manager.h/.cpp`) provides static-capacity handle pools (256 buffers, 256 textures, 32 shaders) with 1-based handles and zero heap allocation. All major RHI stubs replaced with real Vulkan implementations: createBuffer/updateBuffer/destroyBuffer (VMA staging upload or host-visible persistent mapping), createTexture/destroyTexture/bindTexture (VkImage via VMA, staging upload, layout transitions), createShader/destroyShader/useShader (SPIR-V modules, pipeline creation, descriptor layout), setUniformMat4/Vec3/Float/Int (FNV-1a hash-keyed staging, packed into SceneUBO 256B + LightUBO 64B at draw time), drawArrays/drawIndexed (full Vulkan draw path with pipeline bind, descriptor set bind, UBO upload, vertex/index buffer bind). Blinn-Phong SPIR-V shader headers with placeholder bytecode (build-time glslc compilation TODO for M5). Render pass restructured so beginFrame starts and endFrame ends the render pass, enabling multi-draw-call frames. 17 new CPU-only tests. Performance critic: MINOR ISSUES (per-draw UBO packing noted for future optimization). API designer: PASS. Build: 1234 tests, Clang-18, zero warnings. game-dev-tester: SKIPPED (internal backend).
+
+### Planned
+
+- Phase 8 M4: Vulkan RHI mesh rendering — resource manager, full RHI implementation, Blinn-Phong SPIR-V
+
+### Delivered
+
+- **Resource Manager** -- `vk_resource_manager.h/.cpp` — static-capacity handle pools (256 buffers, 256 textures, 32 shaders), 1-based handles, no heap allocation
+- **RHI Buffer Ops** -- createBuffer/updateBuffer/destroyBuffer — VMA staging upload or host-visible persistent mapping
+- **RHI Texture Ops** -- createTexture/destroyTexture/bindTexture — VkImage via VMA, staging upload, layout transitions
+- **RHI Shader Ops** -- createShader/destroyShader/useShader — SPIR-V modules, pipeline creation, descriptor layout
+- **RHI Uniform Ops** -- setUniformMat4/Vec3/Float/Int — FNV-1a hash-keyed staging, packed into SceneUBO (256B std140) + LightUBO (64B std140) at draw time
+- **RHI Draw Ops** -- drawArrays/drawIndexed — full Vulkan draw path with pipeline bind, descriptor set bind, UBO upload, vertex/index buffer bind
+- **Blinn-Phong SPIR-V** -- `blinn_phong_vert.h` + `blinn_phong_frag.h` — documented GLSL with placeholder SPIR-V (TODO: build-time glslc)
+- **Render Pass Restructure** -- beginFrame starts render pass, endFrame ends it — enables multi-draw-call frames
+- **Tests** -- 17 new CPU-only tests (ResourceManager alloc/free/exhaustion, UBO sizes, SPIR-V magic, vertex stride, slot defaults)
+- **.context.md** -- Updated for M4
+
+### Files Created
+
+- `engine/renderer/vulkan/vk_resource_manager.h`
+- `engine/renderer/vulkan/vk_resource_manager.cpp`
+- `engine/renderer/vulkan/shaders/blinn_phong_vert.h`
+- `engine/renderer/vulkan/shaders/blinn_phong_frag.h`
+
+### Files Modified
+
+- `engine/renderer/vulkan/rhi_vulkan.cpp` (major rewrite — full RHI implementation)
+- `engine/renderer/CMakeLists.txt` (new sources)
+- `engine/renderer/.context.md` (M4 update)
+- `tests/renderer/test_rhi_vulkan.cpp` (17 new tests)
+
+### Reviews
+
+| Reviewer | Verdict | Notes |
+|----------|---------|-------|
+| performance-critic | MINOR ISSUES | Per-draw UBO packing + descriptor updates noted for future optimization |
+| api-designer | PASS | Naming clean, no handle leakage |
+| security-auditor | SKIPPED | No new attack surface |
+
+### Metrics
+
+| Metric | Value |
+|--------|-------|
+| Tests | 1234 |
+| Warnings | 0 |
+| Build tier | FAST (Clang-18) |
+| New tests | 17 |
+| game-dev-tester | SKIPPED (internal backend) |
+
+### Next
+
+- Phase 8 M5: Vulkan Depth Buffer + Build-Time SPIR-V — depth buffer attachment (VkImage depth, depth testing in render pass), build-time SPIR-V compilation (CMake custom commands with glslc/glslangValidator), replace placeholder SPIR-V with compiled shaders, full Blinn-Phong lighting, phase close (FULL build).
+
+---
+
 ## 2026-03-07 — Session 87: Phase 8 M3 — Vulkan Textures + Uniform Buffers
 
 ### Summary
