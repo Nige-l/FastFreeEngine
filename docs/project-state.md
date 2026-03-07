@@ -6,7 +6,7 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 76 |
+| Last session | 77 |
 | Total tests | 1052 (FAST build: Clang-18, zero warnings) |
 | Total Lua bindings | ~172 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
@@ -42,11 +42,11 @@
 
 | Session | Summary |
 |---------|---------|
+| 77 | Showcase debug: inverted WASD (forward vector +sin/+cos fixed to -sin/-cos), ground Y-scale doubled + brighter colors, player scale 0.5->1.8, HUD text shortened for overflow. game-dev-tester SHIP 9/10. 1052 tests (FAST). |
 | 76 | Engine fix: framebuffer resize callback (stale screen dimensions), showcase halfExtents 2x mismatch fix, BattleMusic, director process reform. game-dev-tester SHIP 8/10. 1052 tests (FAST). |
 | 75 | Showcase demo 7 bugs fixed, 3 new Lua bindings (getMouseDeltaX/Y, setCursorCaptured), game-dev-tester process reformed (now mandatory for demo changes), director review. 1052 tests (FAST). |
 | 74 | Phase 7 M1: PBR Materials (Cook-Torrance BRDF, metallic-roughness, IBL via skybox cubemap), fog system, 41 new tests. 1046 tests (FAST). |
 | 73 | Phase 6 COMPLETE. Phase 7 ADR approved (PBR, post-processing, instancing, skeletal anim, AA, SSAO). README + ROADMAP updated. No C++ changes. |
-| 72 | Phase 6 M4b: Polish pass -- main menu, pause menu, victory particles/rank, gamepad dead-zones, dynamic HUD labels. 1005 tests (FAST). |
 
 ## Phase 7 — Rendering Pipeline Modernisation (IN PROGRESS)
 

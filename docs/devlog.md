@@ -3,6 +3,38 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 77: Showcase Debug — Inverted Controls, Ground Visibility, Player Scale, HUD Overflow
+
+### Summary
+
+Session 77 ran the showcase executable to capture runtime logs and diagnosed 4 visual/control bugs. Fixed inverted WASD controls (forward vector was `+sin/+cos` instead of `-sin/-cos` since camera at +Z looks toward -Z), doubled ground Y-scale and brightened ground colors for visibility, increased player model scale from 0.5 to 1.8, and shortened HUD controls text from 81 to 70 chars to prevent overflow at 1280px with scale 2. game-dev-tester validated: SHIP 9/10. FAST build: 1052 tests, zero warnings.
+
+### Planned
+
+- Run showcase executable and capture logs for first time
+- Debug and fix any issues found during live playtest
+
+### Delivered
+
+- **Inverted forward vector** -- Player forward vector was `+sin(yaw)/+cos(yaw)`, causing W to move backward and S to move forward. Fixed to `-sin(yaw)/-cos(yaw)` to match OpenGL convention (camera at +Z looks toward -Z).
+- **Ground visibility** -- Ground plane Y-scale was 0.5 (paper-thin), doubled to 1.0. Ground colors brightened from muted dark tones to more visible values across all 3 levels.
+- **Player scale** -- Player model at scale 0.5 was too small to see clearly. Increased to 1.8 for proper visibility.
+- **HUD text overflow** -- Controls HUD text was 81 characters, overflowing 1280px viewport at scale 2. Shortened to 70 characters to fit within viewport.
+
+### Files Changed
+
+- `examples/showcase/` (MODIFIED -- forward vector, ground scale/colors, player scale, HUD text)
+
+### Reviews
+
+- game-dev-tester: SHIP (9/10)
+
+### Next Session (78)
+
+Phase 7 M2: Post-Processing Pipeline -- HDR FBO chain, bloom, tone mapping, gamma correction.
+
+---
+
 ## 2026-03-07 — Session 76: Engine Framebuffer Resize Fix + Showcase Physics/Visual Scale Match
 
 ### Summary
