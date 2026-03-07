@@ -6,8 +6,8 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 84 |
-| Total tests | 1228 (FULL build: Clang-18 + GCC-13, zero warnings) |
+| Last session | 85 |
+| Total tests | 1234 (Clang-18, zero warnings) |
 | Total Lua bindings | ~190 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
 | Phase 2 (3D Foundation) | COMPLETE |
@@ -16,6 +16,7 @@
 | Phase 5 (Website/Learning) | COMPLETE (Sessions 62-65) |
 | Phase 6 (Showcase Game) | COMPLETE (Sessions 66-73) |
 | Phase 7 (Rendering Pipeline) | COMPLETE (Sessions 74-84) |
+| Phase 8 (Vulkan Backend) | IN PROGRESS (Session 85+) |
 | Windows build | DONE (MinGW-w64 cross-compilation) |
 | macOS build | DISABLED (upstream LuaJIT arm64-osx vcpkg issue) |
 | GitHub Actions CI | DONE (Linux Clang-18, Linux GCC-13) |
@@ -42,26 +43,23 @@
 
 | Session | Summary |
 |---------|---------|
-| 84 | Phase 7 M8: Phase Close — README update, architecture-map update, GCC-13 strncpy warning fix in test_exporter.cpp (5 instances). FULL build verified: 1228 tests on both Clang-18 + GCC-13, zero warnings. Phase 7 COMPLETE. |
-| 83 | Phase 7 M7: Sprite Batching 2.0 — runtime texture atlas (shelf packing, 2048x2048), UV remapping, atlas page batching, 1 Lua binding. 24 new tests. 1228 tests (FAST). |
-| 82 | Phase 7 M6: SSAO — 32-sample hemisphere, half-res, 4x4 box blur, GLSL 330 (LEGACY compatible). SSAOConfig singleton, 3 Lua bindings. 36 new tests. 1204 tests (FAST). |
-| 81 | Phase 7 M5: Skeletal Animation Completion — crossfade blending, STEP/LINEAR/CUBIC_SPLINE interpolation modes, root motion extraction. 3 Lua bindings, 31 new tests. 1168 tests (FAST). |
-| 80 | Phase 7 M4: Anti-Aliasing — MSAA (multisample FBO, configurable 2x/4x/8x, glBlitFramebuffer resolve) + FXAA 3.11 post-process. 2 Lua bindings, 22 new tests. 1137 tests (FAST). |
+| 85 | Phase 8 M1: Vulkan Backend Bootstrap — compile-time FFE_BACKEND selection, volk loader, instance/device/swapchain init, RHI Vulkan impl (clear-color), tier validation. 6 new tests. 1234 tests (FAST). |
+| 84 | Phase 7 M8: Phase Close — README update, architecture-map update, GCC-13 strncpy warning fix. FULL build: 1228 tests. Phase 7 COMPLETE. |
+| 83 | Phase 7 M7: Sprite Batching 2.0 — runtime texture atlas, shelf packing, UV remapping, atlas page batching. 24 new tests. 1228 tests (FAST). |
+| 82 | Phase 7 M6: SSAO — 32-sample hemisphere, half-res, 4x4 box blur, GLSL 330. 36 new tests. 1204 tests (FAST). |
+| 81 | Phase 7 M5: Skeletal Animation Completion — crossfade blending, interpolation modes, root motion extraction. 31 new tests. 1168 tests (FAST). |
 
-## Phase 7 — Rendering Pipeline Modernisation (COMPLETE)
+## Phase 8 — Vulkan Backend (IN PROGRESS)
 
-**Goal:** Bring FFE's visual output to competitive parity with Godot 4's forward renderer. ADR: `docs/architecture/adr-phase7-rendering-pipeline.md`
+**Goal:** Add a Vulkan rendering backend alongside OpenGL, targeting STANDARD and MODERN tiers. ADR: `docs/architecture/adr-phase8-vulkan-backend.md`
 
 ### Milestones
 
-- [x] M1 (Sessions 74-76): PBR Materials -- PBRMaterial component, Cook-Torrance BRDF shader, IBL, Lua bindings, tests. Sessions 75-76: showcase bug fixes, engine framebuffer resize fix, process reform.
-- [x] M2 (Sessions 77-78): Post-Processing -- HDR FBO (GL_RGBA16F), bloom (half-res ping-pong Gaussian), tone mapping (Reinhard/ACES), gamma correction. 6 Lua bindings, 42 tests.
-- [x] M3 (Session 79): GPU Instancing -- InstanceData (64B), MAX_INSTANCES_PER_BATCH=1024, shared instance VBO (64KB GL_STREAM_DRAW), 3 instanced shader variants, instanced shadow pass, ffe.getInstanceCount, 21 tests.
-- [x] M4 (Session 80): Anti-Aliasing -- MSAA (multisample HDR FBO, configurable 2x/4x/8x, glBlitFramebuffer resolve) + FXAA 3.11 (Timothy Lottes, post-process edge detection + sub-pixel AA). 2 Lua bindings, 22 tests.
-- [x] M5 (Session 81): Skeletal Animation Completion -- crossfade blending (per-bone lerp/slerp), STEP/LINEAR/CUBIC_SPLINE interpolation modes (glTF sampler parsing), root motion extraction (XZ delta, RootMotionDelta component). 3 Lua bindings, 31 tests.
-- [x] M6 (Session 82): SSAO -- 32-sample hemisphere (configurable 16/32/64), half-resolution, 4x4 box blur, depth texture for sampling. GLSL 330 core (LEGACY compatible -- originally planned STANDARD+ only). Normal reconstruction via dFdx/dFdy (no G-buffer). AO multiply in HDR space before tone mapping. SSAOConfig ECS singleton. 3 Lua bindings (enableSSAO, disableSSAO, setSSAOIntensity), 36 tests.
-- [x] M7 (Session 83): Sprite Batching 2.0 -- runtime texture atlas (shelf packing, 2048x2048 default, 512px max sprite, 1px padding), lazy atlas packing on first texture use, UV remapping, atlas page batching. RHI additions: getTextureWidth/Height, updateTextureSubImage, readTexturePixels. Backward compatible (zero Lua API changes). 1 Lua binding (getAtlasUtilization), 24 tests (20 atlas + 4 misc).
-- [x] M8 (Session 84): Phase Close -- FULL build verified (1228 tests, both compilers, zero warnings), README update, architecture-map update, GCC warning fix.
+- [x] M1 (Session 85): Vulkan Backend Bootstrap -- compile-time FFE_BACKEND selection, volk function loader, Vulkan instance/device/swapchain init (FIFO, 2 frames in flight), RHI Vulkan impl (beginFrame/endFrame clear-color, stubs for rest), tier/backend validation (Vulkan requires STANDARD+), 6 CPU-only tests.
+- [ ] M2: Vulkan Shader Compilation + Vertex Buffers -- SPIR-V compilation, VMA vertex/index buffers, triangle rendering.
+- [ ] M3: Vulkan Pipeline + Textures -- graphics pipeline, descriptor sets, texture sampling.
+- [ ] M4: Vulkan 3D Rendering -- mesh loading, Blinn-Phong equivalent, shadow maps on Vulkan.
+- [ ] M5: Vulkan Optimisations + Phase Close -- pipeline caching, descriptor pooling, FULL build.
 
 ## Build Commands
 

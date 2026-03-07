@@ -3,6 +3,60 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 85: Phase 8 M1 — Vulkan Backend Bootstrap
+
+### Summary
+
+Session 85 launched Phase 8 (Vulkan Backend) with M1: Bootstrap. Delivered compile-time backend selection via `FFE_BACKEND` CMake variable (OpenGL default, Vulkan opt-in), volk for Vulkan function loading, full Vulkan initialization (instance creation with validation layers, physical device scoring, logical device, FIFO swap chain, render pass, 2 frames-in-flight sync), and a complete RHI Vulkan implementation with working beginFrame/endFrame (clear-color) and all other functions stubbed. Tier/backend validation enforces Vulkan requires STANDARD or MODERN tier. Added volk + vulkan-headers to vcpkg.json. 6 new CPU-only tests. Security shift-left: PASS. Performance critic: PASS (1 minor const nit fixed). API designer: MINOR ISSUES (context.md updated). Security post-impl: MINOR ISSUES (2 MEDIUM + 4 LOW, all 6 fixed). Build: 1234 tests, Clang-18, zero warnings. game-dev-tester: SKIPPED (internal backend, no new API paradigm).
+
+### Planned
+
+- Phase 8 M1: Vulkan Backend Bootstrap — compile-time backend selection, Vulkan init, RHI implementation, tests
+
+### Delivered
+
+- **ADR** -- `docs/architecture/adr-phase8-vulkan-backend.md` — compile-time FFE_BACKEND, volk loader, tier/backend constraints
+- **RHI Types** -- `RhiBackend` enum (OPENGL/VULKAN), `MAX_SWAPCHAIN_IMAGES=4`, new `RhiConfig` fields (backend, debugVulkan, preferredSwapImages, window)
+- **Vulkan Init** -- `vk_init.h/cpp` — instance creation, validation layer enumeration, physical device scoring, logical device, FIFO swap chain, render pass, sync objects (2 frames in flight), command pool/buffers
+- **Vulkan RHI** -- `rhi_vulkan.cpp` — full RHI implementation with init/shutdown, beginFrame/endFrame (clear-color), swap chain recreation, all other functions stubbed
+- **CMake** -- `FFE_BACKEND` variable, tier/backend validation, conditional compilation (OpenGL vs Vulkan sources)
+- **Dependencies** -- volk + vulkan-headers added to `vcpkg.json`
+- **Application Guards** -- `engine/core/application.cpp` — `#ifdef` guards for GL vs Vulkan paths
+- **Tests** -- 6 CPU-only tests in `tests/renderer/test_rhi_vulkan.cpp` (enum values, config defaults, tier/backend validation)
+- **Context.md** -- `engine/renderer/.context.md` updated with multi-backend support section
+
+### Files Created
+
+- `docs/architecture/adr-phase8-vulkan-backend.md`
+- `engine/renderer/vulkan/vk_init.h`
+- `engine/renderer/vulkan/vk_init.cpp`
+- `engine/renderer/vulkan/rhi_vulkan.cpp`
+- `tests/renderer/test_rhi_vulkan.cpp`
+
+### Files Modified
+
+- `engine/renderer/rhi_types.h` (RhiBackend enum, new config fields)
+- `engine/renderer/CMakeLists.txt` (conditional Vulkan/OpenGL sources)
+- `CMakeLists.txt` (FFE_BACKEND variable, tier validation)
+- `vcpkg.json` (volk, vulkan-headers)
+- `engine/core/application.cpp` (backend ifdef guards)
+- `engine/renderer/.context.md` (multi-backend section)
+- `tests/CMakeLists.txt` (test_rhi_vulkan)
+
+### Reviews
+
+- **Security shift-left (ADR):** PASS
+- **Performance critic:** PASS (1 minor const nit — fixed in remediation)
+- **API designer:** MINOR ISSUES (context.md updated)
+- **Security post-impl:** MINOR ISSUES (2 MEDIUM: swap chain image count clamping, validation layer string safety; 4 LOW — all 6 fixed)
+- **Build:** 1234 tests, Clang-18, zero warnings
+
+### Session 86 Plan
+
+Phase 8 M2: Vulkan Shader Compilation + Vertex Buffers — SPIR-V compilation, VMA vertex/index buffers, triangle rendering.
+
+---
+
 ## 2026-03-07 — Session 84: Phase 7 M8 — Phase Close
 
 ### Summary
