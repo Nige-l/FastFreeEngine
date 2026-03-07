@@ -3,8 +3,11 @@
 
 #include <imgui.h>
 
+#include <cctype>
+#include <cstdio>
 #include <cstring>
 #include <memory>
+#include <string>
 
 namespace ffe::editor {
 
@@ -31,6 +34,7 @@ void InspectorPanel::draw(World& world, const EntityId selectedEntity, CommandHi
     bool removeTransformRequested  = false;
     bool removeTransform3DRequested = false;
     bool removeSpriteRequested     = false;
+    bool removeMeshRequested       = false;
     bool removeMaterial3DRequested = false;
 
     if (world.hasComponent<Name>(selectedEntity)) {
@@ -70,8 +74,17 @@ void InspectorPanel::draw(World& world, const EntityId selectedEntity, CommandHi
         }
         ImGui::PopID();
     }
+    if (world.hasComponent<Mesh>(selectedEntity)) {
+        drawMeshComponent(world, selectedEntity, history);
+        ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 20.0f);
+        ImGui::PushID("RemoveMesh");
+        if (ImGui::SmallButton("X")) {
+            removeMeshRequested = true;
+        }
+        ImGui::PopID();
+    }
     if (world.hasComponent<Material3D>(selectedEntity)) {
-        drawMaterial3DComponent(world, selectedEntity);
+        drawMaterial3DComponent(world, selectedEntity, history);
         ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 20.0f);
         ImGui::PushID("RemoveMaterial3D");
         if (ImGui::SmallButton("X")) {
@@ -97,6 +110,10 @@ void InspectorPanel::draw(World& world, const EntityId selectedEntity, CommandHi
     if (removeSpriteRequested) {
         history.executeCommand(
             std::make_unique<RemoveComponentCommand<Sprite>>(world, entity));
+    }
+    if (removeMeshRequested) {
+        history.executeCommand(
+            std::make_unique<RemoveComponentCommand<Mesh>>(world, entity));
     }
     if (removeMaterial3DRequested) {
         history.executeCommand(
@@ -300,16 +317,87 @@ void InspectorPanel::drawSpriteComponent(World& world, const EntityId entity) {
                       ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoPicker);
 }
 
-void InspectorPanel::drawMaterial3DComponent(World& world, const EntityId entity) {
+void InspectorPanel::drawMeshComponent(World& world, const EntityId entity, CommandHistory& history) {
+    if (!ImGui::CollapsingHeader("Mesh", ImGuiTreeNodeFlags_DefaultOpen)) return;
+
+    const auto& meshComp = world.getComponent<Mesh>(entity);
+
+    ImGui::Text("Mesh Handle: %u", meshComp.meshHandle.id);
+
+    // Drop target for .glb mesh files
+    const auto droppedPath = drawAssetDropTarget("Mesh Asset##MeshDrop", m_meshAssetPath,
+                                                  false, true);
+    if (!droppedPath.empty()) {
+        // Store the path for display. Snapshot old component for undo.
+        m_meshAssetPath = droppedPath;
+        // Create an undo command (currently a no-op on the handle since loading
+        // is not yet integrated, but the UX and undo plumbing are in place).
+        const Mesh oldMesh = meshComp;
+        const Mesh newMesh = meshComp; // Same for now — loading integration will set meshHandle
+        auto cmd = std::make_unique<ModifyComponentCommand<Mesh>>(
+            world, static_cast<entt::entity>(entity), oldMesh, newMesh);
+        history.executeCommand(std::move(cmd));
+    }
+}
+
+void InspectorPanel::drawMaterial3DComponent(World& world, const EntityId entity, CommandHistory& history) {
     if (!ImGui::CollapsingHeader("Material3D", ImGuiTreeNodeFlags_DefaultOpen)) return;
 
     const auto& m = world.getComponent<Material3D>(entity);
 
-    // Display-only for now
+    // Display-only color fields
     ImGui::ColorEdit3("Diffuse##Mat3D", const_cast<float*>(&m.diffuseColor.r),
                       ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoPicker);
     ImGui::Text("Shininess: %.1f", m.shininess);
     ImGui::Text("Specular: (%.2f, %.2f, %.2f)", m.specularColor.r, m.specularColor.g, m.specularColor.b);
+
+    ImGui::Separator();
+    ImGui::Text("Textures:");
+
+    // Diffuse texture drop target
+    ImGui::Text("Diffuse Texture ID: %u", m.diffuseTexture.id);
+    {
+        const auto dropped = drawAssetDropTarget("Diffuse Texture##DiffuseDrop",
+                                                  m_diffuseTexturePath, true, false);
+        if (!dropped.empty()) {
+            m_diffuseTexturePath = dropped;
+            const Material3D oldMat = m;
+            const Material3D newMat = m; // Same for now — loading will set diffuseTexture
+            auto cmd = std::make_unique<ModifyComponentCommand<Material3D>>(
+                world, static_cast<entt::entity>(entity), oldMat, newMat);
+            history.executeCommand(std::move(cmd));
+        }
+    }
+
+    // Normal map drop target
+    ImGui::Text("Normal Map ID: %u", m.normalMapTexture.id);
+    {
+        const auto dropped = drawAssetDropTarget("Normal Map##NormalDrop",
+                                                  m_normalMapPath, true, false);
+        if (!dropped.empty()) {
+            m_normalMapPath = dropped;
+            const Material3D oldMat = m;
+            const Material3D newMat = m;
+            auto cmd = std::make_unique<ModifyComponentCommand<Material3D>>(
+                world, static_cast<entt::entity>(entity), oldMat, newMat);
+            history.executeCommand(std::move(cmd));
+        }
+    }
+
+    // Specular map drop target
+    ImGui::Text("Specular Map ID: %u", m.specularMapTexture.id);
+    {
+        const auto dropped = drawAssetDropTarget("Specular Map##SpecularDrop",
+                                                  m_specularMapPath, true, false);
+        if (!dropped.empty()) {
+            m_specularMapPath = dropped;
+            const Material3D oldMat = m;
+            const Material3D newMat = m;
+            auto cmd = std::make_unique<ModifyComponentCommand<Material3D>>(
+                world, static_cast<entt::entity>(entity), oldMat, newMat);
+            history.executeCommand(std::move(cmd));
+        }
+    }
 }
 
 void InspectorPanel::drawAddComponentButton(World& world, const EntityId entity,
@@ -345,6 +433,12 @@ void InspectorPanel::drawAddComponentButton(World& world, const EntityId entity,
                     std::make_unique<AddComponentCommand<Sprite>>(world, ent));
             }
         }
+        if (!world.hasComponent<Mesh>(entity)) {
+            if (ImGui::MenuItem("Mesh")) {
+                history.executeCommand(
+                    std::make_unique<AddComponentCommand<Mesh>>(world, ent));
+            }
+        }
         if (!world.hasComponent<Material3D>(entity)) {
             if (ImGui::MenuItem("Material3D")) {
                 history.executeCommand(
@@ -353,6 +447,79 @@ void InspectorPanel::drawAddComponentButton(World& world, const EntityId entity,
         }
         ImGui::EndPopup();
     }
+}
+
+std::string InspectorPanel::extensionLower(const std::string& path) {
+    const auto dotPos = path.rfind('.');
+    if (dotPos == std::string::npos) {
+        return {};
+    }
+    auto ext = path.substr(dotPos);
+    for (auto& ch : ext) {
+        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    }
+    return ext;
+}
+
+bool InspectorPanel::isImageFile(const std::string& path) {
+    const auto ext = extensionLower(path);
+    return ext == ".png" || ext == ".jpg" || ext == ".jpeg" ||
+           ext == ".bmp" || ext == ".tga";
+}
+
+bool InspectorPanel::isMeshFile(const std::string& path) {
+    const auto ext = extensionLower(path);
+    return ext == ".glb" || ext == ".gltf" || ext == ".obj" || ext == ".fbx";
+}
+
+std::string InspectorPanel::drawAssetDropTarget(const char* label, const std::string& currentPath,
+                                                 const bool acceptImage, const bool acceptMesh) {
+    // Show the current assigned path (or "None" if empty)
+    if (currentPath.empty()) {
+        ImGui::Button(label);
+    } else {
+        // Extract just the filename for display
+        auto slashPos = currentPath.rfind('/');
+        if (slashPos == std::string::npos) {
+            slashPos = currentPath.rfind('\\');
+        }
+        const auto filename = (slashPos != std::string::npos)
+                                  ? currentPath.substr(slashPos + 1)
+                                  : currentPath;
+
+        char buttonLabel[256] = {};
+        std::snprintf(buttonLabel, sizeof(buttonLabel), "%s###%s", filename.c_str(), label);
+        ImGui::Button(buttonLabel);
+    }
+
+    std::string droppedPath;
+
+    // Drop target zone
+    if (ImGui::BeginDragDropTarget()) {
+        // Visual feedback: the drop target is already highlighted by ImGui's
+        // default drag-drop rendering (yellow border). We add a tooltip to
+        // indicate whether the payload is compatible.
+        if (const auto* payload = ImGui::AcceptDragDropPayload("ASSET_PATH",
+                ImGuiDragDropFlags_AcceptPeekOnly)) {
+            // Read the path from the payload to check compatibility
+            const std::string candidatePath(static_cast<const char*>(payload->Data),
+                                            payload->DataSize - 1); // exclude null terminator
+
+            const bool compatible = (acceptImage && isImageFile(candidatePath)) ||
+                                    (acceptMesh && isMeshFile(candidatePath));
+
+            if (compatible) {
+                // Accept the real drop (not just peek)
+                if (const auto* accepted = ImGui::AcceptDragDropPayload("ASSET_PATH")) {
+                    droppedPath.assign(static_cast<const char*>(accepted->Data),
+                                       accepted->DataSize - 1);
+                }
+            }
+        }
+        ImGui::EndDragDropTarget();
+    }
+
+    return droppedPath;
 }
 
 } // namespace ffe::editor

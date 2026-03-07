@@ -4,6 +4,8 @@
 #include "commands/command_history.h"
 #include "commands/component_commands.h"
 
+#include <string>
+
 namespace ffe::editor {
 
 // Inspector panel — shows editable fields for the selected entity's components.
@@ -30,7 +32,8 @@ private:
     void drawTransformComponent(World& world, EntityId entity, CommandHistory& history);
     void drawTransform3DComponent(World& world, EntityId entity, CommandHistory& history);
     void drawSpriteComponent(World& world, EntityId entity);
-    void drawMaterial3DComponent(World& world, EntityId entity);
+    void drawMeshComponent(World& world, EntityId entity, CommandHistory& history);
+    void drawMaterial3DComponent(World& world, EntityId entity, CommandHistory& history);
     void drawAddComponentButton(World& world, EntityId entity, CommandHistory& history);
 
     // Returns true if the user clicked the remove ("X") button on a component
@@ -48,6 +51,29 @@ private:
     bool m_editingTransform   = false;
     bool m_editingTransform3D = false;
     bool m_editingName        = false;
+
+    // Asset paths assigned via drag-and-drop (display-only for now — actual
+    // asset loading integration will connect these to the resource system later).
+    std::string m_meshAssetPath;
+    std::string m_diffuseTexturePath;
+    std::string m_normalMapPath;
+    std::string m_specularMapPath;
+
+    // Returns the lowercase extension of a file path (e.g. ".png"), or empty
+    // string if there is no extension.
+    static std::string extensionLower(const std::string& path);
+
+    // Returns true if the extension matches one of the accepted image formats.
+    static bool isImageFile(const std::string& path);
+
+    // Returns true if the extension matches one of the accepted mesh formats.
+    static bool isMeshFile(const std::string& path);
+
+    // Helper: draw a drop-target zone for an asset path field. Returns the
+    // dropped path if a valid drop occurred, or empty string otherwise.
+    // acceptImage: if true, accepts image files; acceptMesh: if true, accepts mesh files.
+    static std::string drawAssetDropTarget(const char* label, const std::string& currentPath,
+                                           bool acceptImage, bool acceptMesh);
 };
 
 } // namespace ffe::editor

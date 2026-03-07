@@ -116,6 +116,7 @@ catch_discover_tests(ffe_tests_audio)
 add_executable(ffe_tests_scene
     test_main.cpp
     scene/test_scene_serialiser.cpp
+    scene/test_scene_graph.cpp
 )
 
 target_link_libraries(ffe_tests_scene
@@ -138,6 +139,7 @@ add_executable(ffe_tests_editor
     editor/test_component_add_remove.cpp
     editor/test_shortcuts.cpp
     editor/test_play_mode.cpp
+    editor/test_hierarchy_panel.cpp
     ${CMAKE_SOURCE_DIR}/editor/commands/command_history.cpp
     ${CMAKE_SOURCE_DIR}/editor/commands/entity_commands.cpp
     ${CMAKE_SOURCE_DIR}/editor/play_mode.cpp

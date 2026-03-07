@@ -85,6 +85,16 @@ void AssetBrowser::render() {
         if (ImGui::Selectable(label, isSelected)) {
             m_selectedAsset = fullPath;
         }
+
+        // Drag-drop source: allow dragging files from the asset browser
+        if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
+            // Payload is the full file path as a null-terminated string
+            ImGui::SetDragDropPayload("ASSET_PATH", fullPath.c_str(),
+                                      fullPath.size() + 1);
+            // Tooltip showing the filename while dragging
+            ImGui::Text("%s %s", prefix, file.c_str());
+            ImGui::EndDragDropSource();
+        }
     }
 
     ImGui::EndChild();
