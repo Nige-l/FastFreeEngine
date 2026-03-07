@@ -6,7 +6,7 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 85 |
+| Last session | 86 |
 | Total tests | 1234 (Clang-18, zero warnings) |
 | Total Lua bindings | ~190 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
@@ -16,7 +16,7 @@
 | Phase 5 (Website/Learning) | COMPLETE (Sessions 62-65) |
 | Phase 6 (Showcase Game) | COMPLETE (Sessions 66-73) |
 | Phase 7 (Rendering Pipeline) | COMPLETE (Sessions 74-84) |
-| Phase 8 (Vulkan Backend) | IN PROGRESS (Session 85+) |
+| Phase 8 (Vulkan Backend) | IN PROGRESS (Session 85+, M2 done) |
 | Windows build | DONE (MinGW-w64 cross-compilation) |
 | macOS build | DISABLED (upstream LuaJIT arm64-osx vcpkg issue) |
 | GitHub Actions CI | DONE (Linux Clang-18, Linux GCC-13) |
@@ -43,11 +43,11 @@
 
 | Session | Summary |
 |---------|---------|
+| 86 | Phase 8 M2: Vulkan Shader Compilation + Vertex Buffers — VMA integration, SPIR-V shaders, graphics pipeline, staged buffer uploads, triangle rendering. 13 new tests. 1234 tests (FAST). |
 | 85 | Phase 8 M1: Vulkan Backend Bootstrap — compile-time FFE_BACKEND selection, volk loader, instance/device/swapchain init, RHI Vulkan impl (clear-color), tier validation. 6 new tests. 1234 tests (FAST). |
 | 84 | Phase 7 M8: Phase Close — README update, architecture-map update, GCC-13 strncpy warning fix. FULL build: 1228 tests. Phase 7 COMPLETE. |
 | 83 | Phase 7 M7: Sprite Batching 2.0 — runtime texture atlas, shelf packing, UV remapping, atlas page batching. 24 new tests. 1228 tests (FAST). |
 | 82 | Phase 7 M6: SSAO — 32-sample hemisphere, half-res, 4x4 box blur, GLSL 330. 36 new tests. 1204 tests (FAST). |
-| 81 | Phase 7 M5: Skeletal Animation Completion — crossfade blending, interpolation modes, root motion extraction. 31 new tests. 1168 tests (FAST). |
 
 ## Phase 8 — Vulkan Backend (IN PROGRESS)
 
@@ -56,8 +56,8 @@
 ### Milestones
 
 - [x] M1 (Session 85): Vulkan Backend Bootstrap -- compile-time FFE_BACKEND selection, volk function loader, Vulkan instance/device/swapchain init (FIFO, 2 frames in flight), RHI Vulkan impl (beginFrame/endFrame clear-color, stubs for rest), tier/backend validation (Vulkan requires STANDARD+), 6 CPU-only tests.
-- [ ] M2: Vulkan Shader Compilation + Vertex Buffers -- SPIR-V compilation, VMA vertex/index buffers, triangle rendering.
-- [ ] M3: Vulkan Pipeline + Textures -- graphics pipeline, descriptor sets, texture sampling.
+- [x] M2 (Session 86): Vulkan Shader Compilation + Vertex Buffers -- VMA integration, embedded SPIR-V shaders (constexpr u32 arrays), VkManagedBuffer (staging upload), VkManagedShader, PipelineConfig + createGraphicsPipeline (dynamic viewport/scissor), colored triangle rendering. 13 new CPU-only tests.
+- [ ] M3: Vulkan Textures + Uniform Buffers -- VkImage/VkImageView/VkSampler via VMA, UBOs for MVP matrix, descriptor sets/pools, textured quad rendering.
 - [ ] M4: Vulkan 3D Rendering -- mesh loading, Blinn-Phong equivalent, shadow maps on Vulkan.
 - [ ] M5: Vulkan Optimisations + Phase Close -- pipeline caching, descriptor pooling, FULL build.
 

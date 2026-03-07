@@ -3,6 +3,71 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 86: Phase 8 M2 — Vulkan Shader Compilation + Vertex Buffers
+
+### Summary
+
+Session 86 delivered Phase 8 M2: Vulkan shader compilation, vertex/index buffers, and graphics pipeline. VMA (Vulkan Memory Allocator) integrated for GPU memory management with staging-to-device-local buffer upload pattern. Embedded SPIR-V shaders as constexpr u32 arrays (GLSL 450, position+color triangle). VkManagedBuffer and VkManagedShader structs for resource lifetime management. PipelineConfig with MAX_ATTRS=8 and dynamic viewport/scissor. Triangle rendering working via Vulkan backend. 13 new CPU-only tests (struct validation, SPIR-V magic number, config defaults). Performance critic: PASS. API designer: PASS (.context.md updated). Security auditor: SKIPPED (no new attack surface). Build: 1234 tests, Clang-18, zero warnings. game-dev-tester: SKIPPED (internal backend, no public API change).
+
+### Planned
+
+- Phase 8 M2: VMA integration, SPIR-V shader compilation, vertex/index buffers, graphics pipeline, triangle rendering
+
+### Delivered
+
+- **VMA Integration** -- `vulkan-memory-allocator` linked, VMA allocator created/destroyed in Vulkan init/shutdown, staging-to-device-local buffer upload
+- **Buffer System** -- `vk_buffer.h/.cpp` — `VkManagedBuffer` struct, `createVertexBuffer()`/`createIndexBuffer()` with staging upload, `destroyBuffer()`
+- **Shader System** -- `vk_shader.h/.cpp` — `VkManagedShader` struct, `createShaderModules()` from SPIR-V binary, alignment validation
+- **Pipeline System** -- `vk_pipeline.h/.cpp` — `PipelineConfig` struct (MAX_ATTRS=8), `createGraphicsPipeline()` with dynamic viewport/scissor
+- **Embedded SPIR-V** -- `shaders/triangle_vert.h` + `triangle_frag.h` — pre-compiled SPIR-V as constexpr u32 arrays (GLSL 450 triangle with position+color)
+- **Triangle Rendering** -- `rhi_vulkan.cpp` creates triangle VB, shader modules, and pipeline at init; renders colored triangle per frame
+- **Tests** -- 13 new CPU-only tests in `test_rhi_vulkan.cpp` (struct validation, SPIR-V magic, config defaults, guarded by `#ifdef FFE_BACKEND_VULKAN`)
+- **.context.md** -- Updated multi-backend section with M2 progress
+
+### Files Created
+
+- `engine/renderer/vulkan/vk_buffer.h`
+- `engine/renderer/vulkan/vk_buffer.cpp`
+- `engine/renderer/vulkan/vk_shader.h`
+- `engine/renderer/vulkan/vk_shader.cpp`
+- `engine/renderer/vulkan/vk_pipeline.h`
+- `engine/renderer/vulkan/vk_pipeline.cpp`
+- `engine/renderer/vulkan/shaders/triangle_vert.h`
+- `engine/renderer/vulkan/shaders/triangle_frag.h`
+
+### Files Modified
+
+- `engine/renderer/vulkan/vk_init.h` (VMA allocator field, pipeline fields)
+- `engine/renderer/vulkan/vk_init.cpp` (VMA create/destroy)
+- `engine/renderer/vulkan/rhi_vulkan.cpp` (triangle rendering integration)
+- `engine/renderer/CMakeLists.txt` (new sources, VMA link)
+- `engine/renderer/.context.md` (M2 update)
+- `tests/renderer/test_rhi_vulkan.cpp` (13 new tests)
+
+### Reviews
+
+| Reviewer | Verdict | Notes |
+|----------|---------|-------|
+| performance-critic | PASS | No issues |
+| api-designer | PASS | .context.md updated |
+| security-auditor | SKIPPED | No new attack surface (embedded shaders, init-time only) |
+
+### Metrics
+
+| Metric | Value |
+|--------|-------|
+| Tests | 1234 |
+| Warnings | 0 |
+| Build tier | FAST (Clang-18) |
+| New tests | 13 |
+| game-dev-tester | SKIPPED (internal backend) |
+
+### Next
+
+- Phase 8 M3: Vulkan Textures + Uniform Buffers — VkImage/VkImageView/VkSampler via VMA, UBOs for MVP matrix, descriptor sets/pools, textured quad rendering, camera/projection integration.
+
+---
+
 ## 2026-03-07 — Session 85: Phase 8 M1 — Vulkan Backend Bootstrap
 
 ### Summary
