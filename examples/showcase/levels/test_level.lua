@@ -71,8 +71,8 @@ local ground = 0
 if cubeMesh ~= 0 then
     ground = ffe.createEntity3D(cubeMesh, 0, -1, 0)
     if ground ~= 0 then
-        ffe.setTransform3D(ground, 0, -1, 0, 0, 0, 0, 40, 0.5, 40)
-        ffe.setMeshColor(ground, 0.35, 0.45, 0.30, 1.0)  -- muted green/brown ground
+        ffe.setTransform3D(ground, 0, -1, 0, 0, 0, 0, 40, 1.0, 40)
+        ffe.setMeshColor(ground, 0.45, 0.55, 0.35, 1.0)  -- brighter green/brown ground
         ffe.setMeshSpecular(ground, 0.1, 0.1, 0.1, 8)
     end
 end

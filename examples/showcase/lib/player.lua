@@ -55,8 +55,8 @@ function Player.create(x, y, z, cubeMeshHandle)
     end
 
     -- Set transform: position, X rotation correction for Y-up glTF models
-    -- Character models (CesiumMan etc) need different scale than cube fallback
-    ffe.setTransform3D(playerEntity, x, y, z, X_ROT_CORRECTION, 0, 0, 0.5, 0.5, 0.5)
+    -- CesiumMan is ~1.7m at scale 1.0; scale to 1.8 for a visible player character
+    ffe.setTransform3D(playerEntity, x, y, z, X_ROT_CORRECTION, 0, 0, 1.8, 1.8, 1.8)
 
     -- Distinct player color: bright cyan
     ffe.setMeshColor(playerEntity, 0.1, 0.8, 0.9, 1.0)
@@ -107,8 +107,11 @@ function Player.update(dt)
     local yawRad = math.rad(camYaw)
 
     -- Forward and right vectors in XZ plane (relative to camera)
-    local fwdX =  math.sin(yawRad)
-    local fwdZ =  math.cos(yawRad)
+    -- Camera orbit places camera at target + radius*(sin(yaw), _, cos(yaw)),
+    -- so the camera looks TOWARD -sin(yaw), -cos(yaw). Player forward must
+    -- match that look direction (i.e. the direction from camera to target).
+    local fwdX = -math.sin(yawRad)
+    local fwdZ = -math.cos(yawRad)
     local rgtX =  math.cos(yawRad)
     local rgtZ = -math.sin(yawRad)
 
@@ -187,9 +190,9 @@ function Player.update(dt)
         wantAttack = wantAttack or ffe.isGamepadButtonPressed(0, ffe.GAMEPAD_X)
     end
     if wantAttack and Combat then
-        -- Forward direction for attack
-        local atkFwdX = math.sin(yawRad)
-        local atkFwdZ = math.cos(yawRad)
+        -- Forward direction for attack (matches camera look direction: -sin, -cos)
+        local atkFwdX = -math.sin(yawRad)
+        local atkFwdZ = -math.cos(yawRad)
         Combat.attack(
             { x = px, y = py, z = pz },
             { x = atkFwdX, y = 0, z = atkFwdZ }
@@ -202,7 +205,7 @@ function Player.update(dt)
         ffe.setTransform3D(playerEntity,
             px, py, pz,
             X_ROT_CORRECTION, facingDeg, 0,
-            0.5, 0.5, 0.5)
+            1.8, 1.8, 1.8)
     end
 end
 

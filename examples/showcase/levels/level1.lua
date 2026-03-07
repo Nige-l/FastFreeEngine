@@ -123,10 +123,11 @@ local function createDynamicBox(x, y, z, sx, sy, sz, r, g, b, mass)
 end
 
 --------------------------------------------------------------------
--- Ground plane: large flat stone floor (60x0.5x60)
--- Bright tan color contrasts with the blue-grey fog (Bug 2)
+-- Ground plane: large flat stone floor (60x1x60)
+-- Bright tan/ochre color with strong contrast against blue-grey fog.
+-- Positioned so the surface sits at y=0 (center at y=-0.5, halfY=0.5).
 --------------------------------------------------------------------
-local ground = createStaticBox(0, -0.5, 0,  30, 0.5, 30,  0.55, 0.50, 0.40)
+local ground = createStaticBox(0, -0.5, 0,  30, 1.0, 30,  0.65, 0.55, 0.35)
 
 --------------------------------------------------------------------
 -- Edge border walls: low walls at ground perimeter for spatial reference (Bug 2)

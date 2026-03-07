@@ -133,8 +133,8 @@ end
 -- CENTRAL ARENA: Large circular-ish platform (12x1x12) at Y=0
 -- The main battleground where the final artifact awaits.
 --------------------------------------------------------------------
--- Main arena floor (larger 60x60 for visibility, Bug 2)
-createStaticBox(0, -0.5, 0, 30, 0.5, 30, 0.50, 0.38, 0.30)
+-- Main arena floor (60x1x60 -- thicker + brighter for visibility)
+createStaticBox(0, -0.5, 0, 30, 1.0, 30, 0.60, 0.48, 0.35)
 
 -- Arena edge ring (decorative border boxes around the perimeter)
 createVisualBox(0, -0.3, 0, 30.5, 0.2, 30.5, 0.35, 0.25, 0.2, 1.0)

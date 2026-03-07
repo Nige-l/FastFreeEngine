@@ -84,9 +84,11 @@ function Camera.update(dt)
     local pitchRad = math.rad(pitch)
 
     -- Camera offset direction (from target toward where camera would be)
-    local camDirX = -math.sin(yawRad) * math.cos(pitchRad)
-    local camDirY =  math.sin(pitchRad)
-    local camDirZ = -math.cos(yawRad) * math.cos(pitchRad)
+    -- Engine orbit: cam = target + radius*(cos(pitch)*sin(yaw), sin(pitch), cos(pitch)*cos(yaw))
+    -- So direction from target toward camera is (+sin(yaw), +sin(pitch), +cos(yaw))
+    local camDirX = math.sin(yawRad) * math.cos(pitchRad)
+    local camDirY = math.sin(pitchRad)
+    local camDirZ = math.cos(yawRad) * math.cos(pitchRad)
 
     -- Raycast from target in camera direction
     local hitEnt, hx, hy, hz, nx, ny, nz, hitDist =

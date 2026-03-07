@@ -114,20 +114,20 @@ end
 -- The temple is a cross-shaped layout with a central area and
 -- 4 bridge arms extending over the lava pit.
 --------------------------------------------------------------------
--- Central platform (larger 16x0.5x16 for better visibility, Bug 2)
-createStaticBox(0, -0.5, 0, 8, 0.5, 8, 0.30, 0.27, 0.25)
+-- Central platform (16x1x16 -- thicker + brighter for visibility)
+createStaticBox(0, -0.5, 0, 8, 1.0, 8, 0.40, 0.35, 0.30)
 
--- South platform (entrance area, wider 12x0.5x10)
-createStaticBox(0, -0.5, -15, 6, 0.5, 5, 0.30, 0.27, 0.25)
+-- South platform (entrance area, wider 12x1x10)
+createStaticBox(0, -0.5, -15, 6, 1.0, 5, 0.40, 0.35, 0.30)
 
--- North platform (exit area, wider 10x0.5x8)
-createStaticBox(0, -0.5, 15, 5, 0.5, 4, 0.30, 0.27, 0.25)
+-- North platform (exit area, wider 10x1x8)
+createStaticBox(0, -0.5, 15, 5, 1.0, 4, 0.40, 0.35, 0.30)
 
--- East platform (crystal alcove, wider 8x0.5x8)
-createStaticBox(13, -0.5, 0, 4, 0.5, 4, 0.30, 0.27, 0.25)
+-- East platform (crystal alcove, wider 8x1x8)
+createStaticBox(13, -0.5, 0, 4, 1.0, 4, 0.40, 0.35, 0.30)
 
--- West platform (crystal alcove, wider 8x0.5x8)
-createStaticBox(-13, -0.5, 0, 4, 0.5, 4, 0.30, 0.27, 0.25)
+-- West platform (crystal alcove, wider 8x1x8)
+createStaticBox(-13, -0.5, 0, 4, 1.0, 4, 0.40, 0.35, 0.30)
 
 -- Platform edge markers: glowing border strips for spatial reference (Bug 2)
 -- Central platform edges
