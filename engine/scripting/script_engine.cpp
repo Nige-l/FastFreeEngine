@@ -27,6 +27,7 @@ extern "C" {
 #include "physics/physics3d.h"
 #include "physics/physics3d_system.h"
 #include "scene/scene_serialiser.h"
+#include "networking/network_system.h"
 
 #include <glm/gtc/quaternion.hpp>
 
@@ -64,6 +65,13 @@ static int s_collisionCallbackKey = 0;
 // Registry key for the 3D collision callback Lua function reference.
 // Same pattern as s_collisionCallbackKey but for 3D physics events.
 static int s_collision3DCallbackKey = 0;
+
+// Registry keys for networking Lua callback references.
+static int s_netMessageCallbackKey       = 0;
+static int s_netClientConnectedKey       = 0;
+static int s_netClientDisconnectedKey    = 0;
+static int s_netOnConnectedKey           = 0;
+static int s_netOnDisconnectedKey        = 0;
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -5846,6 +5854,250 @@ void ScriptEngine::registerEcsBindings() {
     };
     lua_pushcfunction(L, ffe_castRayAll);
     lua_setfield(L, -2, "castRayAll");
+
+    // ================================================================
+    // Networking bindings — ffe.startServer, ffe.connectToServer, etc.
+    // ================================================================
+
+    // ffe.startServer(port) -> bool
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const int port = static_cast<int>(luaL_checkinteger(state, 1));
+        if (port < 1 || port > 65535) {
+            FFE_LOG_WARN("ScriptEngine", "ffe.startServer: invalid port %d", port);
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        const bool ok = ffe::networking::startServer(static_cast<uint16_t>(port));
+        lua_pushboolean(state, ok ? 1 : 0);
+        return 1;
+    });
+    lua_setfield(L, -2, "startServer");
+
+    // ffe.stopServer() -> nil
+    lua_pushcfunction(L, [](lua_State* /*state*/) -> int {
+        ffe::networking::disconnectNetwork();
+        return 0;
+    });
+    lua_setfield(L, -2, "stopServer");
+
+    // ffe.isServer() -> bool
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushboolean(state, ffe::networking::isServer() ? 1 : 0);
+        return 1;
+    });
+    lua_setfield(L, -2, "isServer");
+
+    // ffe.connectToServer(host, port) -> bool
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const char* host = luaL_checkstring(state, 1);
+        const int port = static_cast<int>(luaL_checkinteger(state, 2));
+        if (port < 1 || port > 65535) {
+            FFE_LOG_WARN("ScriptEngine", "ffe.connectToServer: invalid port %d", port);
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        const bool ok = ffe::networking::connectToServer(host, static_cast<uint16_t>(port));
+        lua_pushboolean(state, ok ? 1 : 0);
+        return 1;
+    });
+    lua_setfield(L, -2, "connectToServer");
+
+    // ffe.disconnect() -> nil
+    lua_pushcfunction(L, [](lua_State* /*state*/) -> int {
+        ffe::networking::disconnectNetwork();
+        return 0;
+    });
+    lua_setfield(L, -2, "disconnect");
+
+    // ffe.isConnected() -> bool
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushboolean(state, ffe::networking::isClient() ? 1 : 0);
+        return 1;
+    });
+    lua_setfield(L, -2, "isConnected");
+
+    // ffe.getClientId() -> integer
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const auto* client = ffe::networking::getClient();
+        if (client != nullptr) {
+            lua_pushinteger(state, static_cast<lua_Integer>(client->clientId()));
+        } else {
+            lua_pushinteger(state, -1);
+        }
+        return 1;
+    });
+    lua_setfield(L, -2, "getClientId");
+
+    // ffe.sendMessage(msgType, data) -> bool
+    // msgType: integer [0..255], data: string
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const int msgType = static_cast<int>(luaL_checkinteger(state, 1));
+        if (msgType < 0 || msgType > 255) {
+            FFE_LOG_WARN("ScriptEngine", "ffe.sendMessage: msgType %d out of range [0,255]", msgType);
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+
+        size_t dataLen = 0;
+        const char* dataStr = luaL_optlstring(state, 2, "", &dataLen);
+
+        // Truncate to MAX_PAYLOAD_SIZE - 1 (room for msgType byte in packet)
+        if (dataLen > ffe::networking::MAX_PAYLOAD_SIZE - 1) {
+            dataLen = ffe::networking::MAX_PAYLOAD_SIZE - 1;
+        }
+
+        const bool ok = ffe::networking::sendGameMessage(
+            static_cast<uint8_t>(msgType),
+            reinterpret_cast<const uint8_t*>(dataStr),
+            static_cast<uint16_t>(dataLen));
+        lua_pushboolean(state, ok ? 1 : 0);
+        return 1;
+    });
+    lua_setfield(L, -2, "sendMessage");
+
+    // ffe.onNetworkMessage(callback) -> nil
+    // callback(senderId, msgType, data) or nil to clear
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        // Release previous ref if any
+        lua_pushlightuserdata(state, &s_netMessageCallbackKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (!lua_isnil(state, -1)) {
+            const int oldRef = static_cast<int>(lua_tointeger(state, -1));
+            if (oldRef != -2) { // LUA_NOREF
+                luaL_unref(state, LUA_REGISTRYINDEX, oldRef);
+            }
+        }
+        lua_pop(state, 1);
+
+        if (lua_isfunction(state, 1)) {
+            lua_pushvalue(state, 1);
+            const int ref = luaL_ref(state, LUA_REGISTRYINDEX);
+            lua_pushlightuserdata(state, &s_netMessageCallbackKey);
+            lua_pushinteger(state, static_cast<lua_Integer>(ref));
+            lua_settable(state, LUA_REGISTRYINDEX);
+        } else {
+            lua_pushlightuserdata(state, &s_netMessageCallbackKey);
+            lua_pushinteger(state, -2); // LUA_NOREF
+            lua_settable(state, LUA_REGISTRYINDEX);
+        }
+        return 0;
+    });
+    lua_setfield(L, -2, "onNetworkMessage");
+
+    // ffe.onClientConnected(callback) -> nil
+    // callback(clientId) or nil to clear
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_netClientConnectedKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (!lua_isnil(state, -1)) {
+            const int oldRef = static_cast<int>(lua_tointeger(state, -1));
+            if (oldRef != -2) { luaL_unref(state, LUA_REGISTRYINDEX, oldRef); }
+        }
+        lua_pop(state, 1);
+
+        if (lua_isfunction(state, 1)) {
+            lua_pushvalue(state, 1);
+            const int ref = luaL_ref(state, LUA_REGISTRYINDEX);
+            lua_pushlightuserdata(state, &s_netClientConnectedKey);
+            lua_pushinteger(state, static_cast<lua_Integer>(ref));
+            lua_settable(state, LUA_REGISTRYINDEX);
+        } else {
+            lua_pushlightuserdata(state, &s_netClientConnectedKey);
+            lua_pushinteger(state, -2);
+            lua_settable(state, LUA_REGISTRYINDEX);
+        }
+        return 0;
+    });
+    lua_setfield(L, -2, "onClientConnected");
+
+    // ffe.onClientDisconnected(callback) -> nil
+    // callback(clientId) or nil to clear
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_netClientDisconnectedKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (!lua_isnil(state, -1)) {
+            const int oldRef = static_cast<int>(lua_tointeger(state, -1));
+            if (oldRef != -2) { luaL_unref(state, LUA_REGISTRYINDEX, oldRef); }
+        }
+        lua_pop(state, 1);
+
+        if (lua_isfunction(state, 1)) {
+            lua_pushvalue(state, 1);
+            const int ref = luaL_ref(state, LUA_REGISTRYINDEX);
+            lua_pushlightuserdata(state, &s_netClientDisconnectedKey);
+            lua_pushinteger(state, static_cast<lua_Integer>(ref));
+            lua_settable(state, LUA_REGISTRYINDEX);
+        } else {
+            lua_pushlightuserdata(state, &s_netClientDisconnectedKey);
+            lua_pushinteger(state, -2);
+            lua_settable(state, LUA_REGISTRYINDEX);
+        }
+        return 0;
+    });
+    lua_setfield(L, -2, "onClientDisconnected");
+
+    // ffe.onConnected(callback) -> nil
+    // Client-side: called when connected to server.
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_netOnConnectedKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (!lua_isnil(state, -1)) {
+            const int oldRef = static_cast<int>(lua_tointeger(state, -1));
+            if (oldRef != -2) { luaL_unref(state, LUA_REGISTRYINDEX, oldRef); }
+        }
+        lua_pop(state, 1);
+
+        if (lua_isfunction(state, 1)) {
+            lua_pushvalue(state, 1);
+            const int ref = luaL_ref(state, LUA_REGISTRYINDEX);
+            lua_pushlightuserdata(state, &s_netOnConnectedKey);
+            lua_pushinteger(state, static_cast<lua_Integer>(ref));
+            lua_settable(state, LUA_REGISTRYINDEX);
+        } else {
+            lua_pushlightuserdata(state, &s_netOnConnectedKey);
+            lua_pushinteger(state, -2);
+            lua_settable(state, LUA_REGISTRYINDEX);
+        }
+        return 0;
+    });
+    lua_setfield(L, -2, "onConnected");
+
+    // ffe.onDisconnected(callback) -> nil
+    // Client-side: called when disconnected from server.
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_netOnDisconnectedKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (!lua_isnil(state, -1)) {
+            const int oldRef = static_cast<int>(lua_tointeger(state, -1));
+            if (oldRef != -2) { luaL_unref(state, LUA_REGISTRYINDEX, oldRef); }
+        }
+        lua_pop(state, 1);
+
+        if (lua_isfunction(state, 1)) {
+            lua_pushvalue(state, 1);
+            const int ref = luaL_ref(state, LUA_REGISTRYINDEX);
+            lua_pushlightuserdata(state, &s_netOnDisconnectedKey);
+            lua_pushinteger(state, static_cast<lua_Integer>(ref));
+            lua_settable(state, LUA_REGISTRYINDEX);
+        } else {
+            lua_pushlightuserdata(state, &s_netOnDisconnectedKey);
+            lua_pushinteger(state, -2);
+            lua_settable(state, LUA_REGISTRYINDEX);
+        }
+        return 0;
+    });
+    lua_setfield(L, -2, "onDisconnected");
+
+    // ffe.setNetworkTickRate(hz) -> nil
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const double hz = luaL_checknumber(state, 1);
+        if (!std::isfinite(hz) || hz < 1.0 || hz > 120.0) {
+            FFE_LOG_WARN("ScriptEngine", "ffe.setNetworkTickRate: invalid hz %.1f (clamped to [1,120])", hz);
+        }
+        ffe::networking::setNetworkTickRate(static_cast<float>(hz));
+        return 0;
+    });
+    lua_setfield(L, -2, "setNetworkTickRate");
 
     lua_setglobal(L, "ffe");
 }

@@ -13,6 +13,7 @@
 #include "physics/physics3d.h"
 #include "physics/physics3d_system.h"
 #include "audio/audio.h"
+#include "networking/network_system.h"
 
 #include <chrono>
 #include <cmath>
@@ -358,6 +359,9 @@ Result Application::initSubsystemsInternal() {
         FFE_LOG_WARN("Core", "3D physics initialization failed — physics disabled");
     }
 
+    // 5e0b. Initialize networking subsystem (ENet + default component registration)
+    networking::initNetworkSystem();
+
     // 5e. Initialize render queue (pre-allocated, persistent — not from the frame arena)
     renderer::initRenderQueue(m_renderQueue, renderer::MAX_DRAW_COMMANDS_LEGACY);
 
@@ -511,6 +515,9 @@ void Application::shutdown() {
     // 7. Unregister systems (clear handled by World destructor)
     // 6. Shutdown scripting — not yet implemented
 
+    // 5d0b. Shutdown networking subsystem (before physics and RHI shutdown).
+    networking::shutdownNetworkSystem();
+
     // 5d0. Shutdown 3D physics (before RHI shutdown — physics has no GPU deps,
     // but clean teardown order is important).
     physics::shutdownPhysics3D();
@@ -583,6 +590,11 @@ void Application::tick(const float dt) {
     // Must happen after stepPhysics3D (which populates the event buffer) and
     // before ECS systems run (so Lua onCollision3D callbacks fire this frame).
     physics::dispatchCollisionEvents3D();
+
+    // Update networking: poll transport, process/send snapshots.
+    // Server: polls incoming packets, runs network tick if enough time accumulated.
+    // Client: polls incoming packets, applies latest snapshot to the world.
+    networking::updateNetworkSystem(dt, m_world);
 
     for (const auto& system : m_world.systems()) {
         ZoneScoped;

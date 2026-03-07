@@ -3,6 +3,50 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-34 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 58: Replication, Server/Client, Lua Networking Bindings
+
+### Summary
+
+Session 58 delivered the replication system, server/client architecture, network system module, and Lua networking bindings for Phase 4. Two security hardening fixes were applied during remediation. FULL build passed: 927 tests on both Clang-18 and GCC-13, zero warnings.
+
+### Planned
+
+- Networking replication system (snapshot serialization, interpolation)
+- Server/client architecture (authoritative server, client interpolation)
+- Network system module (init/shutdown/update lifecycle)
+- Lua bindings for networking
+
+### Delivered
+
+- **Replication system** (`engine/networking/replication.h/.cpp`) — ReplicationRegistry with 32 max component types, SerializeFn/DeserializeFn/InterpolateFn function pointers, EntitySnapshot (256 bytes), Snapshot (256 max entities), SnapshotBuffer (16-slot ring buffer), default Transform/Transform3D serializers with slerp interpolation. 21 tests.
+- **NetworkServer** (`engine/networking/server.h/.cpp`) — Authoritative snapshot serialization and broadcast at configurable tick rate. broadcast(), sendTo(), setTickRate() methods. 13 tests (combined with client).
+- **NetworkClient** (`engine/networking/client.h/.cpp`) — Snapshot receiving and parsing, interpolation alpha for smooth entity rendering.
+- **Network system module** (`engine/networking/network_system.h/.cpp`) — Module-level init/shutdown/update, server XOR client mode, sendGameMessage/sendGameMessageTo/setNetworkTickRate. Integrated into application.cpp.
+- **Lua bindings** (12 new) — startServer, stopServer, isServer, connectToServer, disconnect, isConnected, getClientId, sendMessage, onNetworkMessage, onClientConnected, onClientDisconnected, onConnected, onDisconnected, setNetworkTickRate. 16 tests.
+- **Security hardening** — writeString overflow guard in packet.cpp, rate limiter real-time tracking via steady_clock in transport.h/.cpp.
+- **CMake fixes** — ffe_networking added as PUBLIC dependency of ffe_core, ffe_networking linked in scripting CMakeLists.
+- **Documentation** — engine/networking/.context.md fully updated with all APIs and Lua bindings.
+
+### Expert Panel
+
+- **performance-critic:** MINOR ISSUES (no blocking findings)
+- **security-auditor:** MINOR ISSUES — 2 findings fixed in Phase 4 remediation (writeString overflow guard, rate limiter real-time tracking)
+- **api-designer:** PASS
+
+### Build
+
+- **FULL build** — 927 tests on both Clang-18 and GCC-13, zero warnings.
+
+### Skipped
+
+- **game-dev-tester:** Skipped — no new API paradigm (networking Lua bindings follow existing ffe.* callback pattern).
+
+### Next
+
+- Continue Phase 4: lobby/matchmaking API, lag compensation, networked demo game.
+
+---
+
 ## 2026-03-07 — Session 57: Phase 4 Kickoff — ENet Transport, Packet System, Rate Limiting
 
 ### Summary

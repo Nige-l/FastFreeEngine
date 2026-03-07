@@ -12,7 +12,8 @@ engine/
   renderer/opengl/  — OpenGL 3.3 RHI backend, GL debug utilities                               [renderer-specialist]
   audio/            — miniaudio backend, WAV/OGG, sound/music playback, headless mode           [engine-dev]
   physics/          — 2D collision: spatial hash, AABB/Circle, layer/mask, callbacks            [engine-dev]
-  scripting/        — LuaJIT sandbox, ffe.* Lua API (~87 bindings), timer system                [engine-dev + api-designer]
+  scripting/        — LuaJIT sandbox, ffe.* Lua API (~128 bindings), timer system               [engine-dev + api-designer]
+  networking/       — ENet transport, replication, server/client, network system module          [engine-dev]
   editor/           — Debug overlay (HUD text, FPS) — future standalone editor                  [engine-dev]
 tests/
   core/             — ECS, input, timer, platform tests                                        [engine-dev]
@@ -20,6 +21,7 @@ tests/
   audio/            — Audio playback tests (headless)                                          [engine-dev]
   physics/          — Collision system, spatial hash tests                                     [engine-dev]
   scripting/        — Lua binding tests, sandbox security tests                                [engine-dev]
+  networking/       — Replication, server/client tests                                         [engine-dev]
 examples/
   lua_demo/         — Collect Stars (2D top-down)
   pong/             — Pong (2D)
@@ -42,7 +44,8 @@ shaders/legacy/     — External GLSL files (if any; most shaders are inline in 
 ## 2. Subsystem Dependency Graph
 
 ```
-scripting -----> core, renderer, audio, physics  (binds all subsystems to Lua)
+scripting -----> core, renderer, audio, physics, networking  (binds all subsystems to Lua)
+networking ---> core        (uses ECS World for replication, Application for lifecycle)
 renderer  -----> core        (uses ECS World, Application, input)
 audio     -----> core        (uses ECS context for config)
 physics   -----> core        (uses ECS World for collision components)
@@ -75,6 +78,7 @@ Cross-cutting: `core/platform.h` (path canonicalization) used by scripting + ren
 | Audio | `engine/audio/audio.h`, `engine/audio/audio.cpp` |
 | Collision | `engine/physics/collider2d.h`, `engine/physics/collision_system.h` |
 | Scripting | `engine/scripting/script_engine.h`, `engine/scripting/script_engine.cpp` |
+| Networking | `engine/networking/transport.h`, `engine/networking/packet.h`, `engine/networking/replication.h`, `engine/networking/server.h`, `engine/networking/client.h`, `engine/networking/network_system.h`, `engine/networking/connection.h` |
 | Editor | `engine/editor/editor.h`, `engine/editor/editor.cpp` |
 
 ## 4. Lua Binding Registry (`ffe.*`)
@@ -114,6 +118,8 @@ Cross-cutting: `core/platform.h` (path canonicalization) used by scripting + ren
 **Shadows** (4): `enableShadows`, `disableShadows`, `setShadowBias`, `setShadowArea`
 
 **Screenshot** (1): `screenshot`
+
+**Networking** (12): `startServer`, `stopServer`, `isServer`, `connectToServer`, `disconnect`, `isConnected`, `getClientId`, `sendMessage`, `onNetworkMessage`, `onClientConnected`, `onClientDisconnected`, `onConnected`, `onDisconnected`, `setNetworkTickRate`
 
 ## 5. ECS Components Registry
 

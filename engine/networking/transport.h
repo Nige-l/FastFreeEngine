@@ -11,6 +11,7 @@
 #include "networking/connection.h"
 #include "networking/packet.h"
 
+#include <chrono>
 #include <cstdint>
 
 // Forward-declare ENet types to avoid leaking the header.
@@ -85,7 +86,8 @@ private:
     uint32_t m_clientCount = 0;
     uint32_t m_maxClients  = 0;
 
-    float m_currentTime = 0.0f; // incremented in poll()
+    using Clock = std::chrono::steady_clock;
+    Clock::time_point m_startTime = Clock::now();
 
     ConnectCallback    m_connectCb    = nullptr;
     void*              m_connectData  = nullptr;

@@ -16,6 +16,7 @@ target_link_libraries(ffe_core
         EnTT::EnTT
         glm::glm
         Tracy::TracyClient
+        ffe_networking
     PRIVATE
         glad
         glfw

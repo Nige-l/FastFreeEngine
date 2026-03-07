@@ -183,7 +183,12 @@ bool PacketWriter::writeBytes(const uint8_t* data, const uint16_t count) {
 }
 
 bool PacketWriter::writeString(const char* str) {
-    const auto len = static_cast<uint16_t>(std::strlen(str));
+    const auto rawLen = std::strlen(str);
+    if (rawLen > UINT16_MAX) {
+        m_error = true;
+        return false;
+    }
+    const auto len = static_cast<uint16_t>(rawLen);
     if (!writeU16(len)) { return false; }
     if (len == 0) { return true; }
     if (m_error || m_pos + len > m_capacity) {

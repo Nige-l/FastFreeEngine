@@ -71,8 +71,10 @@ bool ServerTransport::isRunning() const { return m_host != nullptr; }
 void ServerTransport::poll(const uint32_t timeoutMs) {
     if (!m_host) { return; }
 
-    // Advance simple time counter (millisecond-resolution is fine for rate limiting)
-    m_currentTime += 0.001f * static_cast<float>(timeoutMs > 0 ? timeoutMs : 1);
+    // Real elapsed time for rate limiting (monotonic clock)
+    const auto now = Clock::now();
+    const float currentTime =
+        std::chrono::duration<float>(now - m_startTime).count();
 
     ENetEvent event;
     while (enet_host_service(m_host, &event, timeoutMs) > 0) {
@@ -117,7 +119,7 @@ void ServerTransport::poll(const uint32_t timeoutMs) {
                         ? MAX_PACKET_SIZE
                         : event.packet->dataLength);
 
-                if (m_rateLimits[cid.id].allowPacket(packetLen, m_currentTime)) {
+                if (m_rateLimits[cid.id].allowPacket(packetLen, currentTime)) {
                     if (event.packet->dataLength <= MAX_PACKET_SIZE && m_receiveCb) {
                         ReceivedPacket rp;
                         rp.sender     = cid;

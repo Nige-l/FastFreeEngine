@@ -52,6 +52,7 @@ target_link_libraries(ffe_scripting
         ffe_audio                    # audio music API (playMusic, stopMusic, etc.)
         ffe_physics                  # Collider2D, CollisionEventList, CollisionCallbackRef
         ffe_scene                    # scene serialiser for ffe.loadSceneJSON binding
+        ffe_networking               # networking bindings (startServer, connect, etc.)
     PRIVATE
         sol2::sol2                   # header-only sol2 — private, not exposed to users
         ${LUAJIT_LIBRARY}            # -lluajit-5.1 (Linux) or -llua51 (Windows/MinGW)

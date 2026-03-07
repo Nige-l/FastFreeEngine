@@ -8,7 +8,11 @@
 find_package(unofficial-enet CONFIG REQUIRED)
 
 add_library(ffe_networking STATIC
+    client.cpp
+    network_system.cpp
     packet.cpp
+    replication.cpp
+    server.cpp
     transport.cpp
 )
 
@@ -19,6 +23,7 @@ target_include_directories(ffe_networking
 target_link_libraries(ffe_networking
     PUBLIC
         ffe_core
+        ffe_renderer
     PRIVATE
         unofficial::enet::enet
 )

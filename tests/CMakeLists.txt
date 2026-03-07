@@ -47,6 +47,7 @@ add_executable(ffe_tests_scripting
     scripting/test_physics3d_bindings.cpp
     scripting/test_physics3d_collision_bindings.cpp
     scripting/test_scene_load_binding.cpp
+    scripting/test_networking_bindings.cpp
 )
 
 target_link_libraries(ffe_tests_scripting
@@ -169,6 +170,8 @@ catch_discover_tests(ffe_tests_editor)
 add_executable(ffe_tests_networking
     test_main.cpp
     networking/test_packet.cpp
+    networking/test_replication.cpp
+    networking/test_server_client.cpp
     networking/test_transport.cpp
 )
 
