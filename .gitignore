@@ -19,6 +19,9 @@ vcpkg_installed/
 assets/audio/Pixel Crown.wav
 assets/audio/music.wav
 
+# Python virtual environment
+.venv/
+
 # OS
 .DS_Store
 Thumbs.db

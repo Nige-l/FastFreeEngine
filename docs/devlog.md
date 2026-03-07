@@ -3,6 +3,51 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-34 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 62: Phase 5 Kickoff — Website Scaffolding + Getting Started Guide
+
+### Summary
+
+Session 62 kicked off Phase 5 (Website and Learning Platform). Delivered the full documentation site scaffolding using MkDocs with the Material for MkDocs theme, a complete Getting Started guide, and an API extraction pipeline that auto-generates reference pages from the engine's 8 `.context.md` files. 21 pages total: landing, getting started, 3 tutorial placeholders, 8 API reference pages, internals index, and community. FAST build verified: 991 engine tests on Clang-18, zero warnings. Website builds cleanly via `mkdocs build`.
+
+### Planned
+
+- Phase 5 kickoff: website scaffolding
+- MkDocs + Material theme setup
+- Getting Started guide
+- API reference auto-generation from .context.md files
+
+### Delivered
+
+- **Website scaffolding** (`website/`) — MkDocs + Material for MkDocs theme with dark/light toggle, navigation tabs, search, code copy, system fonts (no Google Fonts for privacy).
+- **Getting Started guide** (`website/docs/getting-started.md`) — Full guide covering prerequisites, vcpkg setup, build from source (tabbed Clang/GCC), running demos, writing a first game, and what's next. Uses MkDocs Material features (admonitions, tabs, code blocks).
+- **API extraction pipeline** (`website/scripts/generate_api_docs.py`) — Python script reads all 8 `.context.md` files, generates API reference pages with YAML front matter and auto-generation notices.
+- **21 pages** — Landing, getting started, 3 tutorial placeholders, 8 API reference subsystem pages, internals index, community.
+- **Website ADR** (`docs/architecture/adr-website.md`) — Technology stack decision record.
+- **Website .context.md** (`website/.context.md`) — LLM-consumable documentation for website build process and content authoring.
+
+### Review Fixes
+
+- Switched to system fonts (`font: false` in mkdocs.yml) — no Google Fonts requests.
+- Fixed broken internal links.
+- Softened aspirational claims to reflect current engine state.
+
+### Build
+
+- **FAST build** — 991 engine tests on Clang-18, zero warnings.
+- **Website** — `mkdocs build` completes cleanly.
+
+### game-dev-tester: SKIPPED
+
+No engine API changes this session — website-only work.
+
+### Next Session Should Start With
+
+- Tutorial content: first tutorial (2D game from scratch)
+- "How It Works" deep dives
+- Consider GitHub Pages deployment pipeline
+
+---
+
 ## 2026-03-07 — Session 61: Phase 4 Closeout, Transition to Phase 5
 
 ### Summary
