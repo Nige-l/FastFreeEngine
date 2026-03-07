@@ -14,7 +14,7 @@ A 3-level 3D action-exploration game that pushes every major FFE subsystem. Navi
 
 | Title Screen | The Courtyard | The Temple | The Summit |
 |:---:|:---:|:---:|:---:|
-| ![Menu](../../docs/screenshots/showcase_menu.png) | ![Level 1](../../docs/screenshots/showcase_level1.png) | ![Level 2](../../docs/screenshots/showcase_level2.png) | ![Level 3](../../docs/screenshots/showcase_level3.png) |
+| ![Menu](../assets/screenshots/showcase_menu.png) | ![Level 1](../assets/screenshots/showcase_level1.png) | ![Level 2](../assets/screenshots/showcase_level2.png) | ![Level 3](../assets/screenshots/showcase_level3.png) |
 
 **How to run:**
 
