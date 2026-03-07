@@ -6,7 +6,7 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 67 |
+| Last session | 68 |
 | Total tests | 1005 (FAST build: Clang-18, zero warnings) |
 | Total Lua bindings | ~169 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
@@ -68,11 +68,11 @@
 
 | Session | Summary |
 |---------|---------|
+| 68 | Phase 6 M2: Level 1 "The Courtyard" (push-block puzzle, 2 guardians, destructible wall, artifact, fog+shadows+4 lights), macOS CI fix (conditional overlay ports). 1005 tests (FAST). |
 | 67 | Phase 6 M1: linear fog shader (ffe.setFog/disableFog, 14 tests), "Echoes of the Ancients" scaffold (player, camera, HUD, combat, AI, test level). 1005 tests (FAST). |
 | 66 | Editor crash fix (ImGuiKey migration), macOS CI fix (LuaJIT arm64), README overhaul, Phase 6 ADR ("Echoes of the Ancients"). 991 tests (FAST). |
 | 65 | **Phase 5 COMPLETE.** "Build Your Own Engine" learning track (ECS from Scratch tutorial), community game showcase, nav updates. All 5 phases complete. 991 tests. |
 | 64 | Phase 5 deep dives — ECS, renderer, networking "How It Works" pages (~1243 lines total), GitHub Pages deployment workflow, Mermaid diagram support. 991 tests (FAST). |
-| 63 | Phase 5 tutorials — 3 complete tutorials (first 2D game, first 3D game, multiplayer basics), ffe.drawRect docs, review fixes (os.time sandbox violation, broken links). 991 tests (FAST). |
 
 ## Phase 2 — 3D Foundation: COMPLETE
 
@@ -176,7 +176,7 @@ All 5 phases of the FFE roadmap have been delivered:
 
 ### Planned (8-10 sessions)
 - [x] M1 (Session 67): Linear fog shader + project scaffold + player controller
-- [ ] M2 (Sessions 68-69): Level 1 — The Courtyard (outdoor, puzzles, guardians)
+- [x] M2 (Session 68): Level 1 — The Courtyard (outdoor, puzzles, guardians, artifacts)
 - [ ] M3 (Sessions 70-71): Level 2 — The Temple (underground, dark lighting, boss)
 - [ ] M4 (Sessions 72-73): Level 3 — The Summit (floating platforms, victory)
 - [ ] M5 (Sessions 74-75): Polish, screenshots, gamepad pass, README update

@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-991 tests | Zero warnings | Clang-18 + GCC-13 | ~167 Lua bindings | 5 demo games
+1005 tests | Zero warnings | Clang-18 + GCC-13 | ~169 Lua bindings | 6 demo games
 
 ---
 

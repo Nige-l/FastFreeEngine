@@ -3,6 +3,44 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 68: Phase 6 M2 — Level 1 "The Courtyard"
+
+### Summary
+
+Session 68 delivered Phase 6 Milestone 2: Level 1 "The Courtyard" is now a complete, playable level in the "Echoes of the Ancients" showcase game. Also fixed macOS CI by making the vcpkg overlay port conditional on MinGW targets. FAST build: 1005 tests pass on Clang-18, zero warnings.
+
+### Planned
+
+- Level 1 "The Courtyard" — full gameplay (puzzles, combat, artifact collection)
+- macOS CI fix (overlay port shadowing upstream LuaJIT on non-MinGW platforms)
+
+### Delivered
+
+- **Level 1 "The Courtyard"** — Complete playable level with push-block puzzle (2 blocks, 2 pressure plates, 1 gate), 2 guardian enemies with patrol/chase AI, destructible wall hiding the artifact, fog, directional shadows, 4 point lights (torches). Files: `examples/showcase/levels/level1.lua`.
+- **Game flow updates** — `game.lua` updated with level cleanup on transitions, level name display, completion delay, proper shutdown cleanup. `lib/hud.lua` updated with dt-based prompt fade (replacing ffe.after timer approach).
+- **Assets** — cube.glb model, PressStart2P TTF font, placeholder audio files (courtyard music, collect/gate/hit SFX). `examples/showcase/ASSETS.md` documents asset sources and licenses.
+- **CMakeLists** — `examples/showcase/CMakeLists.txt` updated to copy assets to build directory alongside Lua scripts.
+- **macOS CI fix** — Made `VCPKG_OVERLAY_PORTS` conditional on `VCPKG_TARGET_TRIPLET` matching `*mingw*`. Previously the overlay unconditionally shadowed the upstream LuaJIT port, breaking macOS arm64 builds. Files: `CMakeLists.txt`, `docs/environment.md`.
+
+### Reviews
+
+- performance-critic: PASS (38/80 entities, 4/4 lights, 34/40 physics bodies — within LEGACY budget)
+- api-designer: PASS (all ffe.* calls verified correct)
+- security-auditor: SKIPPED (no new attack surface)
+- game-dev-tester: SKIPPED (no new API paradigm — all calls use existing patterns)
+
+### Deferred
+
+- Net Arena 's' key issue — user-reported, investigate in a future session
+- Unreal project porting tools — long-term roadmap item
+- GitHub Pages deployment — user enabled Pages; existing MkDocs workflow should deploy on push
+
+### Next Session (69)
+
+Phase 6 M3 (first half): Level 2 "The Temple" — underground scene with dark lighting (minimal ambient, point lights from crystals and lava glow), fog (dark, short range), pillars/bridges/lava pit/crystal pedestals, particles (lava bubbles, crystal sparkle), dark ambient audio. Per ADR Section 3.2.
+
+---
+
 ## 2026-03-07 — Session 67: Phase 6 M1 — Linear Fog + Showcase Scaffold
 
 ### Summary
