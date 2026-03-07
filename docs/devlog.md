@@ -3,6 +3,47 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 93: Showcase Visual Overhaul — "Echoes of the Ancients"
+
+### Summary
+
+Session 93 overhauled the visual presentation of the Echoes of the Ancients showcase game. Replaced flat ground cubes with real heightmap terrain on Levels 1 and 3, added a full post-processing stack (HDR bloom with ACES tone mapping, SSAO, FXAA) to all 3 levels, tuned per-level atmospheric lighting and fog colors. Terrain-aware gameplay uses ffe.getTerrainHeight() for dynamic spawn and fall detection. Includes a Python heightmap generator tool for reproducible terrain creation. Proper cleanup of terrain, post-processing, and SSAO on level transitions and shutdown. Reviews: performance-critic PASS, game-dev-tester PASS. 1282 tests, zero warnings, Clang-18. No new engine tests (showcase Lua scripts only).
+
+### Delivered
+
+- **Heightmap Terrain** -- Courtyard (Level 1) and summit (Level 3) heightmaps generated via Python script, loaded with ffe.loadTerrain
+- **Post-Processing Stack** -- HDR bloom (ACES tone mapping), SSAO, FXAA on all 3 levels
+- **Atmospheric Lighting** -- Level 1 warm sunlight + cool shadows, Level 2 torch-lit underground, Level 3 golden hour with dramatic fog
+- **Fog Tuning** -- Per-level fog colors matched to background for seamless horizons
+- **Terrain-Aware Gameplay** -- Player spawn and fall detection use ffe.getTerrainHeight() for dynamic ground reference
+- **Proper Cleanup** -- Terrain, post-processing, SSAO cleaned up on level transitions and shutdown
+- **Heightmap Generator** -- Python tool (examples/showcase/tools/generate_heightmaps.py) for reproducible terrain generation
+
+### Files Created (4)
+
+- `examples/showcase/tools/generate_heightmaps.py`
+- `examples/showcase/assets/terrain/courtyard_height.png`
+- `examples/showcase/assets/terrain/summit_height.png`
+
+### Files Modified (4)
+
+- `examples/showcase/game.lua`
+- `examples/showcase/levels/level1.lua`
+- `examples/showcase/levels/level2.lua`
+- `examples/showcase/levels/level3.lua`
+
+### Reviews
+
+- performance-critic: **PASS**
+- game-dev-tester: **PASS** (2 minor findings resolved: fog/bg mismatch fixed, cleanup documented)
+
+### Build
+
+- Clang-18 (FAST): **1282 tests, zero warnings**
+- game-dev-tester: SKIPPED rationale: N/A (invoked and passed)
+
+---
+
 ## 2026-03-07 — Session 92: Phase 9 M3 — Terrain LOD + Frustum Culling
 
 ### Summary
