@@ -59,35 +59,51 @@ end
 
 --------------------------------------------------------------------
 -- Post-processing: full rendering stack for dramatic summit
+-- Software renderers skip advanced FBO-based effects (see level1.lua).
 --------------------------------------------------------------------
-ffe.enablePostProcessing()
-ffe.enableBloom(0.8, 0.3)
-ffe.setToneMapping(2)  -- ACES filmic
-ffe.enableSSAO()
-ffe.setAntiAliasing(2)  -- FXAA
+local softwareRenderer = ffe.isSoftwareRenderer()
+
+if not softwareRenderer then
+    ffe.enablePostProcessing()
+    ffe.enableBloom(0.8, 0.3)
+    ffe.setToneMapping(2)  -- ACES filmic
+    ffe.enableSSAO()
+    ffe.setAntiAliasing(2)  -- FXAA
+end
 
 --------------------------------------------------------------------
 -- Lighting: dramatic golden hour summit
 --------------------------------------------------------------------
 ffe.setLightDirection(-0.2, -0.6, 0.4)   -- low sun angle
-ffe.setLightColor(1.0, 0.8, 0.6)         -- golden hour
-ffe.setAmbientColor(0.12, 0.12, 0.2)     -- cold blue shadows
+if softwareRenderer then
+    -- Brighter ambient without tone mapping
+    ffe.setLightColor(1.0, 0.85, 0.65)
+    ffe.setAmbientColor(0.25, 0.25, 0.35)
+else
+    ffe.setLightColor(1.0, 0.8, 0.6)         -- golden hour
+    ffe.setAmbientColor(0.12, 0.12, 0.2)     -- cold blue shadows
+end
 
--- Shadows: wide area for the outdoor summit
-ffe.enableShadows(1024)
-ffe.setShadowBias(0.005)
-ffe.setShadowArea(40, 40, 0.1, 80)
+-- Shadows: wide area for the outdoor summit (skip on software renderer)
+if not softwareRenderer then
+    ffe.enableShadows(1024)
+    ffe.setShadowBias(0.005)
+    ffe.setShadowArea(40, 40, 0.1, 80)
+end
 
 --------------------------------------------------------------------
 -- Fog: thick atmospheric summit fog
--- NOTE: ACES tone mapping darkens colors. Raw values are boosted
--- so the post-tonemapped result looks correct (~0.5, 0.55, 0.7
--- perceived). ACES(0.72) ~ 0.55.
+-- NOTE: Without post-processing, fog/bg values are used directly.
+-- With ACES tone mapping, raw values are boosted so the
+-- post-tonemapped result looks correct.
 --------------------------------------------------------------------
-ffe.setFog(0.72, 0.78, 0.95, 15.0, 50.0)
-
--- Background matches fog color for seamless horizon
-ffe.setBackgroundColor(0.72, 0.78, 0.95)
+if softwareRenderer then
+    ffe.setFog(0.55, 0.6, 0.72, 15.0, 50.0)
+    ffe.setBackgroundColor(0.55, 0.6, 0.72)
+else
+    ffe.setFog(0.72, 0.78, 0.95, 15.0, 50.0)
+    ffe.setBackgroundColor(0.72, 0.78, 0.95)
+end
 
 --------------------------------------------------------------------
 -- Terrain: dramatic summit heightmap with mountain ring

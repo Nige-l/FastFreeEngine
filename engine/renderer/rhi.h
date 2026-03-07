@@ -15,6 +15,9 @@ void shutdown();
 // --- Query ---
 /// Returns true if the RHI was initialised in headless mode (no GPU context).
 bool isHeadless();
+/// Returns true if the GPU driver is a software renderer (e.g., llvmpipe, swrast).
+/// Useful for gracefully degrading advanced effects that fail on software renderers.
+bool isSoftwareRenderer();
 /// Returns the viewport width (pixels). Returns 0 if not yet initialised.
 i32 getViewportWidth();
 /// Returns the viewport height (pixels). Returns 0 if not yet initialised.

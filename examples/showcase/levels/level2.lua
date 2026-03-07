@@ -43,30 +43,49 @@ end
 
 --------------------------------------------------------------------
 -- Post-processing: bloom for lava glow, SSAO for underground depth
+-- Software renderers skip advanced FBO-based effects (see level1.lua).
 --------------------------------------------------------------------
-ffe.enablePostProcessing()
-ffe.enableBloom(1.0, 0.2)        -- subtle bloom, lava glow
-ffe.setToneMapping(2)             -- ACES filmic
-ffe.enableSSAO()                  -- adds depth to dark underground
-ffe.setAntiAliasing(2)            -- FXAA
+local softwareRenderer = ffe.isSoftwareRenderer()
+
+if not softwareRenderer then
+    ffe.enablePostProcessing()
+    ffe.enableBloom(1.0, 0.2)        -- subtle bloom, lava glow
+    ffe.setToneMapping(2)             -- ACES filmic
+    ffe.enableSSAO()                  -- adds depth to dark underground
+    ffe.setAntiAliasing(2)            -- FXAA
+end
 
 --------------------------------------------------------------------
 -- Lighting: dark underground with warm torch-lit feel
 --------------------------------------------------------------------
 ffe.setLightDirection(0, -1, 0.2)       -- overhead light
-ffe.setLightColor(0.8, 0.6, 0.4)       -- warm/orange (torch-lit feel)
-ffe.setAmbientColor(0.08, 0.05, 0.03)  -- very dark ambient
+if softwareRenderer then
+    -- Brighter ambient so geometry is visible without HDR / tone mapping
+    ffe.setLightColor(0.9, 0.7, 0.5)
+    ffe.setAmbientColor(0.2, 0.15, 0.1)
+else
+    ffe.setLightColor(0.8, 0.6, 0.4)       -- warm/orange (torch-lit feel)
+    ffe.setAmbientColor(0.08, 0.05, 0.03)  -- very dark ambient
+end
 
--- Enable shadows (lower resolution for underground -- 512 is fine)
-ffe.enableShadows(512)
-ffe.setShadowBias(0.005)
-ffe.setShadowArea(35, 35, 0.1, 60)
+-- Enable shadows (skip on software renderer — depth FBOs may fail)
+if not softwareRenderer then
+    ffe.enableShadows(512)
+    ffe.setShadowBias(0.005)
+    ffe.setShadowArea(35, 35, 0.1, 60)
+end
 
 --------------------------------------------------------------------
 -- Fog: dark reddish-brown, oppressive short range
 --------------------------------------------------------------------
-ffe.setFog(0.15, 0.08, 0.05, 5.0, 35.0)
-ffe.setBackgroundColor(0.02, 0.01, 0.03)
+if softwareRenderer then
+    -- Lighter fog so underground doesn't appear fully black
+    ffe.setFog(0.15, 0.1, 0.08, 8.0, 40.0)
+    ffe.setBackgroundColor(0.08, 0.05, 0.06)
+else
+    ffe.setFog(0.15, 0.08, 0.05, 5.0, 35.0)
+    ffe.setBackgroundColor(0.02, 0.01, 0.03)
+end
 
 --------------------------------------------------------------------
 -- No skybox (underground)

@@ -38,15 +38,23 @@ if cesiumMesh == 0 then cesiumMesh = cubeMesh end
 --------------------------------------------------------------------
 -- Lighting
 --------------------------------------------------------------------
+local softwareRenderer = ffe.isSoftwareRenderer()
+
 -- Directional light: warm golden-hour sun from upper-right
 ffe.setLightDirection(0.8, -1.0, 0.5)
 ffe.setLightColor(1.0, 0.92, 0.80)
-ffe.setAmbientColor(0.12, 0.12, 0.18)
+if softwareRenderer then
+    ffe.setAmbientColor(0.25, 0.25, 0.32)
+else
+    ffe.setAmbientColor(0.12, 0.12, 0.18)
+end
 
--- Enable shadows
-ffe.enableShadows(1024)
-ffe.setShadowBias(0.005)
-ffe.setShadowArea(30, 30, 0.1, 60)
+-- Enable shadows (skip on software renderer -- depth FBOs may fail)
+if not softwareRenderer then
+    ffe.enableShadows(1024)
+    ffe.setShadowBias(0.005)
+    ffe.setShadowArea(30, 30, 0.1, 60)
+end
 
 -- Point light 0: warm torch-like light on one side
 ffe.addPointLight(0, 8, 3, 4, 1.0, 0.7, 0.3, 15)

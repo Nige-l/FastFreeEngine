@@ -30,6 +30,7 @@ namespace ffe::rhi {
 
 // --- Internal state ---
 static bool s_headless = false;
+static bool s_softwareRenderer = false;
 static bool s_initialized = false;
 static i32  s_viewportWidth  = 0;
 static i32  s_viewportHeight = 0;
@@ -247,9 +248,44 @@ RhiResult init(const RhiConfig& config) {
     }
 
     // glad should already be loaded by Application before calling rhi::init()
+    const auto* rendererStr = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
     FFE_LOG_INFO("Renderer", "OpenGL %d.%d loaded — %s",
                  GLVersion_major, GLVersion_minor,
-                 reinterpret_cast<const char*>(glGetString(GL_RENDERER)));
+                 rendererStr ? rendererStr : "unknown");
+
+    // Detect software renderers (Mesa llvmpipe, swrast, softpipe, etc.)
+    // These have limited FBO / floating-point texture support, so advanced
+    // effects (HDR post-processing, SSAO, shadow mapping) may produce
+    // black or corrupted output. Games can query isSoftwareRenderer() to
+    // gracefully skip effects that would fail.
+    s_softwareRenderer = false;
+    if (rendererStr != nullptr) {
+        // Case-insensitive substring checks for known software renderer strings
+        // Simple inline search — avoid pulling in <algorithm> for one check
+        auto contains = [](const char* haystack, const char* needle) -> bool {
+            for (const char* h = haystack; *h != '\0'; ++h) {
+                const char* hi = h;
+                const char* ni = needle;
+                while (*ni != '\0' && *hi != '\0') {
+                    // Lowercase compare
+                    char a = *hi;
+                    char b = *ni;
+                    if (a >= 'A' && a <= 'Z') a = static_cast<char>(a + 32);
+                    if (b >= 'A' && b <= 'Z') b = static_cast<char>(b + 32);
+                    if (a != b) break;
+                    ++hi;
+                    ++ni;
+                }
+                if (*ni == '\0') return true;
+            }
+            return false;
+        };
+        if (contains(rendererStr, "llvmpipe") || contains(rendererStr, "softpipe") ||
+            contains(rendererStr, "swrast") || contains(rendererStr, "software")) {
+            s_softwareRenderer = true;
+            FFE_LOG_WARN("Renderer", "Software renderer detected — advanced effects may be degraded");
+        }
+    }
 
     // Setup debug output if requested
     if (config.debugGL) {
@@ -945,6 +981,10 @@ GLuint getGlBufferId(const BufferHandle handle) {
 
 bool isHeadless() {
     return s_headless;
+}
+
+bool isSoftwareRenderer() {
+    return s_softwareRenderer;
 }
 
 i32 getViewportWidth() {

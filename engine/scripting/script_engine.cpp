@@ -1517,6 +1517,16 @@ void ScriptEngine::registerEcsBindings() {
     });
     lua_setfield(L, -2, "getScreenHeight");
 
+    // ffe.isSoftwareRenderer() -> boolean
+    // Returns true if the GPU driver is a software renderer (e.g., llvmpipe,
+    // swrast). Games can use this to skip advanced post-processing effects
+    // that produce black or corrupted output on software renderers.
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushboolean(state, ffe::rhi::isSoftwareRenderer() ? 1 : 0);
+        return 1;
+    });
+    lua_setfield(L, -2, "isSoftwareRenderer");
+
     // ffe.addTransform(entityId, x, y, rotation, scaleX, scaleY) -> bool
     lua_pushcfunction(L, [](lua_State* state) -> int {
         lua_pushlightuserdata(state, &s_worldRegistryKey);

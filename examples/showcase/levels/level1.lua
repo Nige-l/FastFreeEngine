@@ -57,33 +57,54 @@ end
 
 --------------------------------------------------------------------
 -- Post-processing: bloom, tone mapping, SSAO, FXAA
+-- Software renderers (llvmpipe, swrast) have limited FBO support.
+-- HDR float framebuffers, SSAO depth textures, and shadow depth FBOs
+-- may produce black output. Skip advanced effects on software renderers
+-- and use brighter direct colors instead.
 --------------------------------------------------------------------
-ffe.enablePostProcessing()
-ffe.enableBloom(0.8, 0.3)
-ffe.setToneMapping(2)  -- ACES filmic
-ffe.enableSSAO()
-ffe.setAntiAliasing(2)  -- FXAA
+local softwareRenderer = ffe.isSoftwareRenderer()
+
+if not softwareRenderer then
+    ffe.enablePostProcessing()
+    ffe.enableBloom(0.8, 0.3)
+    ffe.setToneMapping(2)  -- ACES filmic
+    ffe.enableSSAO()
+    ffe.setAntiAliasing(2)  -- FXAA
+end
 
 --------------------------------------------------------------------
 -- Lighting: dramatic angled sunlight with cool ambient
 --------------------------------------------------------------------
 ffe.setLightDirection(0.3, -0.8, 0.5)
-ffe.setLightColor(1.0, 0.95, 0.85)       -- warm sunlight
-ffe.setAmbientColor(0.15, 0.18, 0.25)    -- cool ambient (blueish shadows)
+if softwareRenderer then
+    -- Brighter lighting without tone mapping darkening
+    ffe.setLightColor(1.0, 0.95, 0.85)
+    ffe.setAmbientColor(0.3, 0.35, 0.45)
+else
+    ffe.setLightColor(1.0, 0.95, 0.85)       -- warm sunlight
+    ffe.setAmbientColor(0.15, 0.18, 0.25)    -- cool ambient (blueish shadows)
+end
 
--- Enable shadows
-ffe.enableShadows(1024)
-ffe.setShadowBias(0.005)
-ffe.setShadowArea(40, 40, 0.1, 80)
+-- Enable shadows (skip on software renderer — depth FBOs may fail)
+if not softwareRenderer then
+    ffe.enableShadows(1024)
+    ffe.setShadowBias(0.005)
+    ffe.setShadowArea(40, 40, 0.1, 80)
+end
 
 --------------------------------------------------------------------
 -- Fog: soft blue-grey outdoor atmosphere
--- NOTE: ACES tone mapping darkens colors significantly. Raw fog/bg
--- values are boosted so the post-tonemapped result looks correct
--- (~0.6, 0.65, 0.75 perceived). ACES(0.85) ~ 0.65.
+-- NOTE: Without post-processing, fog/bg values are used directly.
+-- With ACES tone mapping, raw values are boosted so the
+-- post-tonemapped result looks correct (~0.6, 0.65, 0.75 perceived).
 --------------------------------------------------------------------
-ffe.setFog(0.85, 0.9, 1.0, 20.0, 80.0)
-ffe.setBackgroundColor(0.85, 0.9, 1.0)
+if softwareRenderer then
+    ffe.setFog(0.6, 0.65, 0.75, 20.0, 80.0)
+    ffe.setBackgroundColor(0.6, 0.65, 0.75)
+else
+    ffe.setFog(0.85, 0.9, 1.0, 20.0, 80.0)
+    ffe.setBackgroundColor(0.85, 0.9, 1.0)
+end
 
 --------------------------------------------------------------------
 -- Terrain: gently rolling courtyard heightmap

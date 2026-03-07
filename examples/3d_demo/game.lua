@@ -148,16 +148,29 @@ else
     ffe.log("Skybox images not found -- using flat background colour")
 end
 
--- Set a dark, moody sky colour that contrasts with the lit cubes.
--- This is visible when the skybox is not loaded (or skybox is disabled).
-ffe.setBackgroundColor(0.05, 0.05, 0.12)
+-- Detect software renderer for graceful degradation of advanced effects
+local softwareRenderer = ffe.isSoftwareRenderer()
+
+-- Set a sky colour visible even without a skybox.
+-- On software renderers, use a brighter background so the scene is not black.
+if softwareRenderer then
+    ffe.setBackgroundColor(0.15, 0.15, 0.25)
+else
+    ffe.setBackgroundColor(0.05, 0.05, 0.12)
+end
 
 -- Configure scene lighting:
 --   A warm directional light from the upper-right front,
 --   plus a cool ambient fill so shadow faces are not pitch-black.
 ffe.setLightDirection(1.0, -1.5, 0.8)
-ffe.setLightColor(1.0, 0.92, 0.78)       -- warm white / golden hour
-ffe.setAmbientColor(0.08, 0.08, 0.18)    -- cool blue-grey fill
+if softwareRenderer then
+    -- Brighter ambient for software renderer (no shadows / post-processing)
+    ffe.setLightColor(1.0, 0.92, 0.78)
+    ffe.setAmbientColor(0.2, 0.2, 0.3)
+else
+    ffe.setLightColor(1.0, 0.92, 0.78)       -- warm white / golden hour
+    ffe.setAmbientColor(0.08, 0.08, 0.18)    -- cool blue-grey fill
+end
 
 -- Add two point lights that will orbit the scene:
 --   Point light 0: warm orange/yellow — orbits CW
@@ -182,10 +195,12 @@ if meshHandle == 0 then
 else
     ffe.log("cube.glb loaded (handle=" .. tostring(meshHandle) .. ")")
 
-    -- Enable shadow mapping for the 3D scene.
-    ffe.enableShadows(1024)
-    ffe.setShadowBias(0.005)
-    ffe.setShadowArea(20, 20, 0.1, 40)
+    -- Enable shadow mapping for the 3D scene (skip on software renderer).
+    if not softwareRenderer then
+        ffe.enableShadows(1024)
+        ffe.setShadowBias(0.005)
+        ffe.setShadowArea(20, 20, 0.1, 40)
+    end
 
     -- Ground plane to receive shadows (reuses the cube mesh, scaled flat).
     local ground = ffe.createEntity3D(meshHandle, 0, -1.5, 0)
@@ -494,8 +509,9 @@ function update(entityId, dt)
     -- Status: mesh load result
     if meshLoaded then
         local skyStr = skyboxLoaded and "Skybox: ON" or "Skybox: OFF"
+        local shadowStr = softwareRenderer and "Shadows: OFF" or "Shadows: ON"
         local physStr = "Physics: " .. tostring(PHYSICS_CUBE_COUNT) .. " cubes"
-        local entStr = "Mesh: cube.glb  |  Shadows: ON  |  " .. skyStr .. "  |  Lights: 2  |  " .. physStr
+        local entStr = "Mesh: cube.glb  |  " .. shadowStr .. "  |  " .. skyStr .. "  |  Lights: 2  |  " .. physStr
         ffe.drawText(entStr, sw / 2 - (#entStr * 8), 8, 2, 0.6, 0.8, 1.0, 0.85)
     else
         ffe.drawText("cube.glb NOT FOUND -- HUD only mode", 12, 44, 2, 1, 0.4, 0.2, 1)

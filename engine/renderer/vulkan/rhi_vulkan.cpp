@@ -1483,6 +1483,11 @@ bool isHeadless() {
     return s_headless;
 }
 
+bool isSoftwareRenderer() {
+    // TODO: Detect Vulkan software renderers (lavapipe, etc.) when Vulkan backend matures.
+    return false;
+}
+
 i32 getViewportWidth() {
     return s_viewportWidth;
 }
