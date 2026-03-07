@@ -211,6 +211,25 @@ else
     meshLoaded = (entityA ~= 0)
 end
 
+-- ---------------------------------------------------------------------------
+-- 3D Positional Audio
+-- ---------------------------------------------------------------------------
+-- Play a looping ambient sound near the red cube at the origin.
+-- The sound will attenuate as the camera orbits further away and pan left/right
+-- based on camera orientation.
+--
+-- NOTE: Requires an audio file at assets/sfx/ambient_hum.wav (or .ogg).
+-- If the file is absent, playSound3D silently no-ops (loadSound fails gracefully).
+-- To hear the effect, place any short looping SFX at that path.
+--
+-- Configure 3D audio attenuation range for the demo scene scale.
+ffe.setSound3DMinDistance(1.0)
+ffe.setSound3DMaxDistance(15.0)
+
+-- Fire a positioned sound at the origin (where the red cube lives).
+-- In a real game, this would be triggered by a game event (e.g., campfire start).
+ffe.playSound3D("sfx/ambient_hum.wav", 0, 0, 0, 0.8)
+
 ffe.log("3D demo init complete. WASD camera, UP/DOWN elevation, R reset, ESC quit")
 
 -- ---------------------------------------------------------------------------

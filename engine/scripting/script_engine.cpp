@@ -2869,6 +2869,122 @@ void ScriptEngine::registerEcsBindings() {
     });
     lua_setfield(L, -2, "setMasterVolume");
 
+    // ----------------------------------------------------------------
+    // 3D Positional Audio bindings
+    //
+    // ffe.playSound3D(path, x, y, z [, volume])
+    //   Play a positioned sound at (x,y,z). Optional volume (default 1.0).
+    //   path is a string (same as ffe.playSound).
+    //   NaN/Inf coordinates are replaced with 0.0 on the C++ side.
+    //
+    // ffe.setListenerPosition(x, y, z, fx, fy, fz, ux, uy, uz)
+    //   Manual listener override. 9 floats: position, forward, up.
+    //
+    // ffe.setSound3DMinDistance(dist) / ffe.setSound3DMaxDistance(dist)
+    //   Configure global attenuation range.
+    // ----------------------------------------------------------------
+
+    // ffe.playSound3D(path, x, y, z [, volume]) -> nothing
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        // Argument 1: path (string)
+        if (lua_type(state, 1) != LUA_TSTRING) {
+            FFE_LOG_ERROR("ScriptEngine", "playSound3D: first argument must be a string");
+            return 0;
+        }
+        const char* path = lua_tostring(state, 1);
+
+        // Arguments 2-4: x, y, z
+        const float x = static_cast<float>(luaL_checknumber(state, 2));
+        const float y = static_cast<float>(luaL_checknumber(state, 3));
+        const float z = static_cast<float>(luaL_checknumber(state, 4));
+
+        // NaN/Inf guard on coordinates
+        if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) {
+            FFE_LOG_WARN("ScriptEngine", "playSound3D: NaN/Inf coordinate rejected");
+            return 0;
+        }
+
+        // Optional argument 5: volume (default 1.0)
+        const float volume = (lua_gettop(state) >= 5 && !lua_isnil(state, 5))
+                           ? static_cast<float>(luaL_checknumber(state, 5))
+                           : 1.0f;
+
+        if (!std::isfinite(volume)) {
+            FFE_LOG_WARN("ScriptEngine", "playSound3D: NaN/Inf volume rejected");
+            return 0;
+        }
+
+        // Load the sound using the same path-to-handle caching pattern as playSound.
+        // For now, load + play (fire-and-forget). In a real game, sounds should be
+        // pre-loaded. This matches the existing ffe.playSound(path, vol) Lua pattern
+        // where the scripting layer auto-loads by path.
+        //
+        // Retrieve asset root from the renderer (same as ffe.loadSound binding).
+        const char* assetRoot = ffe::renderer::getAssetRoot();
+        if (!assetRoot || assetRoot[0] == '\0') {
+            FFE_LOG_ERROR("ScriptEngine", "playSound3D: no asset root set");
+            return 0;
+        }
+
+        ffe::audio::SoundHandle handle = ffe::audio::loadSound(path, assetRoot);
+        if (!ffe::audio::isValid(handle)) {
+            // loadSound already logged the specific error
+            return 0;
+        }
+
+        ffe::audio::playSound3D(handle, x, y, z, volume);
+        return 0;
+    });
+    lua_setfield(L, -2, "playSound3D");
+
+    // ffe.setListenerPosition(x, y, z, fx, fy, fz, ux, uy, uz) -> nothing
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const float x  = static_cast<float>(luaL_checknumber(state, 1));
+        const float y  = static_cast<float>(luaL_checknumber(state, 2));
+        const float z  = static_cast<float>(luaL_checknumber(state, 3));
+        const float fx = static_cast<float>(luaL_checknumber(state, 4));
+        const float fy = static_cast<float>(luaL_checknumber(state, 5));
+        const float fz = static_cast<float>(luaL_checknumber(state, 6));
+        const float ux = static_cast<float>(luaL_checknumber(state, 7));
+        const float uy = static_cast<float>(luaL_checknumber(state, 8));
+        const float uz = static_cast<float>(luaL_checknumber(state, 9));
+
+        // NaN/Inf guard — setListenerPosition sanitizes internally, but log a warning
+        if (!std::isfinite(x)  || !std::isfinite(y)  || !std::isfinite(z)  ||
+            !std::isfinite(fx) || !std::isfinite(fy) || !std::isfinite(fz) ||
+            !std::isfinite(ux) || !std::isfinite(uy) || !std::isfinite(uz)) {
+            FFE_LOG_WARN("ScriptEngine", "setListenerPosition: NaN/Inf parameter detected — sanitized");
+        }
+
+        ffe::audio::setListenerPosition(x, y, z, fx, fy, fz, ux, uy, uz);
+        return 0;
+    });
+    lua_setfield(L, -2, "setListenerPosition");
+
+    // ffe.setSound3DMinDistance(dist) -> nothing
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const float dist = static_cast<float>(luaL_checknumber(state, 1));
+        if (!std::isfinite(dist)) {
+            FFE_LOG_WARN("ScriptEngine", "setSound3DMinDistance: NaN/Inf rejected");
+            return 0;
+        }
+        ffe::audio::setSound3DMinDistance(dist);
+        return 0;
+    });
+    lua_setfield(L, -2, "setSound3DMinDistance");
+
+    // ffe.setSound3DMaxDistance(dist) -> nothing
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const float dist = static_cast<float>(luaL_checknumber(state, 1));
+        if (!std::isfinite(dist)) {
+            FFE_LOG_WARN("ScriptEngine", "setSound3DMaxDistance: NaN/Inf rejected");
+            return 0;
+        }
+        ffe::audio::setSound3DMaxDistance(dist);
+        return 0;
+    });
+    lua_setfield(L, -2, "setSound3DMaxDistance");
+
     // ffe.setHudText(text) -> nothing
     // Sets the on-screen HUD text via HudTextBuffer in ECS context.
     // Pass "" or nil to clear the HUD.

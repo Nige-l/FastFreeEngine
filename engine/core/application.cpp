@@ -10,6 +10,7 @@
 #include "renderer/texture_loader.h"
 #include "physics/collider2d.h"
 #include "physics/collision_system.h"
+#include "audio/audio.h"
 
 #include <chrono>
 #include <cmath>
@@ -504,6 +505,20 @@ void Application::tick(const float dt) {
             shake.duration = 0.0f;
             shake.intensity = 0.0f;
             shake.elapsed = 0.0f;
+        }
+    }
+
+    // Sync 3D audio listener with the 3D camera (only if perspective projection is active).
+    // Forward = normalize(target - position). If the distance is degenerate, skip the sync.
+    if (m_camera3d.projType == renderer::ProjectionType::PERSPECTIVE) {
+        const glm::vec3 diff = m_camera3d.target - m_camera3d.position;
+        const float len = glm::length(diff);
+        if (len > 1e-6f) {
+            const glm::vec3 fwd = diff / len;
+            audio::updateListenerFromCamera(
+                m_camera3d.position.x, m_camera3d.position.y, m_camera3d.position.z,
+                fwd.x, fwd.y, fwd.z,
+                m_camera3d.up.x, m_camera3d.up.y, m_camera3d.up.z);
         }
     }
 }

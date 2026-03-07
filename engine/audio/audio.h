@@ -196,6 +196,76 @@ void setMasterVolume(float volume);
 float getMasterVolume();
 
 // ---------------------------------------------------------------------------
+// 3D Positional Audio
+// ---------------------------------------------------------------------------
+
+// Play a one-shot 3D positioned sound effect. Fire-and-forget — the sound
+// plays from the given world-space position until completion or voice eviction.
+// Position is fixed at creation time (no per-frame updates for fire-and-forget).
+//
+// No-op if: handle is invalid, audio is not initialised, or headless mode.
+// volume: per-instance volume multiplier [0.0, 1.0]. Clamped. NaN/Inf -> 0.0.
+// x, y, z: world-space position. NaN/Inf -> 0.0 (clamped).
+void playSound3D(SoundHandle handle, float x, float y, float z,
+                 float volume = 1.0f);
+
+// Set the listener position and orientation for 3D audio spatialization.
+// Called manually from game code to override automatic camera sync.
+//
+// pos (x, y, z): listener world-space position.
+// fwd (fx, fy, fz): listener forward direction (will be used as-is; should be normalised).
+// up  (ux, uy, uz): listener up direction (will be used as-is; should be normalised).
+//
+// NaN/Inf values are replaced with 0.0 (position) or defaults (fwd: 0,0,-1; up: 0,1,0).
+void setListenerPosition(float x, float y, float z,
+                         float fx, float fy, float fz,
+                         float ux, float uy, float uz);
+
+// Set the minimum distance for 3D audio attenuation.
+// Within minDistance, sound is at full volume (gain = 1.0).
+// Clamped to [0.01, current maxDistance). NaN/Inf ignored.
+void setSound3DMinDistance(float dist);
+
+// Set the maximum distance for 3D audio attenuation.
+// Beyond maxDistance, sound is silent (gain = 0.0).
+// Clamped to (current minDistance, 10000.0]. NaN/Inf ignored.
+void setSound3DMaxDistance(float dist);
+
+// Get the current 3D audio min/max attenuation distances.
+float getSound3DMinDistance();
+float getSound3DMaxDistance();
+
+// Update the listener from the 3D camera. Called once per frame from
+// Application::tick() after camera update. Only syncs if the manual
+// listener override has not been set.
+//
+// pos: camera world position.
+// fwd: camera forward direction (normalised).
+// up:  camera up direction (normalised).
+void updateListenerFromCamera(float posX, float posY, float posZ,
+                              float fwdX, float fwdY, float fwdZ,
+                              float upX,  float upY,  float upZ);
+
+// ---------------------------------------------------------------------------
+// 3D Audio — internal test helpers (exposed for unit testing only)
+// ---------------------------------------------------------------------------
+
+// Compute left/right gain for a 3D voice given source and listener state.
+// Used internally by the mixer; exposed here for deterministic unit testing.
+// Returns {leftGain, rightGain} as a pair of floats.
+struct SpatialGain {
+    float left  = 0.0f;
+    float right = 0.0f;
+};
+
+SpatialGain computeSpatialGain(
+    float srcX, float srcY, float srcZ,
+    float lisX, float lisY, float lisZ,
+    float fwdX, float fwdY, float fwdZ,
+    float upX,  float upY,  float upZ,
+    float minDist, float maxDist);
+
+// ---------------------------------------------------------------------------
 // Diagnostics
 // ---------------------------------------------------------------------------
 

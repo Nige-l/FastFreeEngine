@@ -172,6 +172,10 @@ struct Voice {
     u64                cursor   = 0u;       // current frame position
     float              volume   = 1.0f;     // per-instance volume [0,1]
     bool               active   = false;
+    bool               is3D     = false;    // true = spatialised, false = 2D (legacy)
+    float              posX     = 0.0f;     // world-space position (set once at play time)
+    float              posY     = 0.0f;
+    float              posZ     = 0.0f;
 };
 
 // SPSC command ring buffer: main thread writes, audio callback drains.
@@ -183,6 +187,7 @@ struct Voice {
 struct AudioCommand {
     enum class Type : u8 {
         PLAY_SOUND,
+        PLAY_SOUND_3D,      // play a 3D positioned sound effect
         SET_MASTER_VOLUME,
         PLAY_MUSIC,         // start/restart music streaming (soundId + flags)
         STOP_MUSIC,         // stop current music track
@@ -192,9 +197,12 @@ struct AudioCommand {
     u8    flags   = 0u;     // PLAY_MUSIC: bit 0 = loop (1=loop, 0=once)
     u8    _pad0   = 0u;     // reserved
     u8    _pad1   = 0u;     // reserved
-    u32   soundId = 0u;     // for PLAY_SOUND / PLAY_MUSIC: 1-based sound slot index
-    float volume  = 1.0f;   // for PLAY_SOUND: per-instance volume
+    u32   soundId = 0u;     // for PLAY_SOUND / PLAY_SOUND_3D / PLAY_MUSIC: 1-based sound slot index
+    float volume  = 1.0f;   // for PLAY_SOUND / PLAY_SOUND_3D: per-instance volume
                             // for SET_MASTER_VOLUME / SET_MUSIC_VOLUME: new volume
+    float posX    = 0.0f;   // for PLAY_SOUND_3D: world-space position
+    float posY    = 0.0f;
+    float posZ    = 0.0f;
 };
 
 static constexpr u32 CMD_RING_CAPACITY = 64u;
@@ -249,6 +257,20 @@ static struct {
     std::atomic<float> musicVolume{1.0f};        // music volume [0,1], read by main thread
     std::atomic<bool>  musicPlaying{false};      // true while track is active
 
+    // 3D audio listener state — written by main thread, read by audio callback.
+    // Simple struct copy under the existing mutex in the callback provides
+    // coherent reads. The main thread writes these outside the mutex (atomic
+    // would be overkill for 9 floats; the mixer reads them under mutex).
+    struct Listener {
+        float posX = 0.0f, posY = 0.0f, posZ = 0.0f;
+        float fwdX = 0.0f, fwdY = 0.0f, fwdZ = -1.0f;
+        float upX  = 0.0f, upY  = 1.0f, upZ  = 0.0f;
+    } listener;
+
+    // 3D attenuation distance configuration (global, not per-voice).
+    float minDist3D = 1.0f;    // within this distance, gain = 1.0
+    float maxDist3D = 100.0f;  // beyond this distance, gain = 0.0
+
     // Mutex protecting voice pool and sound buffer deactivation
     std::mutex      mutex;
 } s_state;
@@ -260,6 +282,14 @@ static float clampVolume(const float v) {
     if (!std::isfinite(v)) { return 0.0f; }
     if (v < 0.0f) { return 0.0f; }
     if (v > 1.0f) { return 1.0f; }
+    return v;
+}
+
+// ---------------------------------------------------------------------------
+// Float sanitisation for 3D positions — NaN/Inf replaced with 0.0
+// ---------------------------------------------------------------------------
+static float sanitizeFloat(const float v) {
+    if (!std::isfinite(v)) { return 0.0f; }
     return v;
 }
 
@@ -334,6 +364,69 @@ static bool validateAssetRoot(const char* const absPath) {
 }
 
 // ---------------------------------------------------------------------------
+// 3D Spatialization math — inverse distance clamped + stereo pan
+// ---------------------------------------------------------------------------
+
+SpatialGain computeSpatialGain(
+    const float srcX, const float srcY, const float srcZ,
+    const float lisX, const float lisY, const float lisZ,
+    const float fwdX, const float fwdY, const float fwdZ,
+    const float upX,  const float upY,  const float upZ,
+    const float minDist, const float maxDist)
+{
+    const float dx = srcX - lisX;
+    const float dy = srcY - lisY;
+    const float dz = srcZ - lisZ;
+    const float distSq = dx * dx + dy * dy + dz * dz;
+
+    // Epsilon for near-zero distance (avoid division by zero)
+    constexpr float EPSILON_SQ = 1e-8f;
+
+    if (distSq < EPSILON_SQ) {
+        // Source is at listener position — full volume, center pan
+        return SpatialGain{1.0f, 1.0f};
+    }
+
+    const float distance = std::sqrt(distSq);
+
+    // Inverse distance clamped attenuation (ADR Section 6.1)
+    float gain = 0.0f;
+    if (distance > maxDist) {
+        gain = 0.0f;
+    } else if (distance <= minDist) {
+        gain = 1.0f;
+    } else {
+        gain = minDist / distance;
+    }
+
+    // Stereo pan: project source direction onto listener's right vector
+    const float invDist = 1.0f / distance;
+    const float dirX = dx * invDist;
+    const float dirY = dy * invDist;
+    const float dirZ = dz * invDist;
+
+    // right = cross(forward, up)
+    const float rightX = fwdY * upZ - fwdZ * upY;
+    const float rightY = fwdZ * upX - fwdX * upZ;
+    const float rightZ = fwdX * upY - fwdY * upX;
+
+    // pan = dot(direction, right) — range [-1, +1]
+    float pan = dirX * rightX + dirY * rightY + dirZ * rightZ;
+    // Clamp pan to [-1, 1] for safety
+    if (pan < -1.0f) { pan = -1.0f; }
+    if (pan >  1.0f) { pan =  1.0f; }
+
+    // Linear pan law (matches ADR Section 3.4):
+    //   clamp(1-pan, 0, 1) and clamp(1+pan, 0, 1) ensure each channel
+    //   stays in [0, gain]. Center pan: both = gain. Full right: left=0, right=gain.
+    float lPan = 1.0f - pan;
+    float rPan = 1.0f + pan;
+    if (lPan < 0.0f) { lPan = 0.0f; } else if (lPan > 1.0f) { lPan = 1.0f; }
+    if (rPan < 0.0f) { rPan = 0.0f; } else if (rPan > 1.0f) { rPan = 1.0f; }
+    return SpatialGain{gain * lPan, gain * rPan};
+}
+
+// ---------------------------------------------------------------------------
 // Audio callback (runs on miniaudio's audio thread)
 //
 // M-1 fix: Previously the mutex was acquired once per PLAY_SOUND command in
@@ -385,6 +478,7 @@ static void audioCallback(ma_device* pDevice, void* pOutput, const void* /*pInpu
         const AudioCommand& cmd = s_state.cmdRing[tail % CMD_RING_CAPACITY];
         switch (cmd.type) {
             case AudioCommand::Type::PLAY_SOUND:
+            case AudioCommand::Type::PLAY_SOUND_3D:
                 if (pendingCount < CMD_RING_CAPACITY) {
                     pendingPlay[pendingCount++] = cmd;
                 }
@@ -463,7 +557,7 @@ static void audioCallback(ma_device* pDevice, void* pOutput, const void* /*pInpu
             }
         }
 
-        // --- Activate queued PLAY_SOUND commands ---
+        // --- Activate queued PLAY_SOUND / PLAY_SOUND_3D commands ---
         for (u32 c = 0u; c < pendingCount; ++c) {
             const AudioCommand& cmd = pendingPlay[c];
             bool placed = false;
@@ -475,6 +569,12 @@ static void audioCallback(ma_device* pDevice, void* pOutput, const void* /*pInpu
                         s_state.voices[i].cursor  = 0u;
                         s_state.voices[i].volume  = cmd.volume;
                         s_state.voices[i].active  = true;
+                        // 3D positioning
+                        const bool spatial = (cmd.type == AudioCommand::Type::PLAY_SOUND_3D);
+                        s_state.voices[i].is3D = spatial;
+                        s_state.voices[i].posX = spatial ? cmd.posX : 0.0f;
+                        s_state.voices[i].posY = spatial ? cmd.posY : 0.0f;
+                        s_state.voices[i].posZ = spatial ? cmd.posZ : 0.0f;
                         s_state.activeVoiceCount.fetch_add(1u, std::memory_order_relaxed);
                         placed = true;
                     }
@@ -489,6 +589,11 @@ static void audioCallback(ma_device* pDevice, void* pOutput, const void* /*pInpu
         }
 
         // --- Mix active SFX voices ---
+        // Snapshot listener state once per callback (under mutex, so coherent).
+        const auto lis = s_state.listener;
+        const float minD = s_state.minDist3D;
+        const float maxD = s_state.maxDist3D;
+
         for (u32 v = 0u; v < MAX_AUDIO_VOICES; ++v) {
             Voice& voice = s_state.voices[v];
             if (!voice.active) { continue; }
@@ -500,8 +605,20 @@ static void audioCallback(ma_device* pDevice, void* pOutput, const void* /*pInpu
                 continue;
             }
 
-            const float gainLeft  = voice.volume * master;
-            const float gainRight = gainLeft;
+            // Compute per-voice gain: 2D voices get equal L/R, 3D voices get spatialized
+            float gainLeft  = voice.volume * master;
+            float gainRight = gainLeft;
+
+            if (voice.is3D) {
+                const SpatialGain sg = computeSpatialGain(
+                    voice.posX, voice.posY, voice.posZ,
+                    lis.posX, lis.posY, lis.posZ,
+                    lis.fwdX, lis.fwdY, lis.fwdZ,
+                    lis.upX,  lis.upY,  lis.upZ,
+                    minD, maxD);
+                gainLeft  = voice.volume * master * sg.left;
+                gainRight = voice.volume * master * sg.right;
+            }
 
             for (u32 f = 0u; f < outFrames; ++f) {
                 if (voice.cursor >= buf->frameCount) {
@@ -514,9 +631,8 @@ static void audioCallback(ma_device* pDevice, void* pOutput, const void* /*pInpu
                     out[f * 2u + 0u] += buf->data[voice.cursor * 2u + 0u] * gainLeft;
                     out[f * 2u + 1u] += buf->data[voice.cursor * 2u + 1u] * gainRight;
                 } else {
-                    const float sample = buf->data[voice.cursor] * gainLeft;
-                    out[f * 2u + 0u] += sample;
-                    out[f * 2u + 1u] += sample;
+                    out[f * 2u + 0u] += buf->data[voice.cursor] * gainLeft;
+                    out[f * 2u + 1u] += buf->data[voice.cursor] * gainRight;
                 }
                 ++voice.cursor;
             }
@@ -617,6 +733,11 @@ bool init(const bool headless) {
     s_state.musicPlaying.store(false, std::memory_order_relaxed);
     s_state.musicStream  = nullptr;
     s_state.musicLoop    = false;
+
+    // Reset 3D listener state to defaults
+    s_state.listener = {};
+    s_state.minDist3D = 1.0f;
+    s_state.maxDist3D = 100.0f;
 
     if (headless) {
         // Headless mode: no real device. loadSound() still works for path testing.
@@ -1224,6 +1345,103 @@ u32 getActiveVoiceCount() {
     // M-2 fix: activeVoiceCount is maintained as a std::atomic<u32> alongside
     // voice pool operations. No mutex required — safe to call per-frame.
     return s_state.activeVoiceCount.load(std::memory_order_relaxed);
+}
+
+// ---------------------------------------------------------------------------
+// 3D Positional Audio — public API
+// ---------------------------------------------------------------------------
+
+void playSound3D(const SoundHandle handle, const float x, const float y,
+                 const float z, const float volume) {
+    if (!isValid(handle)) {
+        return;
+    }
+    if (!s_state.initialised || s_state.headless || !s_state.deviceOpen) {
+        return;
+    }
+
+    AudioCommand cmd;
+    cmd.type    = AudioCommand::Type::PLAY_SOUND_3D;
+    cmd.soundId = handle.id;
+    cmd.volume  = clampVolume(volume);
+    cmd.posX    = sanitizeFloat(x);
+    cmd.posY    = sanitizeFloat(y);
+    cmd.posZ    = sanitizeFloat(z);
+    postCommand(cmd);
+}
+
+void setListenerPosition(const float x, const float y, const float z,
+                         const float fx, const float fy, const float fz,
+                         const float ux, const float uy, const float uz) {
+    s_state.listener.posX = sanitizeFloat(x);
+    s_state.listener.posY = sanitizeFloat(y);
+    s_state.listener.posZ = sanitizeFloat(z);
+
+    // Sanitize forward direction — default to (0, 0, -1) if all NaN/Inf
+    const float sfx = sanitizeFloat(fx);
+    const float sfy = sanitizeFloat(fy);
+    const float sfz = sanitizeFloat(fz);
+    if (sfx == 0.0f && sfy == 0.0f && sfz == 0.0f) {
+        s_state.listener.fwdX = 0.0f;
+        s_state.listener.fwdY = 0.0f;
+        s_state.listener.fwdZ = -1.0f;
+    } else {
+        s_state.listener.fwdX = sfx;
+        s_state.listener.fwdY = sfy;
+        s_state.listener.fwdZ = sfz;
+    }
+
+    // Sanitize up direction — default to (0, 1, 0) if all NaN/Inf
+    const float sux = sanitizeFloat(ux);
+    const float suy = sanitizeFloat(uy);
+    const float suz = sanitizeFloat(uz);
+    if (sux == 0.0f && suy == 0.0f && suz == 0.0f) {
+        s_state.listener.upX = 0.0f;
+        s_state.listener.upY = 1.0f;
+        s_state.listener.upZ = 0.0f;
+    } else {
+        s_state.listener.upX = sux;
+        s_state.listener.upY = suy;
+        s_state.listener.upZ = suz;
+    }
+}
+
+void setSound3DMinDistance(const float dist) {
+    if (!std::isfinite(dist)) { return; }
+    const float clamped = (dist < 0.01f) ? 0.01f
+                        : (dist >= s_state.maxDist3D) ? s_state.maxDist3D - 0.01f
+                        : dist;
+    s_state.minDist3D = clamped;
+}
+
+void setSound3DMaxDistance(const float dist) {
+    if (!std::isfinite(dist)) { return; }
+    const float clamped = (dist <= s_state.minDist3D) ? s_state.minDist3D + 0.01f
+                        : (dist > 10000.0f) ? 10000.0f
+                        : dist;
+    s_state.maxDist3D = clamped;
+}
+
+float getSound3DMinDistance() {
+    return s_state.minDist3D;
+}
+
+float getSound3DMaxDistance() {
+    return s_state.maxDist3D;
+}
+
+void updateListenerFromCamera(const float posX, const float posY, const float posZ,
+                              const float fwdX, const float fwdY, const float fwdZ,
+                              const float upX,  const float upY,  const float upZ) {
+    s_state.listener.posX = posX;
+    s_state.listener.posY = posY;
+    s_state.listener.posZ = posZ;
+    s_state.listener.fwdX = fwdX;
+    s_state.listener.fwdY = fwdY;
+    s_state.listener.fwdZ = fwdZ;
+    s_state.listener.upX  = upX;
+    s_state.listener.upY  = upY;
+    s_state.listener.upZ  = upZ;
 }
 
 } // namespace ffe::audio

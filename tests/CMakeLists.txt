@@ -23,6 +23,7 @@ target_link_libraries(ffe_tests
     PRIVATE
         ffe_core
         ffe_renderer
+        ffe_audio
         ffe_physics
         Catch2::Catch2WithMain
 )
@@ -42,6 +43,7 @@ add_executable(ffe_tests_scripting
     scripting/test_point_light_material_bindings.cpp
     scripting/test_skybox_bindings.cpp
     scripting/test_animation3d_bindings.cpp
+    scripting/test_audio3d_bindings.cpp
 )
 
 target_link_libraries(ffe_tests_scripting
@@ -76,6 +78,7 @@ catch_discover_tests(ffe_tests_texture)
 add_executable(ffe_tests_audio
     test_main.cpp
     audio/test_audio.cpp
+    audio/test_audio_3d.cpp
 )
 
 target_link_libraries(ffe_tests_audio
