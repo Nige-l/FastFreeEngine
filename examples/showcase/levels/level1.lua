@@ -44,16 +44,16 @@ ffe.log("[Level1] Meshes loaded: helmet=" .. tostring(helmetMesh)
 local sfxCollect = ffe.loadSound("audio/sfx_collect.wav")
 local sfxHit     = ffe.loadSound("audio/sfx_hit.wav")
 local sfxGate    = ffe.loadSound("audio/sfx_gate.wav")
-local musicHandle = ffe.loadMusic("audio/music_courtyard.ogg")
+local musicHandle = ffe.loadMusic("audio/BattleMusic.mp3")
 
 -- Start background music (with fallback logging, Bug 4)
 if musicHandle and musicHandle ~= 0 then
     ffe.playMusic(musicHandle, true)
     ffe.setMusicVolume(0.35)
-    ffe.log("[Level1] Music playing: audio/music_courtyard.ogg")
+    ffe.log("[Level1] Music playing: audio/BattleMusic.mp3")
 else
     ffe.log("[Level1] WARNING: Could not load music (handle=" .. tostring(musicHandle) .. ")")
-    ffe.log("[Level1] Expected file at: assets/audio/music_courtyard.ogg")
+    ffe.log("[Level1] Expected file at: assets/audio/BattleMusic.mp3")
 end
 
 --------------------------------------------------------------------
@@ -90,7 +90,7 @@ local function createStaticBox(x, y, z, sx, sy, sz, r, g, b, rx, ry, rz)
             ffe.setMeshSpecular(ent, 0.15, 0.15, 0.15, 16)
             ffe.createPhysicsBody(ent, {
                 shape       = "box",
-                halfExtents = { sx, sy, sz },
+                halfExtents = { sx * 0.5, sy * 0.5, sz * 0.5 },
                 motion      = "static",
             })
         end
@@ -111,7 +111,7 @@ local function createDynamicBox(x, y, z, sx, sy, sz, r, g, b, mass)
             ffe.setMeshSpecular(ent, 0.2, 0.2, 0.2, 16)
             ffe.createPhysicsBody(ent, {
                 shape       = "box",
-                halfExtents = { sx, sy, sz },
+                halfExtents = { sx * 0.5, sy * 0.5, sz * 0.5 },
                 motion      = "dynamic",
                 mass        = mass or 1.0,
                 restitution = 0.0,

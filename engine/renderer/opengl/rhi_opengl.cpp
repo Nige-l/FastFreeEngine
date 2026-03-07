@@ -890,4 +890,9 @@ i32 getViewportHeight() {
     return s_viewportHeight;
 }
 
+void setViewportSize(const i32 width, const i32 height) {
+    s_viewportWidth  = width;
+    s_viewportHeight = height;
+}
+
 } // namespace ffe::rhi

@@ -33,6 +33,18 @@ static void glfwWindowCloseCallback(GLFWwindow* window) {
     }
 }
 
+// GLFW framebuffer resize callback — updates viewport, cameras, and text renderer.
+// Without this, resizing the window leaves stale dimensions in the renderer,
+// causing text clipping, incorrect aspect ratios, and mispositioned HUD elements.
+static void glfwFramebufferSizeCallback(GLFWwindow* window, const int width, const int height) {
+    if (width <= 0 || height <= 0) return; // minimised — skip
+
+    auto* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
+    if (app == nullptr) return;
+
+    app->onFramebufferResize(width, height);
+}
+
 Application::Application(const ApplicationConfig& config)
     : m_config(config)
     , m_frameAllocator(arenaDefaultSize())
@@ -485,9 +497,10 @@ Result Application::startup() {
         // VSync ON by default
         glfwSwapInterval(1);
 
-        // Set window close callback
+        // Set window callbacks
         glfwSetWindowUserPointer(m_window, this);
         glfwSetWindowCloseCallback(m_window, glfwWindowCloseCallback);
+        glfwSetFramebufferSizeCallback(m_window, glfwFramebufferSizeCallback);
 
         // Load OpenGL function pointers via glad
         if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress))) {
@@ -508,6 +521,34 @@ Result Application::startup() {
 
     // Delegate to shared subsystem init (renderer, audio, physics, ECS, systems)
     return initSubsystemsInternal();
+}
+
+void Application::onFramebufferResize(const i32 width, const i32 height) {
+    // Update stored config (used by future subsystem queries)
+    m_config.windowWidth  = width;
+    m_config.windowHeight = height;
+
+    // Update GL viewport and tracked RHI dimensions
+    rhi::setViewport(0, 0, width, height);
+    rhi::setViewportSize(width, height);
+
+    // Update 2D orthographic camera to match new window size
+    const auto fw = static_cast<f32>(width);
+    const auto fh = static_cast<f32>(height);
+    m_camera.orthoLeft   = -fw / 2.0f;
+    m_camera.orthoRight  =  fw / 2.0f;
+    m_camera.orthoBottom = -fh / 2.0f;
+    m_camera.orthoTop    =  fh / 2.0f;
+    m_camera.viewportWidth  = fw;
+    m_camera.viewportHeight = fh;
+
+    // Update 3D perspective camera aspect ratio
+    m_camera3d.viewportWidth  = fw;
+    m_camera3d.viewportHeight = fh;
+
+    // Update text renderer coordinate space so HUD text is positioned correctly
+    m_textRenderer.screenWidth  = fw;
+    m_textRenderer.screenHeight = fh;
 }
 
 void Application::shutdown() {

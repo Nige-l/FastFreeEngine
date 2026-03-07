@@ -4111,7 +4111,8 @@ void ScriptEngine::registerEcsBindings() {
 
     // ffe.setTransform3D(entityId, x, y, z, rx, ry, rz, sx, sy, sz) -> nothing
     // Set the full 3D transform of an entity.
-    // rx, ry, rz are Euler angles in DEGREES (converted to quaternion internally — YXZ order).
+    // rx, ry, rz are Euler angles in DEGREES (converted to quaternion internally).
+    // GLM's quat(vec3) applies rotations in intrinsic XYZ order (extrinsic ZYX).
     // sx, sy, sz are scale factors.
     auto ffe_setTransform3D = [](lua_State* state) -> int {
         if (lua_type(state, 1) != LUA_TNUMBER) {
@@ -4143,7 +4144,7 @@ void ScriptEngine::registerEcsBindings() {
         const ffe::f32 sy = static_cast<ffe::f32>(luaL_optnumber(state, 9, 1.0));
         const ffe::f32 sz = static_cast<ffe::f32>(luaL_optnumber(state, 10, 1.0));
 
-        // Convert Euler degrees to quaternion (YXZ order — standard game convention)
+        // Convert Euler degrees to quaternion (GLM intrinsic XYZ / extrinsic ZYX).
         const glm::quat rotation = glm::quat(glm::radians(glm::vec3{rx, ry, rz}));
 
         ffe::Transform3D& t3d = world->registry().get_or_emplace<ffe::Transform3D>(
@@ -4161,7 +4162,7 @@ void ScriptEngine::registerEcsBindings() {
     // ffe.fillTransform3D(entityId, buf) -> nothing
     //   Zero-allocation alternative for reading a 3D transform.
     //   Writes x, y, z (position), rx, ry, rz (rotation in degrees,
-    //   YXZ order), and sx, sy, sz (scale) into the caller-provided table.
+    //   GLM intrinsic XYZ order), and sx, sy, sz (scale) into the caller-provided table.
     //   Returns early safely if entity is invalid or has no Transform3D.
     //   The caller pre-allocates the table once and reuses it every frame,
     //   eliminating per-call GC pressure from table creation.
@@ -4203,9 +4204,9 @@ void ScriptEngine::registerEcsBindings() {
             return 0;
         }
 
-        // Convert quaternion back to Euler angles in degrees (YXZ order).
+        // Convert quaternion back to Euler angles in degrees.
         // glm::eulerAngles inverts glm::quat(glm::radians(vec3{rx, ry, rz})),
-        // returning radians in the same XYZ component order.
+        // returning radians in the same component order (intrinsic XYZ).
         const glm::vec3 eulerDeg = glm::degrees(glm::eulerAngles(t3d->rotation));
 
         // Fill the caller's table in-place — no new table allocation.

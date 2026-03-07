@@ -46,16 +46,16 @@ ffe.log("[Level3] Meshes loaded: cube=" .. tostring(cubeMesh)
 local sfxCollect = ffe.loadSound("audio/sfx_collect.wav")
 local sfxHit     = ffe.loadSound("audio/sfx_hit.wav")
 local sfxGate    = ffe.loadSound("audio/sfx_gate.wav")
-local musicHandle = ffe.loadMusic("audio/music_pixelcrown.ogg")
+local musicHandle = ffe.loadMusic("audio/BattleMusic.mp3")
 
 -- Start background music (with fallback logging, Bug 4)
 if musicHandle and musicHandle ~= 0 then
     ffe.playMusic(musicHandle, true)
     ffe.setMusicVolume(0.35)
-    ffe.log("[Level3] Music playing: audio/music_pixelcrown.ogg")
+    ffe.log("[Level3] Music playing: audio/BattleMusic.mp3")
 else
     ffe.log("[Level3] WARNING: Could not load music (handle=" .. tostring(musicHandle) .. ")")
-    ffe.log("[Level3] Expected file at: assets/audio/music_pixelcrown.ogg")
+    ffe.log("[Level3] Expected file at: assets/audio/BattleMusic.mp3")
 end
 
 --------------------------------------------------------------------
@@ -102,7 +102,7 @@ local function createStaticBox(x, y, z, sx, sy, sz, r, g, b, rx, ry, rz)
             ffe.setMeshSpecular(ent, 0.2, 0.15, 0.1, 16)
             ffe.createPhysicsBody(ent, {
                 shape       = "box",
-                halfExtents = { sx, sy, sz },
+                halfExtents = { sx * 0.5, sy * 0.5, sz * 0.5 },
                 motion      = "static",
             })
         end

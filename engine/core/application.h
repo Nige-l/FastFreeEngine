@@ -87,6 +87,10 @@ public:
     const renderer::Camera& camera3d() const;
     const renderer::Camera& camera2d() const;
 
+    // Handle framebuffer resize (called by GLFW callback).
+    // Updates viewport, camera aspect ratios, and text renderer dimensions.
+    void onFramebufferResize(i32 width, i32 height);
+
 private:
     Result startup();
     Result initSubsystemsInternal(); // Shared init logic (no window creation)

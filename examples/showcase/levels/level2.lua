@@ -82,7 +82,7 @@ local function createStaticBox(x, y, z, sx, sy, sz, r, g, b, rx, ry, rz)
             ffe.setMeshSpecular(ent, 0.15, 0.15, 0.15, 16)
             ffe.createPhysicsBody(ent, {
                 shape       = "box",
-                halfExtents = { sx, sy, sz },
+                halfExtents = { sx * 0.5, sy * 0.5, sz * 0.5 },
                 motion      = "static",
             })
         end

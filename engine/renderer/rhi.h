@@ -15,10 +15,13 @@ void shutdown();
 // --- Query ---
 /// Returns true if the RHI was initialised in headless mode (no GPU context).
 bool isHeadless();
-/// Returns the viewport width (pixels) set at init time. Returns 0 if not yet initialised.
+/// Returns the viewport width (pixels). Returns 0 if not yet initialised.
 i32 getViewportWidth();
-/// Returns the viewport height (pixels) set at init time. Returns 0 if not yet initialised.
+/// Returns the viewport height (pixels). Returns 0 if not yet initialised.
 i32 getViewportHeight();
+/// Update the tracked viewport dimensions (e.g. after window resize).
+/// Does NOT call glViewport — call setViewport() separately if needed.
+void setViewportSize(i32 width, i32 height);
 
 // --- Buffer operations ---
 BufferHandle createBuffer(const BufferDesc& desc);
