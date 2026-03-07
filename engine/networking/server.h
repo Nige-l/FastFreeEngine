@@ -10,6 +10,7 @@
 //
 // Tiers: LEGACY (primary), STANDARD, MODERN.
 
+#include "networking/prediction.h"
 #include "networking/replication.h"
 #include "networking/transport.h"
 
@@ -59,6 +60,14 @@ public:
     /// Set the network tick rate (Hz). Clamped to [1, 120].
     void setTickRate(float hz);
 
+    // -- Input handling --
+    /// Set a callback that fires when a client sends an InputCommand.
+    /// Signature: void(clientId, InputCommand, userData)
+    void setInputCallback(InputCallbackFn cb, void* userData);
+
+    /// Apply queued inputs from all clients. Called internally during networkTick.
+    void applyQueuedInputs(ffe::World& world);
+
     // -- Callbacks (function pointers + user data, no std::function) --
     using ClientConnectCallback    = void(*)(uint32_t clientId, void*);
     using ClientDisconnectCallback = void(*)(uint32_t clientId, void*);
@@ -84,6 +93,20 @@ private:
     void*                    m_disconnectData = nullptr;
     MessageCallback          m_messageCb      = nullptr;
     void*                    m_messageData    = nullptr;
+
+    // Input callback storage
+    InputCallbackFn m_inputCb       = nullptr;
+    void*           m_inputCbData   = nullptr;
+
+    // Per-connection input queue (fixed-size, no heap allocations)
+    static constexpr uint32_t MAX_INPUT_QUEUE_PER_CLIENT = 8;
+    static constexpr uint32_t MAX_SERVER_PEERS = 64; // matches ServerTransport::MAX_PEERS
+
+    struct ClientInputQueue {
+        InputCommand commands[MAX_INPUT_QUEUE_PER_CLIENT]{};
+        uint32_t     count{0};
+    };
+    ClientInputQueue m_inputQueues[MAX_SERVER_PEERS]{};
 
     // Internal transport-level callbacks (static, forward to member state)
     static void onTransportConnect(ConnectionId id, void* userData);

@@ -170,6 +170,7 @@ catch_discover_tests(ffe_tests_editor)
 add_executable(ffe_tests_networking
     test_main.cpp
     networking/test_packet.cpp
+    networking/test_prediction.cpp
     networking/test_replication.cpp
     networking/test_server_client.cpp
     networking/test_transport.cpp

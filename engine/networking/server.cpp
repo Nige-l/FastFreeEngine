@@ -5,9 +5,11 @@
 
 #include "networking/server.h"
 #include "networking/packet.h"
+#include "networking/prediction.h"
 #include "core/ecs.h"
 #include "renderer/render_system.h"
 
+#include <cmath>
 #include <cstring>
 
 namespace ffe::networking {
@@ -32,6 +34,53 @@ void NetworkServer::onTransportDisconnect(const ConnectionId id, void* userData)
 
 void NetworkServer::onTransportReceive(const ReceivedPacket& pkt, void* userData) {
     auto* self = static_cast<NetworkServer*>(userData);
+
+    // Try to parse as a known packet type
+    if (pkt.dataLength >= HEADER_SIZE) {
+        PacketReader reader(pkt.data, pkt.dataLength);
+        PacketHeader header;
+        if (readHeader(reader, header) && header.type == PacketType::INPUT) {
+            // Parse InputCommand: tick(u32) + bits(u32) + dt(f32) + aimX(f32) + aimY(f32)
+            InputCommand cmd;
+            if (reader.readU32(cmd.tickNumber) &&
+                reader.readU32(cmd.inputBits) &&
+                reader.readF32(cmd.dt) &&
+                reader.readF32(cmd.aimX) &&
+                reader.readF32(cmd.aimY)) {
+
+                // Validate dt — reject NaN, Inf, negative, or impossibly large
+                if (!std::isfinite(cmd.dt) || cmd.dt < 0.0f || cmd.dt > 0.1f) {
+                    return; // reject malformed input
+                }
+
+                // Validate aim values — reject NaN/Inf
+                if (!std::isfinite(cmd.aimX) || !std::isfinite(cmd.aimY)) {
+                    return; // reject NaN/Inf aim values
+                }
+
+                // Validate tick number (reject wildly out-of-range ticks)
+                // Allow ticks within a reasonable window of the server tick
+                const uint32_t maxDrift = 120; // ~2 seconds at 60Hz
+                if (self->m_tick > maxDrift && cmd.tickNumber < self->m_tick - maxDrift) {
+                    return; // too far in the past
+                }
+                if (cmd.tickNumber <= self->m_tick + maxDrift) {
+                    // Queue the input for processing during networkTick
+                    const uint32_t clientIdx = pkt.sender.id;
+                    if (clientIdx < MAX_SERVER_PEERS) {
+                        auto& queue = self->m_inputQueues[clientIdx];
+                        if (queue.count < MAX_INPUT_QUEUE_PER_CLIENT) {
+                            queue.commands[queue.count] = cmd;
+                            ++queue.count;
+                        }
+                    }
+                }
+            }
+            return; // Handled — do not forward to message callback
+        }
+    }
+
+    // Not an input packet — forward to message callback
     if (self->m_messageCb) {
         self->m_messageCb(pkt.sender.id, pkt.data, pkt.dataLength, self->m_messageData);
     }
@@ -89,6 +138,9 @@ void NetworkServer::networkTick(ffe::World& world,
     if (m_tickAccumulator < tickInterval) { return; }
     m_tickAccumulator -= tickInterval;
     ++m_tick;
+
+    // Apply queued client inputs before building the snapshot
+    applyQueuedInputs(world);
 
     // If no clients, skip snapshot work
     if (m_transport.clientCount() == 0) { return; }
@@ -262,6 +314,23 @@ void NetworkServer::setTickRate(const float hz) {
     if (clamped < 1.0f)   { clamped = 1.0f; }
     if (clamped > 120.0f) { clamped = 120.0f; }
     m_config.networkTickRate = clamped;
+}
+
+void NetworkServer::setInputCallback(const InputCallbackFn cb, void* userData) {
+    m_inputCb     = cb;
+    m_inputCbData = userData;
+}
+
+void NetworkServer::applyQueuedInputs(ffe::World& /*world*/) {
+    for (uint32_t clientIdx = 0; clientIdx < MAX_SERVER_PEERS; ++clientIdx) {
+        auto& queue = m_inputQueues[clientIdx];
+        for (uint32_t i = 0; i < queue.count; ++i) {
+            if (m_inputCb != nullptr) {
+                m_inputCb(clientIdx, queue.commands[i], m_inputCbData);
+            }
+        }
+        queue.count = 0; // Clear the queue after processing
+    }
 }
 
 void NetworkServer::setClientConnectCallback(const ClientConnectCallback cb, void* userData) {

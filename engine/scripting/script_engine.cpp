@@ -72,6 +72,7 @@ static int s_netClientConnectedKey       = 0;
 static int s_netClientDisconnectedKey    = 0;
 static int s_netOnConnectedKey           = 0;
 static int s_netOnDisconnectedKey        = 0;
+static int s_netOnServerInputKey         = 0;
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -6098,6 +6099,92 @@ void ScriptEngine::registerEcsBindings() {
         return 0;
     });
     lua_setfield(L, -2, "setNetworkTickRate");
+
+    // ================================================================
+    // Prediction bindings — ffe.setLocalPlayer, ffe.sendInput, etc.
+    // ================================================================
+
+    // ffe.setLocalPlayer(entityId) -> nil
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const auto entityId = static_cast<uint32_t>(luaL_checkinteger(state, 1));
+        ffe::networking::setLocalPlayer(entityId);
+        return 0;
+    });
+    lua_setfield(L, -2, "setLocalPlayer");
+
+    // ffe.sendInput(inputTable) -> bool
+    // inputTable: {bits=number, aimX=number, aimY=number}
+    // Engine fills in tickNumber and dt automatically.
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        ffe::networking::InputCommand cmd;
+
+        if (lua_istable(state, 1)) {
+            lua_getfield(state, 1, "bits");
+            if (lua_isnumber(state, -1)) {
+                cmd.inputBits = static_cast<uint32_t>(lua_tointeger(state, -1));
+            }
+            lua_pop(state, 1);
+
+            lua_getfield(state, 1, "aimX");
+            if (lua_isnumber(state, -1)) {
+                cmd.aimX = static_cast<float>(lua_tonumber(state, -1));
+            }
+            lua_pop(state, 1);
+
+            lua_getfield(state, 1, "aimY");
+            if (lua_isnumber(state, -1)) {
+                cmd.aimY = static_cast<float>(lua_tonumber(state, -1));
+            }
+            lua_pop(state, 1);
+        }
+
+        const bool ok = ffe::networking::sendInput(cmd);
+        lua_pushboolean(state, ok ? 1 : 0);
+        return 1;
+    });
+    lua_setfield(L, -2, "sendInput");
+
+    // ffe.onServerInput(callback) -> nil
+    // Server-side: callback(clientId, inputTable) when input arrives.
+    // inputTable: {bits, aimX, aimY, tick, dt}
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        // Release previous ref if any
+        lua_pushlightuserdata(state, &s_netOnServerInputKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (!lua_isnil(state, -1)) {
+            const int oldRef = static_cast<int>(lua_tointeger(state, -1));
+            if (oldRef != -2) { luaL_unref(state, LUA_REGISTRYINDEX, oldRef); }
+        }
+        lua_pop(state, 1);
+
+        if (lua_isfunction(state, 1)) {
+            lua_pushvalue(state, 1);
+            const int ref = luaL_ref(state, LUA_REGISTRYINDEX);
+            lua_pushlightuserdata(state, &s_netOnServerInputKey);
+            lua_pushinteger(state, static_cast<lua_Integer>(ref));
+            lua_settable(state, LUA_REGISTRYINDEX);
+        } else {
+            lua_pushlightuserdata(state, &s_netOnServerInputKey);
+            lua_pushinteger(state, -2); // LUA_NOREF
+            lua_settable(state, LUA_REGISTRYINDEX);
+        }
+        return 0;
+    });
+    lua_setfield(L, -2, "onServerInput");
+
+    // ffe.getPredictionError() -> number
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushnumber(state, static_cast<lua_Number>(ffe::networking::getPredictionError()));
+        return 1;
+    });
+    lua_setfield(L, -2, "getPredictionError");
+
+    // ffe.getNetworkTick() -> integer
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushinteger(state, static_cast<lua_Integer>(ffe::networking::getCurrentNetworkTick()));
+        return 1;
+    });
+    lua_setfield(L, -2, "getNetworkTick");
 
     lua_setglobal(L, "ffe");
 }

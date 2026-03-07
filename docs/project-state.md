@@ -6,13 +6,13 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 58 |
-| Total tests | 927 (Clang-18 + GCC-13 passing, zero warnings) |
-| Total Lua bindings | ~128 |
+| Last session | 59 |
+| Total tests | 947 (Clang-18, zero warnings) |
+| Total Lua bindings | ~133 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
 | Phase 2 (3D Foundation) | COMPLETE |
 | Phase 3 (Standalone Editor) | MVP COMPLETE (6 milestones, Sessions 51-56) |
-| Phase 4 (Networking) | IN PROGRESS (Session 58: replication + server/client + Lua bindings) |
+| Phase 4 (Networking) | IN PROGRESS (Session 59: client-side prediction + net demo) |
 | Windows build | DONE (MinGW-w64 cross-compilation) |
 | macOS build | DONE (arm64 + x86_64) |
 | GitHub Actions CI | DONE (Linux Clang-18, Linux GCC-13, macOS arm64) |
@@ -45,7 +45,7 @@
 | Timers | Stable | ffe.after/every/cancelTimer, 256 max, fixed-size array |
 | Camera | Stable | CameraShake, ClearColor, set3DCameraFPS/Orbit |
 | Screenshot | Stable | glReadPixels, PNG via stb_image_write, ffe.screenshot |
-| Networking | In Progress | ENet transport, PacketReader/Writer, rate limiting, ReplicationRegistry (32 types, snapshot serialization, slerp interpolation), NetworkServer (authoritative broadcast), NetworkClient (snapshot receiving, interpolation), network_system module, 12 Lua bindings |
+| Networking | In Progress | ENet transport, PacketReader/Writer, rate limiting, ReplicationRegistry (32 types, snapshot serialization, slerp interpolation), NetworkServer (authoritative broadcast, input processing), NetworkClient (snapshot receiving, interpolation, prediction), ClientPrediction (64-slot ring buffer, reconciliation), network_system module, 17 Lua bindings |
 
 ## Demo Games
 
@@ -53,6 +53,7 @@
 2. **Pong** — classic 2D, Lua-only
 3. **Breakout** — brick-breaker 2D, Lua-only
 4. **3D Demo** — mesh loading, Blinn-Phong, point lights, materials, shadows, skybox
+5. **Net Arena** — 2D multiplayer arena, client-side prediction, server reconciliation
 
 ## Known Issues / Deferred Items
 
@@ -64,11 +65,11 @@
 
 | Session | Summary |
 |---------|---------|
+| 59 | Client-side prediction, server input processing, 5 new Lua bindings, Net Arena demo. 947 tests (FAST). |
 | 58 | Replication system, NetworkServer/Client, network_system module, 12 Lua networking bindings, 2 security fixes. 927 tests (FULL). |
 | 57 | Phase 4 kickoff — ENet transport, packet system, rate limiting, networking ADR. 872 tests. |
 | 56 | Build pipeline — game export, runtime binary, ffe.loadSceneJSON. 842 tests. Milestone 6 delivered. **Phase 3 MVP COMPLETE.** |
 | 55 | Scene hierarchy tree (parent/child), drag-and-drop (asset browser to inspector), scene graph, ReparentCommand. 828 tests. Milestone 5 delivered. |
-| 54 | Viewport gizmos, keyboard shortcuts, component add/remove from inspector. 810 tests. Milestone 4 delivered. |
 
 ## Phase 2 — 3D Foundation: COMPLETE
 
@@ -127,14 +128,15 @@ All deliverables met:
 - [x] Client-server architecture (NetworkServer authoritative broadcast, NetworkClient snapshot receiving)
 - [x] ECS state replication (ReplicationRegistry, 32 component types, snapshot serialization, slerp interpolation)
 - [x] Network interpolation (client-side entity interpolation via SnapshotBuffer)
-- [x] Lua bindings for networking (12 bindings: startServer, connectToServer, sendMessage, onNetworkMessage, callbacks, setNetworkTickRate)
+- [x] Lua bindings for networking (17 bindings: startServer, connectToServer, sendMessage, onNetworkMessage, callbacks, setNetworkTickRate, setLocalPlayer, sendInput, onServerInput, getPredictionError, getNetworkTick)
+- [x] Client-side prediction and server reconciliation (ClientPrediction, 64-slot ring buffer, MoveFn, configurable threshold)
+- [x] Server input processing (INPUT packet validation, per-connection queue, InputCallbackFn)
+- [x] At least one networked demo game (Net Arena — 2D multiplayer arena)
 - [ ] Lobby/matchmaking API
-- [ ] Client-side prediction and server reconciliation
 - [ ] Lag compensation
 - [ ] NAT traversal / relay server support
-- [ ] At least one networked demo game
 
-### Next Session (59) — Lobby/matchmaking, lag compensation, networked demo
+### Next Session (60) — Lobby/matchmaking, lag compensation
 
 ## Build Commands
 

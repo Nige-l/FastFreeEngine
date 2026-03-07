@@ -3,6 +3,50 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-34 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 59: Client-Side Prediction, Server Reconciliation, Net Arena Demo
+
+### Summary
+
+Session 59 delivered client-side prediction with server reconciliation, server-side input processing, 5 new Lua bindings, and the Net Arena networked demo game. Security hardening applied during Phase 4 remediation (dt/aim float validation, lower-bound tick rejection). FAST build passed: 947 tests on Clang-18, zero warnings.
+
+### Planned
+
+- Client-side prediction and server reconciliation
+- Server input processing
+- Lua bindings for prediction
+- Networked demo game
+
+### Delivered
+
+- **ClientPrediction** (`engine/networking/prediction.h/.cpp`) — InputCommand struct (tick, inputBits, dt, aimX, aimY), PredictionBuffer (64-slot circular ring buffer, fixed-size, no heap allocs), ClientPrediction class (record-predict-reconcile with MoveFn function pointer, configurable threshold). 15 tests.
+- **Server input processing** (`engine/networking/server.h/.cpp`) — INPUT packet parsing with full validation (dt, aimX, aimY finite checks, tick bounds), per-connection input queue (8 commands per client, 64 clients max), InputCallbackFn for game-defined movement, applyQueuedInputs() called before snapshot broadcast.
+- **Client prediction integration** (`engine/networking/client.h/.cpp`) — sendInput() serialization, reconciliation on snapshot receipt, setLocalEntity/setMovementFunction pass-through.
+- **Network system updates** (`engine/networking/network_system.h/.cpp`) — setLocalPlayer, sendInput, setMovementFunction, getPredictionError, getCurrentNetworkTick.
+- **Lua bindings** (5 new) — ffe.setLocalPlayer, ffe.sendInput, ffe.onServerInput, ffe.getPredictionError, ffe.getNetworkTick. 5 tests.
+- **Net Arena demo** (`examples/net_demo/`) — 2D multiplayer arena (S to host, C to connect, WASD movement), main.cpp, CMakeLists.txt, README.md.
+- **Security hardening** — Server-side dt/aimX/aimY finite validation, lower-bound tick rejection.
+- **Documentation** — engine/networking/.context.md updated with prediction API and usage patterns.
+
+### Expert Panel
+
+- **performance-critic:** PASS (no blocking or minor findings)
+- **security-auditor:** findings addressed in Phase 4 (finite float validation, tick bounds)
+- **api-designer:** PASS
+
+### Build
+
+- **FAST build** — 947 tests on Clang-18, zero warnings.
+
+### Skipped
+
+- **game-dev-tester:** Skipped — net demo validates the full prediction API in practice; no new paradigm beyond existing ffe.* pattern.
+
+### Next
+
+- Continue Phase 4: lobby/matchmaking API, lag compensation.
+
+---
+
 ## 2026-03-07 — Session 58: Replication, Server/Client, Lua Networking Bindings
 
 ### Summary

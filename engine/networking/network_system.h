@@ -11,6 +11,7 @@
 //
 // Tiers: LEGACY (primary), STANDARD, MODERN.
 
+#include "networking/prediction.h"
 #include "networking/replication.h"
 #include "networking/server.h"
 #include "networking/client.h"
@@ -61,5 +62,25 @@ void setNetworkTickRate(float hz);
 
 // -- Shared replication registry --
 ReplicationRegistry& getReplicationRegistry();
+
+// -- Prediction (client-side) --
+/// Designate the locally predicted entity (client-side prediction).
+void setLocalPlayer(uint32_t entityId);
+
+/// Send an input command to the server and apply predicted movement locally.
+bool sendInput(const InputCommand& cmd);
+
+/// Set the movement function for client-side prediction.
+void setMovementFunction(MoveFn fn, void* userData);
+
+/// Get the last reconciliation error magnitude.
+float getPredictionError();
+
+/// Get the current network tick (server tick if server, prediction tick if client).
+uint32_t getCurrentNetworkTick();
+
+// -- Input handling (server-side) --
+/// Set a callback that fires when a client sends an InputCommand.
+void setInputCallback(InputCallbackFn cb, void* userData);
 
 } // namespace ffe::networking

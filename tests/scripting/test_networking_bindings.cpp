@@ -200,3 +200,44 @@ TEST_CASE("double startServer returns false",
         "assert(ok == false, 'second start should fail')\n"
         "ffe.stopServer()"));
 }
+
+// =============================================================================
+// Prediction bindings
+// =============================================================================
+
+TEST_CASE("ffe.setLocalPlayer exists and callable",
+          "[scripting][networking][prediction]") {
+    NetworkingScriptFixture fix;
+    REQUIRE(fix.engine.doString("ffe.setLocalPlayer(1)"));
+}
+
+TEST_CASE("ffe.sendInput does not crash when not connected",
+          "[scripting][networking][prediction]") {
+    NetworkingScriptFixture fix;
+    REQUIRE(fix.engine.doString(
+        "local ok = ffe.sendInput({bits=1, aimX=0.5, aimY=-0.5})\n"
+        "assert(ok == false, 'sendInput should fail when not connected')"));
+}
+
+TEST_CASE("ffe.getPredictionError returns 0 initially",
+          "[scripting][networking][prediction]") {
+    NetworkingScriptFixture fix;
+    REQUIRE(fix.engine.doString(
+        "local err = ffe.getPredictionError()\n"
+        "assert(err == 0, 'prediction error should be 0 initially, got ' .. tostring(err))"));
+}
+
+TEST_CASE("ffe.getNetworkTick returns a number",
+          "[scripting][networking][prediction]") {
+    NetworkingScriptFixture fix;
+    REQUIRE(fix.engine.doString(
+        "local tick = ffe.getNetworkTick()\n"
+        "assert(type(tick) == 'number', 'getNetworkTick should return number, got ' .. type(tick))"));
+}
+
+TEST_CASE("ffe.onServerInput callable with function",
+          "[scripting][networking][prediction]") {
+    NetworkingScriptFixture fix;
+    REQUIRE(fix.engine.doString(
+        "ffe.onServerInput(function(clientId, inputTable) end)"));
+}

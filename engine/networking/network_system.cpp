@@ -183,4 +183,52 @@ ReplicationRegistry& getReplicationRegistry() {
     return s_registry;
 }
 
+// ===========================================================================
+// Prediction (client-side)
+// ===========================================================================
+
+void setLocalPlayer(const uint32_t entityId) {
+    if (s_isClient) {
+        s_client.setLocalEntity(entityId);
+    }
+}
+
+bool sendInput(const InputCommand& cmd) {
+    if (!s_isClient) { return false; }
+    return s_client.sendInput(cmd);
+}
+
+void setMovementFunction(const MoveFn fn, void* userData) {
+    if (s_isClient) {
+        s_client.setMovementFunction(fn, userData);
+    }
+}
+
+float getPredictionError() {
+    if (s_isClient) {
+        return s_client.getPredictionError();
+    }
+    return 0.0f;
+}
+
+uint32_t getCurrentNetworkTick() {
+    if (s_isServer) {
+        return s_server.tick();
+    }
+    if (s_isClient) {
+        return s_client.getCurrentPredictionTick();
+    }
+    return 0;
+}
+
+// ===========================================================================
+// Input handling (server-side)
+// ===========================================================================
+
+void setInputCallback(const InputCallbackFn cb, void* userData) {
+    if (s_isServer) {
+        s_server.setInputCallback(cb, userData);
+    }
+}
+
 } // namespace ffe::networking

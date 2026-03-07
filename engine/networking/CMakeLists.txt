@@ -11,6 +11,7 @@ add_library(ffe_networking STATIC
     client.cpp
     network_system.cpp
     packet.cpp
+    prediction.cpp
     replication.cpp
     server.cpp
     transport.cpp

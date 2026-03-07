@@ -115,6 +115,9 @@ void NetworkClient::onTransportReceive(const ReceivedPacket& pkt, void* userData
         // Reset interpolation timer on new snapshot
         self->m_timeSinceSnapshot = 0.0f;
         self->m_snapshots.push(snapshot);
+
+        // Track the server tick for prediction reconciliation
+        self->m_lastAcknowledgedTick = snapshotTick;
     } else if (header.type == PacketType::CONNECT_ACCEPT) {
         // Server assigned us a client ID
         uint32_t assignedId = 0;
@@ -179,6 +182,8 @@ void NetworkClient::applySnapshots(ffe::World& world,
     const Snapshot* snap = m_snapshots.latest();
     if (snap == nullptr) { return; }
 
+    const uint32_t localEnt = m_prediction.localEntity();
+
     for (uint32_t e = 0; e < snap->entityCount; ++e) {
         const EntitySnapshot& es = snap->entities[e];
         const auto entityId = static_cast<ffe::EntityId>(es.entityId);
@@ -186,6 +191,42 @@ void NetworkClient::applySnapshots(ffe::World& world,
         // Ensure the entity exists
         if (!world.isValid(entityId)) {
             continue; // Entity doesn't exist locally -- skip
+        }
+
+        // If this is the locally predicted entity, extract server position
+        // and reconcile instead of directly applying the snapshot.
+        if (es.entityId == localEnt) {
+            float sx = 0.0f;
+            float sy = 0.0f;
+            float sz = 0.0f;
+
+            // Extract position from the packed component data
+            uint16_t off = 0;
+            while (off + 4 <= es.dataSize) {
+                uint16_t cId   = 0;
+                uint16_t cSize = 0;
+                std::memcpy(&cId,   es.componentData + off, 2);
+                off += 2;
+                std::memcpy(&cSize, es.componentData + off, 2);
+                off += 2;
+                if (off + cSize > es.dataSize) { break; }
+
+                if (cId == COMPONENT_ID_TRANSFORM && cSize >= 12) {
+                    // First 3 floats are position x,y,z
+                    std::memcpy(&sx, es.componentData + off,     4);
+                    std::memcpy(&sy, es.componentData + off + 4, 4);
+                    std::memcpy(&sz, es.componentData + off + 8, 4);
+                } else if (cId == COMPONENT_ID_TRANSFORM3D && cSize >= 12) {
+                    std::memcpy(&sx, es.componentData + off,     4);
+                    std::memcpy(&sy, es.componentData + off + 4, 4);
+                    std::memcpy(&sz, es.componentData + off + 8, 4);
+                }
+                off += cSize;
+            }
+
+            // Reconcile: snap + replay if error exceeds threshold
+            m_prediction.reconcile(world, snap->tick, sx, sy, sz);
+            continue; // Skip normal deserialization for the local entity
         }
 
         // Walk the packed component data in the entity snapshot
@@ -231,6 +272,71 @@ bool NetworkClient::send(const uint8_t* data, const uint16_t len) {
     if (!m_connected) { return false; }
     return m_transport.send(0, data, len, true);
 }
+
+// ===========================================================================
+// Prediction pass-throughs
+// ===========================================================================
+
+void NetworkClient::setLocalEntity(const uint32_t entityId) {
+    m_prediction.setLocalEntity(entityId);
+}
+
+void NetworkClient::setMovementFunction(const MoveFn fn, void* userData) {
+    m_prediction.setMovementFunction(fn, userData);
+}
+
+void NetworkClient::recordAndPredict(ffe::World& world, const InputCommand& cmd) {
+    m_prediction.recordAndPredict(world, cmd);
+}
+
+bool NetworkClient::sendInput(const InputCommand& cmd) {
+    if (!m_connected) { return false; }
+
+    // Serialize InputCommand into a packet: Header + tick(u32) + bits(u32) + dt(f32) + aimX(f32) + aimY(f32)
+    uint8_t buffer[MAX_PACKET_SIZE];
+    PacketWriter writer(buffer, MAX_PACKET_SIZE);
+
+    PacketHeader header;
+    header.type          = PacketType::INPUT;
+    header.channel       = 0;
+    header.sequence      = static_cast<uint16_t>(cmd.tickNumber & 0xFFFF);
+    header.payloadLength = 20; // 4 + 4 + 4 + 4 + 4
+    writeHeader(writer, header);
+
+    writer.writeU32(cmd.tickNumber);
+    writer.writeU32(cmd.inputBits);
+    writer.writeF32(cmd.dt);
+    writer.writeF32(cmd.aimX);
+    writer.writeF32(cmd.aimY);
+
+    if (writer.hasError()) { return false; }
+
+    return m_transport.send(0, buffer, writer.bytesWritten(), true);
+}
+
+uint32_t NetworkClient::getLastAcknowledgedTick() const {
+    return m_lastAcknowledgedTick;
+}
+
+float NetworkClient::getPredictionError() const {
+    return m_prediction.lastError();
+}
+
+uint32_t NetworkClient::getCurrentPredictionTick() const {
+    return m_prediction.currentTick();
+}
+
+ClientPrediction& NetworkClient::prediction() {
+    return m_prediction;
+}
+
+const ClientPrediction& NetworkClient::prediction() const {
+    return m_prediction;
+}
+
+// ===========================================================================
+// Callback setters
+// ===========================================================================
 
 void NetworkClient::setConnectedCallback(const ConnectedCallback cb, void* userData) {
     m_connectedCb   = cb;
