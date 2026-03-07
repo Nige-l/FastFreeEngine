@@ -184,3 +184,74 @@ TEST_CASE("TTF_CHAR_COUNT is 96", "[renderer][font]") {
 TEST_CASE("TTF_FIRST_CHAR is 32", "[renderer][font]") {
     REQUIRE(ffe::renderer::TTF_FIRST_CHAR == 32);
 }
+
+// =============================================================================
+// Text buffer persistence (flicker fix)
+// =============================================================================
+// These tests verify the invariant that the text glyph buffer retains its
+// contents across frames when beginText() is NOT called. This is critical for
+// the fixed-timestep game loop: when zero ticks execute in a frame, drawText()
+// is never called, so the previous frame's glyphs must persist.
+
+TEST_CASE("beginText resets glyph count to zero", "[renderer][text]") {
+    ffe::renderer::TextRenderer tr{};
+    tr.glyphs = static_cast<ffe::renderer::GlyphQuad*>(
+        std::malloc(ffe::renderer::MAX_TEXT_GLYPHS * sizeof(ffe::renderer::GlyphQuad)));
+    tr.glyphCount = 0;
+
+    // Simulate queuing some glyphs manually
+    tr.glyphCount = 5;
+    REQUIRE(tr.glyphCount == 5);
+
+    ffe::renderer::beginText(tr);
+    REQUIRE(tr.glyphCount == 0);
+
+    std::free(tr.glyphs);
+}
+
+TEST_CASE("Text glyphs persist when beginText is not called", "[renderer][text]") {
+    ffe::renderer::TextRenderer tr{};
+    tr.glyphs = static_cast<ffe::renderer::GlyphQuad*>(
+        std::malloc(ffe::renderer::MAX_TEXT_GLYPHS * sizeof(ffe::renderer::GlyphQuad)));
+    tr.glyphCount = 0;
+    tr.screenWidth = 800.0f;
+    tr.screenHeight = 600.0f;
+
+    // Simulate a tick frame: beginText clears, drawText populates
+    ffe::renderer::beginText(tr);
+    ffe::renderer::drawText(tr, "AB", 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f);
+    REQUIRE(tr.glyphCount == 2);
+
+    // Simulate a zero-tick frame: do NOT call beginText.
+    // Glyphs from the previous tick must still be present.
+    REQUIRE(tr.glyphCount == 2);
+    // Verify the glyph data is still valid (not zeroed)
+    REQUIRE(tr.glyphs[0].width > 0.0f);
+    REQUIRE(tr.glyphs[1].width > 0.0f);
+
+    std::free(tr.glyphs);
+}
+
+TEST_CASE("drawText appends to existing glyphs when beginText is skipped", "[renderer][text]") {
+    ffe::renderer::TextRenderer tr{};
+    tr.glyphs = static_cast<ffe::renderer::GlyphQuad*>(
+        std::malloc(ffe::renderer::MAX_TEXT_GLYPHS * sizeof(ffe::renderer::GlyphQuad)));
+    tr.glyphCount = 0;
+    tr.screenWidth = 800.0f;
+    tr.screenHeight = 600.0f;
+
+    // First tick: draw "Hi" (2 glyphs)
+    ffe::renderer::beginText(tr);
+    ffe::renderer::drawText(tr, "Hi", 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f);
+    REQUIRE(tr.glyphCount == 2);
+
+    // Second tick without beginText: drawing more text appends
+    ffe::renderer::drawText(tr, "AB", 0.0f, 10.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f);
+    REQUIRE(tr.glyphCount == 4);
+
+    // With beginText: resets properly
+    ffe::renderer::beginText(tr);
+    REQUIRE(tr.glyphCount == 0);
+
+    std::free(tr.glyphs);
+}

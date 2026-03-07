@@ -113,7 +113,7 @@ jobs:
 
       - name: Set up vcpkg
         run: |
-          git clone --depth 1 --branch 2024.11.16 https://github.com/microsoft/vcpkg.git $HOME/vcpkg
+          git clone --depth 1 --branch 2025.01.13 https://github.com/microsoft/vcpkg.git $HOME/vcpkg
           $HOME/vcpkg/bootstrap-vcpkg.sh -disableMetrics
           echo "VCPKG_ROOT=$HOME/vcpkg" >> $GITHUB_ENV
 

@@ -152,7 +152,7 @@ cmake --build build-gcc
 
 ### Running Tests
 
-627 Catch2 tests covering core, renderer (2D and 3D), scripting, audio, physics, and texture loading:
+738 Catch2 tests covering core, renderer (2D and 3D), scripting, audio, physics, and texture loading:
 
 ```bash
 ctest --test-dir build --output-on-failure
@@ -220,6 +220,8 @@ Classic brick-breaking game with particle effects -- brick destruction particles
 
 A 3D scene demonstrating mesh loading, Blinn-Phong lighting with directional and point lights, materials (specular/normal maps), shadow mapping, and skybox environment rendering.
 
+![3D Demo Screenshot](docs/screenshots/3d_demo.png)
+
 ```bash
 ./build/examples/3d_demo/ffe_3d_demo
 ```
@@ -249,13 +251,13 @@ A 3D scene demonstrating mesh loading, Blinn-Phong lighting with directional and
 ```
 engine/
   core/         ECS, types, arena allocator, logging, input, application loop
-  renderer/     OpenGL 3.3 backend, sprite batching, textures, sprite animation
-  audio/        miniaudio integration, WAV/OGG, SFX + streaming music
-  physics/      2D collision detection, spatial hash, AABB/circle colliders
+  renderer/     OpenGL 3.3 backend, sprite batching, textures, sprite animation, 3D mesh, lighting, shadows, skybox
+  audio/        miniaudio integration, WAV/OGG, SFX + streaming music, 3D spatial audio
+  physics/      2D collision + 3D physics (Jolt), spatial hash, AABB/circle colliders, rigid bodies, raycasting
   scripting/    Lua sandbox, ffe.* API bindings, instruction budget
   editor/       Dear ImGui overlay, entity inspector
 
-tests/          627 Catch2 tests (core, renderer, scripting, audio, physics)
+tests/          738 Catch2 tests (core, renderer, scripting, audio, physics)
 examples/       Demo games (lua_demo, pong, breakout, hello_sprites, interactive_demo, headless_test)
 assets/
   textures/     PNG textures and spritesheets
@@ -282,6 +284,7 @@ Managed via vcpkg (see `vcpkg.json`):
 | [Tracy](https://github.com/wolfpld/tracy) | Frame profiler |
 | [Catch2](https://github.com/catchorg/Catch2) | Test framework |
 | [nlohmann-json](https://github.com/nlohmann/json) | JSON parsing |
+| [Jolt Physics](https://github.com/jrouwe/JoltPhysics) | 3D physics engine |
 
 System packages:
 
@@ -291,6 +294,8 @@ System packages:
 | GLFW | Window and input management |
 | glad | OpenGL function loading (vendored in `third_party/`) |
 | stb_image | Texture loading (vendored in `third_party/`) |
+| [stb_truetype](https://github.com/nothings/stb) | TTF font rendering (vendored in `third_party/`) |
+| [cgltf](https://github.com/jkuhlmann/cgltf) | glTF mesh loading (vendored in `third_party/`) |
 | miniaudio | Audio playback (vendored in `third_party/`) |
 
 ---
@@ -303,7 +308,7 @@ FastFreeEngine is licensed under the [MIT License](LICENSE). Free and open sourc
 
 ## Status
 
-Active development. Phase 2 (3D Foundation) is in progress. The engine supports 2D and 3D rendering, point lights, materials (specular/normal maps), shadow mapping, skybox environment rendering, audio, physics, scripting, and an editor overlay -- demonstrated in four playable demos including a 3D scene. See `docs/devlog.md` for the full session-by-session development history.
+Active development. Phase 2 (3D Foundation) is COMPLETE. The engine supports 2D and 3D rendering, point lights, materials (specular/normal maps), skeletal animation, shadow mapping, skybox environment rendering, 3D physics (Jolt -- collision callbacks, raycasting), 3D spatial audio, scripting, and an editor overlay -- demonstrated in four playable demos including a 3D scene. Phase 3 (Standalone Editor) is next. See `docs/devlog.md` for the full session-by-session development history.
 
 **Getting started?** Read the [Quick-Start Tutorial](docs/tutorial.md) to build your first game in Lua.
 

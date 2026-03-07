@@ -6,8 +6,8 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 49 |
-| Total tests | 735 (Clang-18 + GCC-13 passing, zero warnings) |
+| Last session | 50 |
+| Total tests | 738 (Clang-18 passing, zero warnings) |
 | Total Lua bindings | ~115 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
 | Phase 2 (3D Foundation) | COMPLETE |
@@ -57,11 +57,11 @@
 
 | Session | Summary |
 |---------|---------|
+| 50 | Text flicker fix (fixed-timestep gating), macOS CI fix (LINK_GROUP + vcpkg pin), 3 new TTF tests, README update. 738 tests. |
 | 49 | 3D physics gameplay layer — collision callbacks, raycasting, entity mapping, 5 Lua bindings, 735 tests. Phase 2 COMPLETE. |
 | 48 | 3D physics foundation — Jolt integration, rigid bodies, ECS sync, 8 Lua bindings, 711 tests |
 | 47 | 3D positional audio (spatial voices, listener sync, 4 Lua bindings), 686 tests |
 | 46 | Skeletal animation (bone hierarchy, GPU skinning, 8 Lua bindings), 1.37 GB static array fix, 664 tests |
-| 45 | Skybox / cubemap environment rendering, 3 new Lua bindings, security hardening, 627 tests |
 
 ## Phase 2 — 3D Foundation: COMPLETE
 
@@ -98,7 +98,7 @@ All deliverables met:
 - [ ] Project creation wizard
 - [ ] LLM integration panel (connect AI assistant, generate code, explain systems)
 
-### Next Session (50) — Phase 3 kickoff: architecture design, editor scaffold, scene serialisation format
+### Next Session (51) — Phase 3 kickoff: architecture design, editor scaffold, scene serialisation format
 
 ## Build Commands
 

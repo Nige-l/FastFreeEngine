@@ -3,6 +3,37 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-34 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 50: Text Flicker Fix + macOS CI Fix
+
+### Summary
+
+Session 50 was a bug-fix and maintenance session. Fixed text flickering in the fixed-timestep loop, resolved macOS arm64 CI build failure, added 3 new TTF font tests, and updated README.md with the 3D demo screenshot and current project state.
+
+### Fixes
+
+- **Text flicker fix** -- gated `beginText()` with `if (accumulator >= fixedDt)` in `engine/core/application.cpp`, ensuring text rendering only occurs on frames that also run the fixed update. Previously, text could flicker when render frames outnumbered fixed-update frames.
+- **macOS CI fix** -- made `LINK_GROUP:RESCAN` platform-conditional in `engine/CMakeLists.txt` (Linux only, skipped on macOS where Apple's linker doesn't support it). Updated vcpkg baseline pin to `2025.01.13` for stable macOS builds.
+
+### Tests
+
+- 3 new tests in `tests/renderer/test_ttf_font.cpp`
+- **738 tests** total, passing on Clang-18, zero warnings
+
+### Documentation
+
+- Updated `engine/renderer/.context.md` and `engine/scripting/.context.md`
+- Updated `README.md`: 3D demo screenshot, 738 test count, Phase 2 COMPLETE status, added missing dependencies (cgltf, stb_truetype, Jolt Physics), updated project structure descriptions
+
+### Reviews
+
+- game-dev-tester: SKIPPED (bug fixes only, no new API paradigms)
+
+### Build Notes
+
+- FAST build: 738 tests on Clang-18, zero warnings, zero failures
+
+---
+
 ## 2026-03-07 — Session 49: 3D Physics Gameplay Layer (Collision Callbacks + Raycasting) — PHASE 2 COMPLETE
 
 ### Summary

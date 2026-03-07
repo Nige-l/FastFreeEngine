@@ -91,9 +91,17 @@ int32_t Application::run() {
             accumulator = fixedDt;
         }
 
-        // Reset render queue and text buffer for this frame.
+        // Reset render queue for this frame. The render queue is repopulated
+        // by renderPrepareSystem during render(), so it must always be cleared.
         m_renderQueue.clear();
-        renderer::beginText(m_textRenderer);
+
+        // Only clear the text glyph buffer when at least one tick will run.
+        // Text is queued via drawText() during tick(), so if zero ticks execute
+        // (frame completed faster than fixedDt), the previous frame's text must
+        // persist — otherwise text flickers on/off frame-to-frame.
+        if (accumulator >= fixedDt) {
+            renderer::beginText(m_textRenderer);
+        }
 
         // --- Fixed-rate update ---
         while (accumulator >= fixedDt) {
