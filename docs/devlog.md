@@ -3,6 +3,45 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-34 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 53: Editor Milestone 3 — Play-in-Editor, Inspector Undo, Asset Browser
+
+### Summary
+
+Session 53 delivered Editor Milestone 3: play-in-editor mode with scene snapshot/restore, inspector fields wired through the undo system, and an asset browser panel for navigating project files. FAST build passed: 793 tests on Clang-18, zero warnings.
+
+### New Features
+
+- **PlayMode** (`editor/play_mode.cpp/.h`) — snapshot/restore architecture using JSON serialisation. Captures full scene state before play, restores on stop. Supports Play, Pause, Resume, and Stop transitions with state machine enforcement.
+- **Viewport toolbar** — Play/Pause/Resume/Stop buttons rendered in the viewport panel, wired to PlayMode state transitions.
+- **Inspector undo integration** — all editable fields (Transform, Transform3D, Name) now create `ModifyComponentCommand` entries on edit. Every inspector change is fully undoable/redoable through the command history.
+- **Asset browser** (`editor/panels/asset_browser.cpp/.h`) — directory traversal starting from project root, file type indicators (meshes, textures, scripts, audio, scenes), project-root security boundary preventing navigation outside the project.
+
+### Tests
+
+- **13 new tests** (793 total, up from 780)
+- 11 play mode tests: state transitions, snapshot/restore, pause/resume, invalid transitions
+- 2 inspector undo wiring tests: verify inspector edits produce undoable commands
+
+### Reviews
+
+- **performance-critic:** PASS
+- **api-designer:** Updated `editor/.context.md` with play mode, asset browser, and inspector undo documentation
+- **game-dev-tester:** SKIP (editor internals, not game developer API)
+
+### Files Changed
+
+- `editor/play_mode.cpp`, `editor/play_mode.h` (new)
+- `editor/panels/asset_browser.cpp`, `editor/panels/asset_browser.h` (new)
+- `editor/panels/viewport_panel.cpp`, `editor/panels/viewport_panel.h` (modified — play toolbar)
+- `editor/panels/inspector_panel.cpp`, `editor/panels/inspector_panel.h` (modified — undo integration)
+- `editor/editor_app.cpp`, `editor/editor_app.h` (modified — play mode + asset browser wiring)
+- `editor/CMakeLists.txt` (modified — new source files)
+- `editor/.context.md` (updated)
+- `tests/editor/test_play_mode.cpp` (new)
+- `tests/CMakeLists.txt` (modified)
+
+---
+
 ## 2026-03-07 — Session 52: Editor Milestone 2 — FBO Viewport, Component Commands, File Dialogs
 
 ### Summary
