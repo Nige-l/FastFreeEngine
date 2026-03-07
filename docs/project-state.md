@@ -6,7 +6,7 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 68 |
+| Last session | 69 |
 | Total tests | 1005 (FAST build: Clang-18, zero warnings) |
 | Total Lua bindings | ~169 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
@@ -68,11 +68,11 @@
 
 | Session | Summary |
 |---------|---------|
+| 69 | Phase 6 M3 (part 1): Level 2 "The Temple" (underground, dark lighting, lava pit, crystal pedestals, 2 purple guardians, artifact), macOS CI fix (always-on vcpkg overlay). 1005 tests (FAST). |
 | 68 | Phase 6 M2: Level 1 "The Courtyard" (push-block puzzle, 2 guardians, destructible wall, artifact, fog+shadows+4 lights), macOS CI fix (conditional overlay ports). 1005 tests (FAST). |
 | 67 | Phase 6 M1: linear fog shader (ffe.setFog/disableFog, 14 tests), "Echoes of the Ancients" scaffold (player, camera, HUD, combat, AI, test level). 1005 tests (FAST). |
 | 66 | Editor crash fix (ImGuiKey migration), macOS CI fix (LuaJIT arm64), README overhaul, Phase 6 ADR ("Echoes of the Ancients"). 991 tests (FAST). |
 | 65 | **Phase 5 COMPLETE.** "Build Your Own Engine" learning track (ECS from Scratch tutorial), community game showcase, nav updates. All 5 phases complete. 991 tests. |
-| 64 | Phase 5 deep dives — ECS, renderer, networking "How It Works" pages (~1243 lines total), GitHub Pages deployment workflow, Mermaid diagram support. 991 tests (FAST). |
 
 ## Phase 2 — 3D Foundation: COMPLETE
 

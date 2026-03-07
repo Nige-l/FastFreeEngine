@@ -3,6 +3,43 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 69: Phase 6 M3 (part 1) — Level 2 "The Temple"
+
+### Summary
+
+Session 69 delivered the first half of Phase 6 Milestone 3: Level 2 "The Temple" — an underground temple environment with dark atmospheric lighting, lava pit, crystal pedestals, narrow bridges, 2 purple guardians, and an artifact on a central altar. Also fixed macOS CI by making vcpkg overlay always-on (upstream LuaJIT port broken on arm64-osx). FAST build: 1005 tests pass on Clang-18, zero warnings.
+
+### Planned
+
+- Level 2 "The Temple" — underground environment with dark lighting, hazards, guardians
+- macOS CI fix (vcpkg overlay)
+
+### Delivered
+
+- **Level 2 "The Temple"** — 532-line underground temple level with dark atmospheric lighting (low ambient 0.05/0.05/0.08), lava pit with orange glow lights, crystal pedestals with blue/purple/green lights, narrow stone bridges, 2 purple guardians patrolling corridors, artifact on central altar. Short-range dark fog (dark blue/purple, 3-18 range). Files: `examples/showcase/levels/level2.lua`, `examples/showcase/game.lua` (Level 2 added to LEVELS table).
+- **macOS CI fix (take 2)** — Made vcpkg overlay always-on instead of conditional on MinGW. Upstream LuaJIT port is broken on arm64-osx, so the overlay is needed everywhere. Files: `CMakeLists.txt`, `docs/environment.md`.
+
+### Reviews
+
+- performance-critic: PASS (57/80 entities, 4/4 lights, 31/40 bodies)
+- api-designer: PASS (all ffe.* calls verified, 1 unused variable noted, 2 doc gaps noted)
+- security-auditor: SKIPPED (no new attack surface)
+- game-dev-tester: SKIPPED (no new API paradigm)
+
+### Critical User Feedback (HIGH PRIORITY for Session 70)
+
+1. **"The showcase needs to be EPIC"** — User wants REAL 3D models from CC0 sources (Kenney, Quaternius, etc.). Cubes are NOT acceptable. This is the #1 priority.
+2. **"We have music"** — User has Suno tracks in `assets/audio/` (BattleMusic.mp3, music_pixelcrown.ogg, Pixel Crown.wav, etc.). Use these.
+3. **"Be conscious of disk space"** — Selective downloads, no massive packs.
+4. **"Exclude models from build"** — Downloaded assets should be copied, not compiled.
+5. **GitHub Pages showing just README** — `jekyll-gh-pages.yml` (commit e935f47) overrides MkDocs deploy. Must be deleted.
+
+### Next Session (70)
+
+Priority: Download real CC0 3D models (Kenney .glb packs, Quaternius characters), wire up existing Suno music tracks, fix GitHub Pages by removing Jekyll workflow, Level 2 gameplay (crystal puzzle, timed platforms, boss guardian). The user wants EPIC visuals — colored cubes must go.
+
+---
+
 ## 2026-03-07 — Session 68: Phase 6 M2 — Level 1 "The Courtyard"
 
 ### Summary
