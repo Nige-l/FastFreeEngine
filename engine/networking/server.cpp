@@ -139,6 +139,51 @@ void NetworkServer::networkTick(ffe::World& world,
     m_tickAccumulator -= tickInterval;
     ++m_tick;
 
+    // Record entity positions for lag compensation BEFORE applying new inputs
+    {
+        EntityState lagEntities[MAX_TRACKED_ENTITIES];
+        uint32_t lagCount = 0;
+
+        // Gather 2D entities (Transform)
+        {
+            auto view2d = world.view<ffe::Transform>();
+            for (const auto entity : view2d) {
+                if (lagCount >= MAX_TRACKED_ENTITIES) { break; }
+                const auto eid = static_cast<ffe::EntityId>(entity);
+                const auto& t = world.getComponent<ffe::Transform>(eid);
+                auto& es = lagEntities[lagCount];
+                es.entityId = static_cast<uint32_t>(entity);
+                es.x        = t.position.x;
+                es.y        = t.position.y;
+                es.z        = 0.0f;
+                es.radius   = 0.5f; // default for 2D
+                es.active   = true;
+                ++lagCount;
+            }
+        }
+
+        // Gather 3D entities (Transform3D) not already covered
+        {
+            auto view3d = world.view<ffe::Transform3D>();
+            for (const auto entity : view3d) {
+                if (lagCount >= MAX_TRACKED_ENTITIES) { break; }
+                const auto eid = static_cast<ffe::EntityId>(entity);
+                if (world.hasComponent<ffe::Transform>(eid)) { continue; }
+                const auto& t = world.getComponent<ffe::Transform3D>(eid);
+                auto& es = lagEntities[lagCount];
+                es.entityId = static_cast<uint32_t>(entity);
+                es.x        = t.position.x;
+                es.y        = t.position.y;
+                es.z        = t.position.z;
+                es.radius   = 0.5f; // default
+                es.active   = true;
+                ++lagCount;
+            }
+        }
+
+        m_lagComp.recordFrame(m_tick, lagEntities, lagCount);
+    }
+
     // Apply queued client inputs before building the snapshot
     applyQueuedInputs(world);
 
@@ -346,6 +391,48 @@ void NetworkServer::setClientDisconnectCallback(const ClientDisconnectCallback c
 void NetworkServer::setMessageCallback(const MessageCallback cb, void* userData) {
     m_messageCb   = cb;
     m_messageData = userData;
+}
+
+// ===========================================================================
+// Lag compensation
+// ===========================================================================
+
+HitCheckResult NetworkServer::processHitCheck(
+    const uint32_t shooterConnectionId,
+    const uint32_t atTick,
+    const float originX, const float originY, const float originZ,
+    const float dirX, const float dirY, const float dirZ,
+    const float maxDistance,
+    const uint32_t ignoreEntityId)
+{
+    // Clamp rewind depth
+    const uint32_t maxRewind = m_lagComp.maxRewindTicks();
+    if (m_tick > maxRewind && atTick < m_tick - maxRewind) {
+        return HitCheckResult{}; // too far in the past
+    }
+
+    const HitCheckResult result = m_lagComp.performHitCheck(
+        atTick, originX, originY, originZ,
+        dirX, dirY, dirZ, maxDistance, ignoreEntityId);
+
+    if (result.hit && m_hitConfirmCb != nullptr) {
+        m_hitConfirmCb(shooterConnectionId, result, m_hitConfirmData);
+    }
+
+    return result;
+}
+
+void NetworkServer::setHitConfirmCallback(const HitConfirmFn cb, void* userData) {
+    m_hitConfirmCb   = cb;
+    m_hitConfirmData = userData;
+}
+
+LagCompensator& NetworkServer::lagCompensator() {
+    return m_lagComp;
+}
+
+const LagCompensator& NetworkServer::lagCompensator() const {
+    return m_lagComp;
 }
 
 } // namespace ffe::networking

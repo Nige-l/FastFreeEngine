@@ -169,6 +169,8 @@ catch_discover_tests(ffe_tests_editor)
 # and init/shutdown global state that must be isolated from other test suites.
 add_executable(ffe_tests_networking
     test_main.cpp
+    networking/test_lag_compensation.cpp
+    networking/test_lobby.cpp
     networking/test_packet.cpp
     networking/test_prediction.cpp
     networking/test_replication.cpp

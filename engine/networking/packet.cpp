@@ -21,6 +21,13 @@ bool isValidPacketType(const uint8_t t) {
     case PacketType::SNAPSHOT_DELTA:
     case PacketType::EVENT:
     case PacketType::RPC:
+    case PacketType::LOBBY_CREATE:
+    case PacketType::LOBBY_JOIN:
+    case PacketType::LOBBY_LEAVE:
+    case PacketType::LOBBY_READY:
+    case PacketType::LOBBY_STATE:
+    case PacketType::LOBBY_GAME_START:
+    case PacketType::HIT_CHECK:
     case PacketType::HEARTBEAT:
         return true;
     default:

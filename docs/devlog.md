@@ -3,6 +3,48 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-34 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 60: Lobby/Matchmaking + Lag Compensation
+
+### Summary
+
+Session 60 delivered lobby/matchmaking (LobbyServer/LobbyClient) and lag compensation (LagCompensator) for the networking subsystem. 7 new packet types, 14 module-level functions, 13 new Lua bindings, 33 new tests (18 lobby + 15 lag comp). FAST build passed: 991 tests on Clang-18, zero warnings.
+
+### Planned
+
+- Lobby/matchmaking API
+- Lag compensation system
+
+### Delivered
+
+- **LobbyServer** (`engine/networking/lobby.h/.cpp`) — create/destroy lobbies, handle JOIN/LEAVE/READY packets, max player enforcement, duplicate join rejection, broadcastState to all lobby members, startGame trigger. 18 tests.
+- **LobbyClient** (`engine/networking/lobby.h/.cpp`) — requestJoin/Leave/Ready, handle LOBBY_STATE/GAME_START packets, onLobbyUpdate/onGameStart callbacks.
+- **LagCompensator** (`engine/networking/lag_compensation.h/.cpp`) — 64-frame position history buffer, recordFrame, performHitCheck (ray-vs-sphere intersection with server-side rewind). EntityState, HistoryFrame, HitCheckResult structs. 15 tests.
+- **Server integration** — position history recording in networkTick, processHitCheck with rewind window enforcement.
+- **Packet types** (`engine/networking/packet.h/.cpp`) — 7 new types: LOBBY_CREATE, LOBBY_JOIN, LOBBY_LEAVE, LOBBY_READY, LOBBY_STATE, GAME_START, HIT_CHECK. LobbyPlayerInfo struct, MAX_LOBBY_PLAYERS, MAX_LOBBY_NAME_LENGTH constants.
+- **Network system updates** (`engine/networking/network_system.h/.cpp`) — 11 lobby module-level functions, 3 lag compensation module-level functions, lobby packet routing for server and client.
+- **Lua bindings** (13 new) — Lobby: createLobby, destroyLobby, joinLobby, leaveLobby, setReady, isInLobby, getLobbyPlayers, startLobbyGame, onLobbyUpdate, onGameStart. Lag comp: performHitCheck, setLagCompensationWindow, onHitConfirm. 9 binding tests.
+- **Documentation** — engine/networking/.context.md updated with lobby + lag compensation APIs.
+
+### Expert Panel
+
+- **performance-critic:** PASS
+- **security-auditor:** findings addressed in Phase 4
+- **api-designer:** PASS, .context.md updated
+
+### Build
+
+- **FAST build** — 991 tests on Clang-18, zero warnings.
+
+### Skipped
+
+- **game-dev-tester:** Skipped — lobby and lag comp follow established ffe.* binding patterns; no new API paradigm.
+
+### Next
+
+- Continue Phase 4: NAT traversal / relay server support, or Phase 4 wrap-up.
+
+---
+
 ## 2026-03-07 — Session 59: Client-Side Prediction, Server Reconciliation, Net Arena Demo
 
 ### Summary

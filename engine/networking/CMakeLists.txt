@@ -9,6 +9,8 @@ find_package(unofficial-enet CONFIG REQUIRED)
 
 add_library(ffe_networking STATIC
     client.cpp
+    lag_compensation.cpp
+    lobby.cpp
     network_system.cpp
     packet.cpp
     prediction.cpp

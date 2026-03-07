@@ -73,6 +73,9 @@ static int s_netClientDisconnectedKey    = 0;
 static int s_netOnConnectedKey           = 0;
 static int s_netOnDisconnectedKey        = 0;
 static int s_netOnServerInputKey         = 0;
+static int s_netOnLobbyUpdateKey         = 0;
+static int s_netOnGameStartKey           = 0;
+static int s_netOnHitConfirmKey          = 0;
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -6185,6 +6188,219 @@ void ScriptEngine::registerEcsBindings() {
         return 1;
     });
     lua_setfield(L, -2, "getNetworkTick");
+
+    // ================================================================
+    // Lag compensation bindings
+    // ================================================================
+
+    // ffe.performHitCheck(originX, originY, originZ, dirX, dirY, dirZ, maxDist, ignoreEntityId)
+    // -> {hit=bool, entityId=number, x=number, y=number, z=number, distance=number} or nil
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const float ox = static_cast<float>(luaL_checknumber(state, 1));
+        const float oy = static_cast<float>(luaL_checknumber(state, 2));
+        const float oz = static_cast<float>(luaL_checknumber(state, 3));
+        const float dx = static_cast<float>(luaL_checknumber(state, 4));
+        const float dy = static_cast<float>(luaL_checknumber(state, 5));
+        const float dz = static_cast<float>(luaL_checknumber(state, 6));
+        const float maxDist = static_cast<float>(luaL_checknumber(state, 7));
+        const auto ignoreId = static_cast<uint32_t>(luaL_checkinteger(state, 8));
+
+        const auto result = ffe::networking::performHitCheck(
+            ox, oy, oz, dx, dy, dz, maxDist, ignoreId);
+
+        if (!result.hit) {
+            lua_pushnil(state);
+            return 1;
+        }
+
+        lua_newtable(state);
+        lua_pushboolean(state, 1);
+        lua_setfield(state, -2, "hit");
+        lua_pushinteger(state, static_cast<lua_Integer>(result.hitEntityId));
+        lua_setfield(state, -2, "entityId");
+        lua_pushnumber(state, static_cast<lua_Number>(result.hitX));
+        lua_setfield(state, -2, "x");
+        lua_pushnumber(state, static_cast<lua_Number>(result.hitY));
+        lua_setfield(state, -2, "y");
+        lua_pushnumber(state, static_cast<lua_Number>(result.hitZ));
+        lua_setfield(state, -2, "z");
+        lua_pushnumber(state, static_cast<lua_Number>(result.distance));
+        lua_setfield(state, -2, "distance");
+        return 1;
+    });
+    lua_setfield(L, -2, "performHitCheck");
+
+    // ffe.setLagCompensationWindow(ticks) -> nil
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const auto ticks = static_cast<uint32_t>(luaL_checkinteger(state, 1));
+        ffe::networking::setLagCompensationWindow(ticks);
+        return 0;
+    });
+    lua_setfield(L, -2, "setLagCompensationWindow");
+
+    // ffe.onHitConfirm(callback) -> nil
+    // callback(shooterEntityId, hitResult) where hitResult = {hit, entityId, x, y, z, distance}
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        // Release previous ref if any
+        lua_pushlightuserdata(state, &s_netOnHitConfirmKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (!lua_isnil(state, -1)) {
+            const int oldRef = static_cast<int>(lua_tointeger(state, -1));
+            if (oldRef != -2) { luaL_unref(state, LUA_REGISTRYINDEX, oldRef); }
+        }
+        lua_pop(state, 1);
+
+        if (lua_isfunction(state, 1)) {
+            lua_pushvalue(state, 1);
+            const int ref = luaL_ref(state, LUA_REGISTRYINDEX);
+            lua_pushlightuserdata(state, &s_netOnHitConfirmKey);
+            lua_pushinteger(state, static_cast<lua_Integer>(ref));
+            lua_settable(state, LUA_REGISTRYINDEX);
+        } else {
+            lua_pushlightuserdata(state, &s_netOnHitConfirmKey);
+            lua_pushinteger(state, -2); // LUA_NOREF
+            lua_settable(state, LUA_REGISTRYINDEX);
+        }
+        return 0;
+    });
+    lua_setfield(L, -2, "onHitConfirm");
+
+    // ================================================================
+    // Lobby / Matchmaking bindings
+    // ================================================================
+
+    // ffe.createLobby(name, maxPlayers) -> bool
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const char* name = luaL_checkstring(state, 1);
+        const int maxP   = static_cast<int>(luaL_checkinteger(state, 2));
+        if (maxP < 1 || maxP > static_cast<int>(ffe::networking::MAX_LOBBY_PLAYERS)) {
+            lua_pushboolean(state, 0);
+            return 1;
+        }
+        const bool ok = ffe::networking::createLobby(name, static_cast<uint32_t>(maxP));
+        lua_pushboolean(state, ok ? 1 : 0);
+        return 1;
+    });
+    lua_setfield(L, -2, "createLobby");
+
+    // ffe.destroyLobby() -> nil
+    lua_pushcfunction(L, [](lua_State* /*state*/) -> int {
+        ffe::networking::destroyLobby();
+        return 0;
+    });
+    lua_setfield(L, -2, "destroyLobby");
+
+    // ffe.joinLobby(playerName) -> bool
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const char* name = luaL_checkstring(state, 1);
+        const bool ok = ffe::networking::joinLobby(name);
+        lua_pushboolean(state, ok ? 1 : 0);
+        return 1;
+    });
+    lua_setfield(L, -2, "joinLobby");
+
+    // ffe.leaveLobby() -> nil
+    lua_pushcfunction(L, [](lua_State* /*state*/) -> int {
+        ffe::networking::leaveLobby();
+        return 0;
+    });
+    lua_setfield(L, -2, "leaveLobby");
+
+    // ffe.setReady(bool) -> nil
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const bool ready = lua_toboolean(state, 1) != 0;
+        ffe::networking::setReady(ready);
+        return 0;
+    });
+    lua_setfield(L, -2, "setReady");
+
+    // ffe.isInLobby() -> bool
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushboolean(state, ffe::networking::isInLobby() ? 1 : 0);
+        return 1;
+    });
+    lua_setfield(L, -2, "isInLobby");
+
+    // ffe.getLobbyPlayers() -> array of {id=number, name=string, ready=bool}
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        const auto& ls = ffe::networking::getLobbyState();
+        lua_newtable(state);
+        int idx = 1;
+        for (uint32_t i = 0; i < ffe::networking::MAX_LOBBY_PLAYERS; ++i) {
+            if (ls.players[i].connectionId == 0) { continue; }
+            lua_newtable(state);
+            lua_pushinteger(state, static_cast<lua_Integer>(ls.players[i].connectionId));
+            lua_setfield(state, -2, "id");
+            lua_pushstring(state, ls.players[i].name);
+            lua_setfield(state, -2, "name");
+            lua_pushboolean(state, ls.players[i].ready ? 1 : 0);
+            lua_setfield(state, -2, "ready");
+            lua_rawseti(state, -2, idx);
+            ++idx;
+        }
+        return 1;
+    });
+    lua_setfield(L, -2, "getLobbyPlayers");
+
+    // ffe.startLobbyGame() -> nil
+    lua_pushcfunction(L, [](lua_State* /*state*/) -> int {
+        ffe::networking::startLobbyGame();
+        return 0;
+    });
+    lua_setfield(L, -2, "startLobbyGame");
+
+    // ffe.onLobbyUpdate(callback) -> nil
+    // callback(lobbyState) where lobbyState is a table with players array
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        // Release previous ref if any
+        lua_pushlightuserdata(state, &s_netOnLobbyUpdateKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        const int oldRef = static_cast<int>(lua_tointeger(state, -1));
+        lua_pop(state, 1);
+        if (oldRef > 0) {
+            luaL_unref(state, LUA_REGISTRYINDEX, oldRef);
+        }
+
+        if (lua_isfunction(state, 1)) {
+            lua_pushvalue(state, 1);
+            const int ref = luaL_ref(state, LUA_REGISTRYINDEX);
+            lua_pushlightuserdata(state, &s_netOnLobbyUpdateKey);
+            lua_pushinteger(state, static_cast<lua_Integer>(ref));
+            lua_settable(state, LUA_REGISTRYINDEX);
+        } else {
+            lua_pushlightuserdata(state, &s_netOnLobbyUpdateKey);
+            lua_pushinteger(state, -2); // LUA_NOREF
+            lua_settable(state, LUA_REGISTRYINDEX);
+        }
+        return 0;
+    });
+    lua_setfield(L, -2, "onLobbyUpdate");
+
+    // ffe.onGameStart(callback) -> nil
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        // Release previous ref if any
+        lua_pushlightuserdata(state, &s_netOnGameStartKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        const int oldRef = static_cast<int>(lua_tointeger(state, -1));
+        lua_pop(state, 1);
+        if (oldRef > 0) {
+            luaL_unref(state, LUA_REGISTRYINDEX, oldRef);
+        }
+
+        if (lua_isfunction(state, 1)) {
+            lua_pushvalue(state, 1);
+            const int ref = luaL_ref(state, LUA_REGISTRYINDEX);
+            lua_pushlightuserdata(state, &s_netOnGameStartKey);
+            lua_pushinteger(state, static_cast<lua_Integer>(ref));
+            lua_settable(state, LUA_REGISTRYINDEX);
+        } else {
+            lua_pushlightuserdata(state, &s_netOnGameStartKey);
+            lua_pushinteger(state, -2); // LUA_NOREF
+            lua_settable(state, LUA_REGISTRYINDEX);
+        }
+        return 0;
+    });
+    lua_setfield(L, -2, "onGameStart");
 
     lua_setglobal(L, "ffe");
 }

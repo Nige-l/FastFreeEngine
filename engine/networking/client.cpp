@@ -124,6 +124,12 @@ void NetworkClient::onTransportReceive(const ReceivedPacket& pkt, void* userData
         if (reader.readU32(assignedId)) {
             self->m_clientId = assignedId;
         }
+    } else if (header.type == PacketType::LOBBY_STATE ||
+               header.type == PacketType::LOBBY_GAME_START) {
+        // Route lobby packets to the lobby callback (full packet for re-parse)
+        if (self->m_lobbyCb) {
+            self->m_lobbyCb(pkt.data, pkt.dataLength, self->m_lobbyData);
+        }
     } else {
         // Unknown or user-defined packet type -- forward as raw message
         if (self->m_messageCb) {
@@ -351,6 +357,11 @@ void NetworkClient::setDisconnectedCallback(const DisconnectedCallback cb, void*
 void NetworkClient::setMessageCallback(const MessageCallback cb, void* userData) {
     m_messageCb   = cb;
     m_messageData = userData;
+}
+
+void NetworkClient::setLobbyPacketCallback(const LobbyPacketCallback cb, void* userData) {
+    m_lobbyCb   = cb;
+    m_lobbyData = userData;
 }
 
 } // namespace ffe::networking

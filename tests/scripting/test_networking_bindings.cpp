@@ -241,3 +241,79 @@ TEST_CASE("ffe.onServerInput callable with function",
     REQUIRE(fix.engine.doString(
         "ffe.onServerInput(function(clientId, inputTable) end)"));
 }
+
+// =============================================================================
+// Lag compensation bindings
+// =============================================================================
+
+TEST_CASE("ffe.performHitCheck exists and returns nil when not server",
+          "[scripting][networking][lag_compensation]") {
+    NetworkingScriptFixture fix;
+    REQUIRE(fix.engine.doString(
+        "local result = ffe.performHitCheck(0, 0, 0, 1, 0, 0, 100, 0)\n"
+        "assert(result == nil, 'should return nil when not server/client')"));
+}
+
+TEST_CASE("ffe.setLagCompensationWindow callable",
+          "[scripting][networking][lag_compensation]") {
+    NetworkingScriptFixture fix;
+    // Should not error even when not a server
+    REQUIRE(fix.engine.doString("ffe.setLagCompensationWindow(32)"));
+}
+
+TEST_CASE("ffe.onHitConfirm callable with function",
+          "[scripting][networking][lag_compensation]") {
+    NetworkingScriptFixture fix;
+    REQUIRE(fix.engine.doString(
+        "ffe.onHitConfirm(function(shooterId, hitResult) end)"));
+}
+
+// =============================================================================
+// Lobby / Matchmaking bindings
+// =============================================================================
+
+TEST_CASE("ffe.createLobby exists and callable",
+          "[scripting][networking][lobby]") {
+    NetworkingScriptFixture fix;
+    // Not a server, so should return false
+    REQUIRE(fix.engine.doString(
+        "local ok = ffe.createLobby('TestLobby', 4)\n"
+        "assert(ok == false, 'createLobby should fail when not a server')"));
+}
+
+TEST_CASE("ffe.isInLobby returns false initially",
+          "[scripting][networking][lobby]") {
+    NetworkingScriptFixture fix;
+    REQUIRE(fix.engine.doString(
+        "assert(ffe.isInLobby() == false, 'should not be in lobby initially')"));
+}
+
+TEST_CASE("ffe.getLobbyPlayers returns empty table initially",
+          "[scripting][networking][lobby]") {
+    NetworkingScriptFixture fix;
+    REQUIRE(fix.engine.doString(
+        "local players = ffe.getLobbyPlayers()\n"
+        "assert(type(players) == 'table', 'should return table')\n"
+        "assert(#players == 0, 'should be empty, got ' .. #players)"));
+}
+
+TEST_CASE("ffe.setReady does not crash when not in lobby",
+          "[scripting][networking][lobby]") {
+    NetworkingScriptFixture fix;
+    REQUIRE(fix.engine.doString("ffe.setReady(true)"));
+    REQUIRE(fix.engine.doString("ffe.setReady(false)"));
+}
+
+TEST_CASE("ffe.onLobbyUpdate callable with function",
+          "[scripting][networking][lobby]") {
+    NetworkingScriptFixture fix;
+    REQUIRE(fix.engine.doString(
+        "ffe.onLobbyUpdate(function(state) end)"));
+}
+
+TEST_CASE("ffe.onGameStart callable with function",
+          "[scripting][networking][lobby]") {
+    NetworkingScriptFixture fix;
+    REQUIRE(fix.engine.doString(
+        "ffe.onGameStart(function() end)"));
+}

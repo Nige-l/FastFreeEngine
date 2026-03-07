@@ -16,23 +16,46 @@ namespace ffe::networking {
 // Packet types (wire values — do NOT reorder)
 // ---------------------------------------------------------------------------
 enum class PacketType : uint8_t {
-    CONNECT_REQUEST = 0x01,
-    CONNECT_ACCEPT  = 0x02,
-    CONNECT_REJECT  = 0x03,
-    DISCONNECT      = 0x04,
+    CONNECT_REQUEST  = 0x01,
+    CONNECT_ACCEPT   = 0x02,
+    CONNECT_REJECT   = 0x03,
+    DISCONNECT       = 0x04,
 
-    INPUT           = 0x10,
-    SNAPSHOT_FULL   = 0x11,
-    SNAPSHOT_DELTA  = 0x12,
+    INPUT            = 0x10,
+    SNAPSHOT_FULL    = 0x11,
+    SNAPSHOT_DELTA   = 0x12,
 
-    EVENT           = 0x20,
-    RPC             = 0x21,
+    EVENT            = 0x20,
+    RPC              = 0x21,
 
-    HEARTBEAT       = 0xF0
+    LOBBY_CREATE     = 0x30,
+    LOBBY_JOIN       = 0x31,
+    LOBBY_LEAVE      = 0x32,
+    LOBBY_READY      = 0x33,
+    LOBBY_STATE      = 0x34,
+    LOBBY_GAME_START = 0x35,
+
+    HIT_CHECK        = 0x40,
+
+    HEARTBEAT        = 0xF0
 };
 
 /// Return true if \p t is a known PacketType value.
 bool isValidPacketType(uint8_t t);
+
+// ---------------------------------------------------------------------------
+// Lobby shared types
+// ---------------------------------------------------------------------------
+constexpr uint32_t MAX_LOBBY_PLAYERS     = 16;
+constexpr uint32_t MAX_LOBBY_NAME_LENGTH = 32;
+
+/// Compact player info for lobby state broadcasts.
+/// Fixed-size, no heap allocations — safe for direct serialization.
+struct LobbyPlayerInfo {
+    uint32_t connectionId{0};
+    bool     ready{false};
+    char     name[MAX_LOBBY_NAME_LENGTH]{}; // null-terminated
+};
 
 // ---------------------------------------------------------------------------
 // Packet header — 6 bytes on the wire

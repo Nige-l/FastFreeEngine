@@ -6,13 +6,13 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 59 |
-| Total tests | 947 (Clang-18, zero warnings) |
-| Total Lua bindings | ~133 |
+| Last session | 60 |
+| Total tests | 991 (Clang-18, zero warnings) |
+| Total Lua bindings | ~146 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
 | Phase 2 (3D Foundation) | COMPLETE |
 | Phase 3 (Standalone Editor) | MVP COMPLETE (6 milestones, Sessions 51-56) |
-| Phase 4 (Networking) | IN PROGRESS (Session 59: client-side prediction + net demo) |
+| Phase 4 (Networking) | IN PROGRESS (Session 60: lobby + lag compensation) |
 | Windows build | DONE (MinGW-w64 cross-compilation) |
 | macOS build | DONE (arm64 + x86_64) |
 | GitHub Actions CI | DONE (Linux Clang-18, Linux GCC-13, macOS arm64) |
@@ -45,7 +45,7 @@
 | Timers | Stable | ffe.after/every/cancelTimer, 256 max, fixed-size array |
 | Camera | Stable | CameraShake, ClearColor, set3DCameraFPS/Orbit |
 | Screenshot | Stable | glReadPixels, PNG via stb_image_write, ffe.screenshot |
-| Networking | In Progress | ENet transport, PacketReader/Writer, rate limiting, ReplicationRegistry (32 types, snapshot serialization, slerp interpolation), NetworkServer (authoritative broadcast, input processing), NetworkClient (snapshot receiving, interpolation, prediction), ClientPrediction (64-slot ring buffer, reconciliation), network_system module, 17 Lua bindings |
+| Networking | In Progress | ENet transport, PacketReader/Writer, rate limiting, ReplicationRegistry (32 types, snapshot serialization, slerp interpolation), NetworkServer (authoritative broadcast, input processing, lobby management), NetworkClient (snapshot receiving, interpolation, prediction, lobby client), ClientPrediction (64-slot ring buffer, reconciliation), LobbyServer/LobbyClient (create/join/leave/ready/start), LagCompensator (64-frame history, ray-vs-sphere hit check), network_system module, 30 Lua bindings |
 
 ## Demo Games
 
@@ -65,11 +65,11 @@
 
 | Session | Summary |
 |---------|---------|
+| 60 | Lobby/matchmaking (LobbyServer/Client), lag compensation (LagCompensator), 7 new packet types, 13 new Lua bindings. 991 tests (FAST). |
 | 59 | Client-side prediction, server input processing, 5 new Lua bindings, Net Arena demo. 947 tests (FAST). |
 | 58 | Replication system, NetworkServer/Client, network_system module, 12 Lua networking bindings, 2 security fixes. 927 tests (FULL). |
 | 57 | Phase 4 kickoff — ENet transport, packet system, rate limiting, networking ADR. 872 tests. |
 | 56 | Build pipeline — game export, runtime binary, ffe.loadSceneJSON. 842 tests. Milestone 6 delivered. **Phase 3 MVP COMPLETE.** |
-| 55 | Scene hierarchy tree (parent/child), drag-and-drop (asset browser to inspector), scene graph, ReparentCommand. 828 tests. Milestone 5 delivered. |
 
 ## Phase 2 — 3D Foundation: COMPLETE
 
@@ -128,15 +128,15 @@ All deliverables met:
 - [x] Client-server architecture (NetworkServer authoritative broadcast, NetworkClient snapshot receiving)
 - [x] ECS state replication (ReplicationRegistry, 32 component types, snapshot serialization, slerp interpolation)
 - [x] Network interpolation (client-side entity interpolation via SnapshotBuffer)
-- [x] Lua bindings for networking (17 bindings: startServer, connectToServer, sendMessage, onNetworkMessage, callbacks, setNetworkTickRate, setLocalPlayer, sendInput, onServerInput, getPredictionError, getNetworkTick)
+- [x] Lua bindings for networking (30 bindings: startServer, connectToServer, sendMessage, onNetworkMessage, callbacks, setNetworkTickRate, setLocalPlayer, sendInput, onServerInput, getPredictionError, getNetworkTick, createLobby, destroyLobby, joinLobby, leaveLobby, setReady, isInLobby, getLobbyPlayers, startLobbyGame, onLobbyUpdate, onGameStart, performHitCheck, setLagCompensationWindow, onHitConfirm)
 - [x] Client-side prediction and server reconciliation (ClientPrediction, 64-slot ring buffer, MoveFn, configurable threshold)
 - [x] Server input processing (INPUT packet validation, per-connection queue, InputCallbackFn)
 - [x] At least one networked demo game (Net Arena — 2D multiplayer arena)
-- [ ] Lobby/matchmaking API
-- [ ] Lag compensation
+- [x] Lobby/matchmaking API (LobbyServer/LobbyClient, create/join/leave/ready/game start, max player enforcement, duplicate rejection)
+- [x] Lag compensation (LagCompensator, 64-frame history, ray-vs-sphere hit check, server-side rewind window)
 - [ ] NAT traversal / relay server support
 
-### Next Session (60) — Lobby/matchmaking, lag compensation
+### Next Session (61) — NAT traversal / relay, or Phase 4 wrap-up
 
 ## Build Commands
 

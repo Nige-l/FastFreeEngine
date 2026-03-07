@@ -81,6 +81,12 @@ public:
     void setDisconnectedCallback(DisconnectedCallback cb, void* userData);
     void setMessageCallback(MessageCallback cb, void* userData);
 
+    /// Callback for lobby packets (LOBBY_STATE, LOBBY_GAME_START).
+    /// Receives full raw packet data (including header) so the caller
+    /// can parse the header and dispatch.
+    using LobbyPacketCallback = void(*)(const uint8_t* data, uint16_t len, void*);
+    void setLobbyPacketCallback(LobbyPacketCallback cb, void* userData);
+
 private:
     ClientTransport  m_transport;
     SnapshotBuffer   m_snapshots;
@@ -99,6 +105,8 @@ private:
     void*                m_disconnectedData = nullptr;
     MessageCallback      m_messageCb        = nullptr;
     void*                m_messageData      = nullptr;
+    LobbyPacketCallback  m_lobbyCb          = nullptr;
+    void*                m_lobbyData        = nullptr;
 
     // Internal transport-level callbacks
     static void onTransportConnect(void* userData);

@@ -10,6 +10,7 @@
 //
 // Tiers: LEGACY (primary), STANDARD, MODERN.
 
+#include "networking/lag_compensation.h"
 #include "networking/prediction.h"
 #include "networking/replication.h"
 #include "networking/transport.h"
@@ -68,6 +69,22 @@ public:
     /// Apply queued inputs from all clients. Called internally during networkTick.
     void applyQueuedInputs(ffe::World& world);
 
+    // -- Lag compensation (server-side rewind) --
+    /// Perform a lag-compensated hit check at the given tick.
+    HitCheckResult processHitCheck(uint32_t shooterConnectionId,
+                                   uint32_t atTick,
+                                   float originX, float originY, float originZ,
+                                   float dirX, float dirY, float dirZ,
+                                   float maxDistance,
+                                   uint32_t ignoreEntityId);
+
+    /// Set a callback that fires when a hit is confirmed server-side.
+    void setHitConfirmCallback(HitConfirmFn cb, void* userData);
+
+    /// Access the lag compensator (e.g. for configuring max rewind).
+    LagCompensator& lagCompensator();
+    const LagCompensator& lagCompensator() const;
+
     // -- Callbacks (function pointers + user data, no std::function) --
     using ClientConnectCallback    = void(*)(uint32_t clientId, void*);
     using ClientDisconnectCallback = void(*)(uint32_t clientId, void*);
@@ -97,6 +114,11 @@ private:
     // Input callback storage
     InputCallbackFn m_inputCb       = nullptr;
     void*           m_inputCbData   = nullptr;
+
+    // Lag compensation
+    LagCompensator m_lagComp;
+    HitConfirmFn   m_hitConfirmCb     = nullptr;
+    void*          m_hitConfirmData   = nullptr;
 
     // Per-connection input queue (fixed-size, no heap allocations)
     static constexpr uint32_t MAX_INPUT_QUEUE_PER_CLIENT = 8;

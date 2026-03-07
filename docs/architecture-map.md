@@ -12,8 +12,8 @@ engine/
   renderer/opengl/  — OpenGL 3.3 RHI backend, GL debug utilities                               [renderer-specialist]
   audio/            — miniaudio backend, WAV/OGG, sound/music playback, headless mode           [engine-dev]
   physics/          — 2D collision: spatial hash, AABB/Circle, layer/mask, callbacks            [engine-dev]
-  scripting/        — LuaJIT sandbox, ffe.* Lua API (~133 bindings), timer system               [engine-dev + api-designer]
-  networking/       — ENet transport, replication, server/client, prediction, network system      [engine-dev]
+  scripting/        — LuaJIT sandbox, ffe.* Lua API (~146 bindings), timer system               [engine-dev + api-designer]
+  networking/       — ENet transport, replication, server/client, prediction, lobby, lag compensation, network system  [engine-dev]
   editor/           — Debug overlay (HUD text, FPS) — future standalone editor                  [engine-dev]
 tests/
   core/             — ECS, input, timer, platform tests                                        [engine-dev]
@@ -79,7 +79,7 @@ Cross-cutting: `core/platform.h` (path canonicalization) used by scripting + ren
 | Audio | `engine/audio/audio.h`, `engine/audio/audio.cpp` |
 | Collision | `engine/physics/collider2d.h`, `engine/physics/collision_system.h` |
 | Scripting | `engine/scripting/script_engine.h`, `engine/scripting/script_engine.cpp` |
-| Networking | `engine/networking/transport.h`, `engine/networking/packet.h`, `engine/networking/replication.h`, `engine/networking/server.h`, `engine/networking/client.h`, `engine/networking/prediction.h`, `engine/networking/network_system.h`, `engine/networking/connection.h` |
+| Networking | `engine/networking/transport.h`, `engine/networking/packet.h`, `engine/networking/replication.h`, `engine/networking/server.h`, `engine/networking/client.h`, `engine/networking/prediction.h`, `engine/networking/lobby.h`, `engine/networking/lag_compensation.h`, `engine/networking/network_system.h`, `engine/networking/connection.h` |
 | Editor | `engine/editor/editor.h`, `engine/editor/editor.cpp` |
 
 ## 4. Lua Binding Registry (`ffe.*`)
@@ -120,7 +120,7 @@ Cross-cutting: `core/platform.h` (path canonicalization) used by scripting + ren
 
 **Screenshot** (1): `screenshot`
 
-**Networking** (17): `startServer`, `stopServer`, `isServer`, `connectToServer`, `disconnect`, `isConnected`, `getClientId`, `sendMessage`, `onNetworkMessage`, `onClientConnected`, `onClientDisconnected`, `onConnected`, `onDisconnected`, `setNetworkTickRate`, `setLocalPlayer`, `sendInput`, `onServerInput`, `getPredictionError`, `getNetworkTick`
+**Networking** (30): `startServer`, `stopServer`, `isServer`, `connectToServer`, `disconnect`, `isConnected`, `getClientId`, `sendMessage`, `onNetworkMessage`, `onClientConnected`, `onClientDisconnected`, `onConnected`, `onDisconnected`, `setNetworkTickRate`, `setLocalPlayer`, `sendInput`, `onServerInput`, `getPredictionError`, `getNetworkTick`, `createLobby`, `destroyLobby`, `joinLobby`, `leaveLobby`, `setReady`, `isInLobby`, `getLobbyPlayers`, `startLobbyGame`, `onLobbyUpdate`, `onGameStart`, `performHitCheck`, `setLagCompensationWindow`, `onHitConfirm`
 
 ## 5. ECS Components Registry
 
