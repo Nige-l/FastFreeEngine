@@ -6,12 +6,12 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 54 |
-| Total tests | 810 (Clang-18 passing, zero warnings) |
+| Last session | 55 |
+| Total tests | 828 (Clang-18 + GCC-13 passing, zero warnings) |
 | Total Lua bindings | ~115 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
 | Phase 2 (3D Foundation) | COMPLETE |
-| Phase 3 (Standalone Editor) | IN PROGRESS — Milestone 4 delivered |
+| Phase 3 (Standalone Editor) | IN PROGRESS — Milestone 5 delivered |
 | Windows build | DONE (MinGW-w64 cross-compilation) |
 | macOS build | DONE (arm64 + x86_64) |
 | GitHub Actions CI | DONE (Linux Clang-18, Linux GCC-13, macOS arm64) |
@@ -31,7 +31,8 @@
 | Tilemap | Stable | Tilemap component, renderTilemaps, 1024x1024 max |
 | Particles | Stable | ParticleEmitter, 128 inline pool, gravity/color/size interp |
 | Scene Serialisation | Stable | SceneSerialiser — saveScene/loadScene (JSON), entity count limits, NaN rejection, path traversal rejection |
-| Editor | Milestone 4 | Standalone binary, ImGui dockspace, scene hierarchy, inspector, undo/redo (entity + component + inspector fields + add/remove), FBO viewport, file dialogs, play-in-editor (snapshot/restore), asset browser, viewport gizmos (translate/rotate/scale), keyboard shortcuts, component add/remove |
+| Editor | Milestone 5 | Standalone binary, ImGui dockspace, scene hierarchy tree (parent/child), inspector, undo/redo (entity + component + inspector fields + add/remove + reparent), FBO viewport, file dialogs, play-in-editor (snapshot/restore), asset browser with drag-and-drop, viewport gizmos (translate/rotate/scale), keyboard shortcuts, component add/remove |
+| Scene Graph | Stable | setParent/removeParent/getParent/getChildren/isRoot/isAncestor/getRootEntities, circular parenting prevention |
 | Scene Mgmt | Stable | destroyAllEntities, cancelAllTimers, loadScene |
 | Input | Stable | keyboard+mouse+gamepad, pressed/held/released, action bindings |
 | Audio | Stable | miniaudio, WAV/OGG, playSound/playMusic, streaming, headless, 3D positional (playSound3D, listener sync) |
@@ -60,11 +61,11 @@
 
 | Session | Summary |
 |---------|---------|
+| 55 | Scene hierarchy tree (parent/child), drag-and-drop (asset browser to inspector), scene graph, ReparentCommand. 828 tests. Milestone 5 delivered. |
 | 54 | Viewport gizmos, keyboard shortcuts, component add/remove from inspector. 810 tests. Milestone 4 delivered. |
 | 53 | Play-in-editor (snapshot/restore), inspector undo integration, asset browser panel. 793 tests. Milestone 3 delivered. |
 | 52 | FBO viewport, component-modify commands, file dialogs (Open/Save/Save As). 780 tests. Milestone 2 delivered. |
 | 51 | Phase 3 kickoff — standalone editor scaffold, scene serialisation, inspector, undo/redo commands. 766 tests. Milestone 1 delivered. |
-| 50 | Text flicker fix (fixed-timestep gating), macOS CI fix (LINK_GROUP + vcpkg pin), 3 new TTF tests, README update. 738 tests. |
 
 ## Phase 2 — 3D Foundation: COMPLETE
 
@@ -101,14 +102,14 @@ All deliverables met:
 - [x] Viewport gizmos (translate/rotate/scale, axis constraints, undo integration) — Milestone 4
 - [x] Keyboard shortcuts (ShortcutManager, 7 default bindings) — Milestone 4
 - [x] Component add/remove from inspector (undoable) — Milestone 4
-- [ ] Scene hierarchy tree (parent/child relationships, drag reorder)
-- [ ] Drag-and-drop (asset browser to inspector for texture/mesh assignment)
+- [x] Scene hierarchy tree (parent/child relationships, drag reorder) — Milestone 5
+- [x] Drag-and-drop (asset browser to inspector for texture/mesh assignment) — Milestone 5
 - [ ] Editor preferences persistence
 - [ ] Build pipeline (export game as standalone executable)
 - [ ] Project creation wizard
 - [ ] LLM integration panel (connect AI assistant, generate code, explain systems)
 
-### Next Session (55) — TBD (see Session 54 devlog for plan)
+### Next Session (56) — TBD (Phase 3 MVP assessment — see Session 55 devlog)
 
 ## Build Commands
 

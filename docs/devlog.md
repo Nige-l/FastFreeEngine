@@ -3,6 +3,58 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-34 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 55: Editor Milestone 5 — Scene Hierarchy Tree + Drag-and-Drop
+
+### Summary
+
+Session 55 delivered Editor Milestone 5: a scene graph with parent/child entity relationships, a recursive hierarchy tree panel replacing the flat entity list, drag-to-reparent with undo support, and asset drag-and-drop from the browser to inspector fields. FULL build passed: 828 tests on both Clang-18 and GCC-13, zero warnings.
+
+### New Features
+
+- **Scene Graph** (`engine/scene/scene_graph.h/.cpp`) — parent/child entity relationship management with `setParent`, `removeParent`, `getParent`, `getChildren`, `isRoot`, `isAncestor`, and `getRootEntities`. Includes circular parenting prevention (cannot parent an entity to itself or any of its descendants).
+- **Hierarchy Tree Panel** — replaced the flat entity list in the scene hierarchy with a recursive tree view using `ImGui::TreeNodeEx`. Entities display as expandable tree nodes showing their children. Root entities appear at the top level.
+- **Drag-to-Reparent** — drag entities in the hierarchy tree to reparent them. Dropping onto another entity makes it a child; dropping onto empty space unparents it. All reparenting operations are undoable.
+- **ReparentCommand** (`editor/commands/reparent_command.h`) — undoable command for parent/child relationship changes, integrated with the existing undo/redo system.
+- **Asset Drag-and-Drop** — drag files from the asset browser panel and drop them onto inspector fields. Supports Material3D texture fields (diffuse, specular, normal maps) and Mesh component model assignment.
+- **Right-Click Context Menu** — hierarchy tree context menu with Create Entity, Create Child Entity, Unparent, and Delete options.
+
+### Tests
+
+- **18 new tests** (828 total, up from 810)
+  - `tests/scene/test_scene_graph.cpp` — scene graph operations: setParent, removeParent, getChildren, isAncestor, circular parenting prevention, getRootEntities
+  - `tests/editor/test_hierarchy_panel.cpp` — hierarchy tree rendering, reparenting operations
+
+### Reviews
+
+- **performance-critic:** MINOR ISSUES (non-blocking) — tree traversal is fine for expected entity counts
+- **api-designer:** Updated `engine/scene/.context.md` and `editor/.context.md` with new APIs
+- **game-dev-tester:** SKIP (editor internals, no new Lua API paradigm)
+
+### Phase 3 Progress — Editor MVP Assessment
+
+With Milestone 5 complete, the editor now has all core features expected of an MVP scene editor:
+
+| Capability | Status |
+|-----------|--------|
+| Scene hierarchy with parent/child | Done (M5) |
+| Entity inspector (all components) | Done (M1-M4) |
+| Undo/redo (all operations) | Done (M1-M5) |
+| FBO viewport | Done (M2) |
+| Play-in-editor | Done (M3) |
+| File dialogs (open/save) | Done (M2) |
+| Asset browser | Done (M3) |
+| Viewport gizmos | Done (M4) |
+| Keyboard shortcuts | Done (M4) |
+| Drag-and-drop | Done (M5) |
+| Editor preferences | Not yet |
+| Build pipeline | Not yet |
+| Project wizard | Not yet |
+| LLM integration | Not yet |
+
+The editor is now a **functional MVP** — a developer can create scenes, arrange entity hierarchies, edit components, manipulate objects with gizmos, manage assets, play-test in the editor, and save/load their work. The remaining Phase 3 items (preferences, build pipeline, project wizard, LLM panel) are important for a polished product but not required for the editor to be usable.
+
+---
+
 ## 2026-03-07 — Session 54: Editor Milestone 4 — Gizmos, Keyboard Shortcuts, Component Add/Remove
 
 ### Summary
