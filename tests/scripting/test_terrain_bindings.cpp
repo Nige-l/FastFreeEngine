@@ -94,3 +94,62 @@ TEST_CASE("loadTerrain rejects negative dimensions", "[scripting][terrain]") {
         "local h = ffe.loadTerrain('test.png', -100, 100, 10)\n"
         "assert(h == 0, 'expected 0 for negative width, got ' .. tostring(h))"));
 }
+
+// =============================================================================
+// ffe.setTerrainSplatMap — binding registration (M2)
+// =============================================================================
+
+TEST_CASE("setTerrainSplatMap binding is callable", "[scripting][terrain]") {
+    TerrainBindingFixture fix;
+    CHECK(fix.engine.doString("ffe.setTerrainSplatMap(0)"));
+}
+
+TEST_CASE("setTerrainSplatMap with texture id is callable", "[scripting][terrain]") {
+    TerrainBindingFixture fix;
+    CHECK(fix.engine.doString("ffe.setTerrainSplatMap(42)"));
+}
+
+// =============================================================================
+// ffe.setTerrainLayer — binding registration and validation (M2)
+// =============================================================================
+
+TEST_CASE("setTerrainLayer binding is callable with valid args", "[scripting][terrain]") {
+    TerrainBindingFixture fix;
+    CHECK(fix.engine.doString("ffe.setTerrainLayer(0, 1, 16.0)"));
+}
+
+TEST_CASE("setTerrainLayer accepts all four layer indices", "[scripting][terrain]") {
+    TerrainBindingFixture fix;
+    CHECK(fix.engine.doString(
+        "ffe.setTerrainLayer(0, 1, 16.0)\n"
+        "ffe.setTerrainLayer(1, 2, 12.0)\n"
+        "ffe.setTerrainLayer(2, 3, 20.0)\n"
+        "ffe.setTerrainLayer(3, 4, 8.0)"));
+}
+
+TEST_CASE("setTerrainLayer rejects layerIndex >= 4", "[scripting][terrain]") {
+    TerrainBindingFixture fix;
+    // Should not crash — layerIndex 4 is rejected by the C++ validation.
+    // No terrain is loaded so the binding returns early anyway, but this
+    // verifies the binding itself does not error on the Lua side.
+    CHECK(fix.engine.doString("ffe.setTerrainLayer(4, 1, 16.0)"));
+}
+
+TEST_CASE("setTerrainLayer rejects negative layerIndex", "[scripting][terrain]") {
+    TerrainBindingFixture fix;
+    CHECK(fix.engine.doString("ffe.setTerrainLayer(-1, 1, 16.0)"));
+}
+
+// =============================================================================
+// ffe.setTerrainTriplanar — binding registration (M2)
+// =============================================================================
+
+TEST_CASE("setTerrainTriplanar binding is callable", "[scripting][terrain]") {
+    TerrainBindingFixture fix;
+    CHECK(fix.engine.doString("ffe.setTerrainTriplanar(true, 0.7)"));
+}
+
+TEST_CASE("setTerrainTriplanar with false is callable", "[scripting][terrain]") {
+    TerrainBindingFixture fix;
+    CHECK(fix.engine.doString("ffe.setTerrainTriplanar(false, 0.5)"));
+}

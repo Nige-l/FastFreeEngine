@@ -36,6 +36,7 @@ struct TerrainAsset {
     TerrainChunkGpu chunks[MAX_CHUNKS_TOTAL];
     u32 chunkCount = 0;
     rhi::TextureHandle diffuseTexture{0};
+    TerrainMaterial material;  // M2: splat-map texturing material
 };
 
 // Get internal terrain asset data. Returns nullptr for invalid/inactive handles.

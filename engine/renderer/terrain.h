@@ -88,11 +88,47 @@ void unloadAllTerrains();
 // O(1) -- direct array lookup after coordinate mapping.
 f32 getTerrainHeight(TerrainHandle handle, f32 worldX, f32 worldZ);
 
-// --- Texture ---
+// --- Texture (M1 single-texture path) ---
 
 // Set an optional diffuse texture for terrain rendering.
 // If not set, terrain renders with a default green-ish diffuse color.
 void setTerrainTexture(TerrainHandle handle, rhi::TextureHandle texture);
+
+// --- Terrain Material (M2 splat-map texturing) ---
+
+// A single terrain texture layer: diffuse texture + UV tiling scale.
+// Layers are sampled from texture units 2-5 in the TERRAIN shader.
+struct TerrainLayer {
+    rhi::TextureHandle texture{0};   // Diffuse texture for this layer (0 = unused)
+    f32 uvScale = 16.0f;             // UV tiling multiplier (default 16.0)
+};
+
+// Material for splat-map terrain rendering.
+// When splatTexture is valid (non-zero), the terrain render pass uses the TERRAIN
+// shader with 4-layer blending. Otherwise it falls back to MESH_BLINN_PHONG.
+struct TerrainMaterial {
+    rhi::TextureHandle splatTexture{0};    // RGBA splat map (R=layer0, G=layer1, B=layer2, A=layer3)
+    TerrainLayer layers[4] = {};           // Per-layer texture + UV scale
+    bool triplanarEnabled = false;         // Enable triplanar projection for steep surfaces
+    f32  triplanarThreshold = 0.7f;        // Normal.y threshold for triplanar activation
+};
+
+// Set the splat map texture (RGBA = blend weights for 4 layers).
+// The texture must be an RGBA image loaded via loadTexture().
+// Cold path only -- do NOT call per frame.
+void setTerrainSplatMap(TerrainHandle handle, rhi::TextureHandle splatTexture);
+
+// Set a terrain texture layer (0-3) with UV tiling scale.
+// layerIndex must be 0-3 (corresponding to splat map R, G, B, A channels).
+// uvScale: tiling multiplier (default 16.0). Higher = more repetitions. Must be > 0.
+// Cold path only.
+void setTerrainLayer(TerrainHandle handle, u32 layerIndex,
+                     rhi::TextureHandle texture, f32 uvScale = 16.0f);
+
+// Enable/disable triplanar projection for steep surfaces.
+// threshold: fragments with abs(normal.y) < threshold use triplanar (default 0.7).
+// Clamped to (0.0, 1.0].
+void setTerrainTriplanar(TerrainHandle handle, bool enabled, f32 threshold = 0.7f);
 
 // --- Convenience ---
 

@@ -7289,6 +7289,68 @@ void ScriptEngine::registerEcsBindings() {
     lua_pushcfunction(L, ffe_setTerrainTexture);
     lua_setfield(L, -2, "setTerrainTexture");
 
+    // ffe.setTerrainSplatMap(textureId: integer) -> nothing
+    // Set the splat map texture for the first active terrain.
+    auto ffe_setTerrainSplatMap = [](lua_State* state) -> int {
+        const ffe::renderer::TerrainHandle terrain =
+            ffe::renderer::getFirstActiveTerrain();
+        if (!ffe::renderer::isValid(terrain)) { return 0; }
+
+        const lua_Integer rawId = lua_tointeger(state, 1);
+        const ffe::rhi::TextureHandle tex{static_cast<ffe::u32>(rawId > 0 ? rawId : 0)};
+        ffe::renderer::setTerrainSplatMap(terrain, tex);
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_setTerrainSplatMap);
+    lua_setfield(L, -2, "setTerrainSplatMap");
+
+    // ffe.setTerrainLayer(layerIndex: integer, textureId: integer, uvScale: number) -> nothing
+    // Set a terrain texture layer (0-3) on the first active terrain.
+    auto ffe_setTerrainLayer = [](lua_State* state) -> int {
+        const ffe::renderer::TerrainHandle terrain =
+            ffe::renderer::getFirstActiveTerrain();
+        if (!ffe::renderer::isValid(terrain)) { return 0; }
+
+        const lua_Integer rawLayer = lua_tointeger(state, 1);
+        if (rawLayer < 0 || rawLayer > 3) {
+            FFE_LOG_ERROR("ScriptEngine",
+                          "ffe.setTerrainLayer: layerIndex must be 0-3, got %lld",
+                          static_cast<long long>(rawLayer));
+            return 0;
+        }
+
+        const lua_Integer rawId = lua_tointeger(state, 2);
+        const ffe::rhi::TextureHandle tex{static_cast<ffe::u32>(rawId > 0 ? rawId : 0)};
+
+        const lua_Number rawScale = lua_tonumber(state, 3);
+        const ffe::f32 uvScale = (rawScale > 0.0) ? static_cast<ffe::f32>(rawScale) : 16.0f;
+
+        ffe::renderer::setTerrainLayer(terrain,
+                                       static_cast<ffe::u32>(rawLayer),
+                                       tex, uvScale);
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_setTerrainLayer);
+    lua_setfield(L, -2, "setTerrainLayer");
+
+    // ffe.setTerrainTriplanar(enabled: boolean, threshold: number) -> nothing
+    // Enable/disable triplanar projection on the first active terrain.
+    auto ffe_setTerrainTriplanar = [](lua_State* state) -> int {
+        const ffe::renderer::TerrainHandle terrain =
+            ffe::renderer::getFirstActiveTerrain();
+        if (!ffe::renderer::isValid(terrain)) { return 0; }
+
+        const bool enabled = lua_toboolean(state, 1) != 0;
+        const lua_Number rawThreshold = lua_tonumber(state, 2);
+        const ffe::f32 threshold = (rawThreshold > 0.0 && rawThreshold <= 1.0)
+            ? static_cast<ffe::f32>(rawThreshold) : 0.7f;
+
+        ffe::renderer::setTerrainTriplanar(terrain, enabled, threshold);
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_setTerrainTriplanar);
+    lua_setfield(L, -2, "setTerrainTriplanar");
+
     lua_setglobal(L, "ffe");
 }
 

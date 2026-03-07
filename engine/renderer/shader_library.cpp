@@ -1311,6 +1311,201 @@ void main() {
 }
 )glsl";
 
+// --- Terrain splat-map texturing shader (Phase 9 M2) ---
+// Vertex shader: identical to MESH_BLINN_PHONG but uses separate view/projection uniforms.
+// Fragment shader: 4-layer splat-map blending with optional triplanar projection.
+// GLSL 330 core (LEGACY tier).
+
+static const char* const TERRAIN_VERT_SOURCE = R"glsl(
+#version 330 core
+
+layout(location = 0) in vec3 a_position;
+layout(location = 1) in vec3 a_normal;
+layout(location = 2) in vec2 a_texcoord;
+
+uniform mat4 u_model;
+uniform mat4 u_viewProjection;
+uniform mat3 u_normalMatrix;
+uniform mat4 u_lightSpaceMatrix;
+
+out vec3 v_fragPos;
+out vec3 v_normal;
+out vec2 v_texcoord;
+out vec4 v_fragPosLightSpace;
+
+void main() {
+    vec4 worldPos       = u_model * vec4(a_position, 1.0);
+    v_fragPos           = worldPos.xyz;
+    v_normal            = u_normalMatrix * a_normal;
+    v_texcoord          = a_texcoord;
+    v_fragPosLightSpace = u_lightSpaceMatrix * worldPos;
+    gl_Position         = u_viewProjection * worldPos;
+}
+)glsl";
+
+static const char* const TERRAIN_FRAG_SOURCE = R"glsl(
+#version 330 core
+
+#define MAX_POINT_LIGHTS 8
+
+in vec3 v_fragPos;
+in vec3 v_normal;
+in vec2 v_texcoord;
+in vec4 v_fragPosLightSpace;
+
+// Splat map: RGBA = weights for 4 layers (texture unit 1)
+uniform sampler2D u_splatMap;
+
+// Layer textures (texture units 2-5)
+uniform sampler2D u_layer0;
+uniform sampler2D u_layer1;
+uniform sampler2D u_layer2;
+uniform sampler2D u_layer3;
+
+// Per-layer UV tiling scale
+uniform float u_layerScale0;
+uniform float u_layerScale1;
+uniform float u_layerScale2;
+uniform float u_layerScale3;
+
+// Triplanar projection
+uniform int   u_triplanarEnabled;
+uniform float u_triplanarThreshold;
+
+// Lighting (same as MESH_BLINN_PHONG)
+uniform vec3  u_lightDir;
+uniform vec3  u_lightColor;
+uniform vec3  u_ambientColor;
+uniform vec3  u_viewPos;
+
+// Point lights
+uniform int   u_pointLightCount;
+uniform vec3  u_pointLightPos[MAX_POINT_LIGHTS];
+uniform vec3  u_pointLightColor[MAX_POINT_LIGHTS];
+uniform float u_pointLightRadius[MAX_POINT_LIGHTS];
+
+// Shadow map (texture unit 0)
+uniform sampler2D u_shadowMap;
+uniform int       u_shadowsEnabled;
+uniform float     u_shadowBias;
+
+// Fog
+uniform int   u_fogEnabled;
+uniform vec3  u_fogColor;
+uniform float u_fogNear;
+uniform float u_fogFar;
+
+out vec4 fragColor;
+
+// Triplanar sampling: sample texture from 3 axis-aligned projections
+// and blend by surface normal weights.
+vec3 sampleLayerTriplanar(sampler2D tex, float scale, vec3 worldPos, vec3 blend) {
+    vec3 xzSample = texture(tex, worldPos.xz * scale).rgb;
+    vec3 xySample = texture(tex, worldPos.xy * scale).rgb;
+    vec3 yzSample = texture(tex, worldPos.yz * scale).rgb;
+    return xzSample * blend.y + xySample * blend.z + yzSample * blend.x;
+}
+
+// PCF 3x3 shadow calculation (same as MESH_BLINN_PHONG)
+float calcShadow() {
+    if (u_shadowsEnabled == 0) return 1.0;
+    vec3 projCoords = v_fragPosLightSpace.xyz / v_fragPosLightSpace.w;
+    projCoords = projCoords * 0.5 + 0.5;
+    if (projCoords.z > 1.0) return 1.0;
+    float shadow = 0.0;
+    vec2 texelSize = 1.0 / vec2(textureSize(u_shadowMap, 0));
+    for (int x = -1; x <= 1; ++x) {
+        for (int y = -1; y <= 1; ++y) {
+            float pcfDepth = texture(u_shadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
+            shadow += (projCoords.z - u_shadowBias) > pcfDepth ? 1.0 : 0.0;
+        }
+    }
+    return 1.0 - (shadow / 9.0);
+}
+
+void main() {
+    vec3 N = normalize(v_normal);
+
+    // Sample splat map — RGBA = weights for layers 0-3
+    vec4 splat = texture(u_splatMap, v_texcoord);
+    float totalWeight = splat.r + splat.g + splat.b + splat.a;
+    if (totalWeight > 0.001) {
+        splat /= totalWeight; // Normalize weights
+    }
+
+    // Determine terrain color via layer blending
+    vec3 terrainColor;
+    if (u_triplanarEnabled != 0 && abs(N.y) < u_triplanarThreshold) {
+        // Triplanar blending for steep surfaces
+        vec3 blend = abs(N);
+        blend = max(blend, vec3(0.00001));
+        float b = blend.x + blend.y + blend.z;
+        blend /= b;
+
+        terrainColor =
+            sampleLayerTriplanar(u_layer0, u_layerScale0, v_fragPos, blend) * splat.r +
+            sampleLayerTriplanar(u_layer1, u_layerScale1, v_fragPos, blend) * splat.g +
+            sampleLayerTriplanar(u_layer2, u_layerScale2, v_fragPos, blend) * splat.b +
+            sampleLayerTriplanar(u_layer3, u_layerScale3, v_fragPos, blend) * splat.a;
+    } else {
+        // Standard UV sampling for flat surfaces
+        terrainColor =
+            texture(u_layer0, v_texcoord * u_layerScale0).rgb * splat.r +
+            texture(u_layer1, v_texcoord * u_layerScale1).rgb * splat.g +
+            texture(u_layer2, v_texcoord * u_layerScale2).rgb * splat.b +
+            texture(u_layer3, v_texcoord * u_layerScale3).rgb * splat.a;
+    }
+
+    // --- Blinn-Phong directional light ---
+    vec3 viewDir  = normalize(u_viewPos - v_fragPos);
+    vec3 lightDir = normalize(-u_lightDir);
+    vec3 halfDir  = normalize(lightDir + viewDir);
+
+    float diff = max(dot(N, lightDir), 0.0);
+    float spec = pow(max(dot(N, halfDir), 0.0), 32.0);
+
+    vec3 diffuse  = diff * u_lightColor;
+    vec3 specular = spec * u_lightColor * vec3(0.1); // Low specular for terrain
+
+    // Shadow
+    float shadowFactor = calcShadow();
+    vec3 dirLighting = shadowFactor * (diffuse + specular);
+
+    // --- Point lights (additive, not shadow-mapped) ---
+    vec3 pointLighting = vec3(0.0);
+    for (int i = 0; i < u_pointLightCount; ++i) {
+        vec3  toLight  = u_pointLightPos[i] - v_fragPos;
+        float dist     = length(toLight);
+        float r        = u_pointLightRadius[i];
+        float dr       = dist / max(r, 0.001);
+        float atten    = 1.0 / (1.0 + 2.0 * dr + dr * dr);
+
+        vec3  pLightDir = normalize(toLight);
+        float pDiff     = max(dot(N, pLightDir), 0.0);
+        vec3  pDiffuse  = pDiff * u_pointLightColor[i] * atten;
+
+        vec3  pHalf     = normalize(pLightDir + viewDir);
+        float pSpec     = pow(max(dot(N, pHalf), 0.0), 32.0);
+        vec3  pSpecular = pSpec * u_pointLightColor[i] * vec3(0.1) * atten;
+
+        pointLighting += pDiffuse + pSpecular;
+    }
+
+    // Combine: ambient + directional (shadow-affected) + point lights
+    vec3 lighting   = u_ambientColor + dirLighting + pointLighting;
+    vec3 finalColor = lighting * terrainColor;
+
+    // Linear fog
+    if (u_fogEnabled != 0) {
+        float dist = length(v_fragPos - u_viewPos);
+        float fogFactor = clamp((u_fogFar - dist) / (u_fogFar - u_fogNear), 0.0, 1.0);
+        finalColor = mix(u_fogColor, finalColor, fogFactor);
+    }
+
+    fragColor = vec4(finalColor, 1.0);
+}
+)glsl";
+
 // ==================== Library Implementation ====================
 
 struct ShaderPair {
@@ -1339,6 +1534,7 @@ static const ShaderPair PAIRS[] = {
     { FULLSCREEN_VERT_SOURCE,          POST_FXAA_FRAG_SOURCE,           "post_fxaa"             },
     { FULLSCREEN_VERT_SOURCE,          SSAO_PASS_FRAG_SOURCE,           "ssao_pass"             },
     { FULLSCREEN_VERT_SOURCE,          SSAO_BLUR_FRAG_SOURCE,           "ssao_blur"             },
+    { TERRAIN_VERT_SOURCE,             TERRAIN_FRAG_SOURCE,             "terrain"               },
 };
 static_assert(sizeof(PAIRS) / sizeof(PAIRS[0]) == static_cast<u32>(BuiltinShader::COUNT));
 

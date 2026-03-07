@@ -203,6 +203,9 @@ void terrainRenderSystem(World& world, const Camera& camera3d,
         rhi::setUniformInt(meshShader, "u_fogEnabled", 0);
     }
 
+    // --- Retrieve TERRAIN shader for splat-map path ---
+    const rhi::ShaderHandle terrainShader = getShader(*shaderLib, BuiltinShader::TERRAIN);
+
     // --- Draw terrain entities ---
     for (const auto [entity, transform3d, terrainComp] : view.each()) {
         const TerrainAsset* asset = getTerrainAsset(terrainComp.terrainHandle);
@@ -210,36 +213,162 @@ void terrainRenderSystem(World& world, const Camera& camera3d,
 
         const glm::mat4 model = buildTerrainModelMatrix(transform3d);
         const glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(model)));
-        rhi::setUniformMat4(meshShader, "u_model", model);
-        rhi::setUniformMat3(meshShader, "u_normalMatrix", normalMatrix);
 
-        // Material: use terrain diffuse texture or default green-ish color
-        if (rhi::isValid(asset->diffuseTexture)) {
-            rhi::bindTexture(asset->diffuseTexture, 0);
-            rhi::setUniformInt(meshShader, "u_diffuseTexture", 0);
-            rhi::setUniformVec4(meshShader, "u_diffuseColor", {1.0f, 1.0f, 1.0f, 1.0f});
-        } else if (rhi::isValid(defaultWhite)) {
-            rhi::bindTexture(defaultWhite, 0);
-            rhi::setUniformInt(meshShader, "u_diffuseTexture", 0);
-            // Default terrain color: earthy green
-            rhi::setUniformVec4(meshShader, "u_diffuseColor", {0.3f, 0.5f, 0.2f, 1.0f});
-        }
+        // Decide which shader path: TERRAIN (splat map) or MESH_BLINN_PHONG (fallback)
+        const bool useSplatMap = rhi::isValid(asset->material.splatTexture) &&
+                                 rhi::isValid(terrainShader);
 
-        // Default specular: low shininess for terrain
-        rhi::setUniformVec3(meshShader, "u_specularColor", {0.2f, 0.2f, 0.2f});
-        rhi::setUniformFloat(meshShader, "u_shininess", 8.0f);
-        rhi::setUniformInt(meshShader, "u_hasNormalMap", 0);
-        rhi::setUniformInt(meshShader, "u_hasSpecularMap", 0);
+        if (useSplatMap) {
+            // --- M2 splat-map rendering path (TERRAIN shader) ---
+            rhi::bindShader(terrainShader);
 
-        // Draw all chunks
-        for (u32 ci = 0; ci < asset->chunkCount; ++ci) {
-            const TerrainChunkGpu& chunk = asset->chunks[ci];
-            if (chunk.vaoId == 0 || chunk.indexCount == 0) { continue; }
+            // Scene-global uniforms (same as MESH_BLINN_PHONG)
+            rhi::setUniformVec3(terrainShader, "u_lightDir",        lighting->lightDir);
+            rhi::setUniformVec3(terrainShader, "u_lightColor",      lighting->lightColor);
+            rhi::setUniformVec3(terrainShader, "u_ambientColor",    lighting->ambientColor);
+            rhi::setUniformVec3(terrainShader, "u_viewPos",         camera3d.position);
+            rhi::setUniformMat4(terrainShader, "u_viewProjection",  vpMatrix);
 
-            glBindVertexArray(chunk.vaoId);
-            glDrawElements(GL_TRIANGLES,
-                           static_cast<GLsizei>(chunk.indexCount),
-                           GL_UNSIGNED_INT, nullptr);
+            // Point light uniforms
+            {
+                u32 activeCount = 0;
+                glm::vec3 positions[MAX_POINT_LIGHTS];
+                glm::vec3 colors[MAX_POINT_LIGHTS];
+                float radii[MAX_POINT_LIGHTS];
+
+                for (u32 i = 0; i < MAX_POINT_LIGHTS; ++i) {
+                    if (lighting->pointLights[i].active) {
+                        positions[activeCount] = lighting->pointLights[i].position;
+                        colors[activeCount]    = lighting->pointLights[i].color;
+                        radii[activeCount]     = lighting->pointLights[i].radius;
+                        ++activeCount;
+                    }
+                }
+
+                rhi::setUniformInt(terrainShader, "u_pointLightCount", static_cast<i32>(activeCount));
+
+                char uniformName[64];
+                for (u32 i = 0; i < activeCount; ++i) {
+                    const auto uIdx = static_cast<unsigned int>(i);
+                    std::snprintf(uniformName, sizeof(uniformName), "u_pointLightPos[%u]", uIdx);
+                    rhi::setUniformVec3(terrainShader, uniformName, positions[i]);
+                    std::snprintf(uniformName, sizeof(uniformName), "u_pointLightColor[%u]", uIdx);
+                    rhi::setUniformVec3(terrainShader, uniformName, colors[i]);
+                    std::snprintf(uniformName, sizeof(uniformName), "u_pointLightRadius[%u]", uIdx);
+                    rhi::setUniformFloat(terrainShader, uniformName, radii[i]);
+                }
+            }
+
+            // Shadow map uniforms
+            if (shadowCfg.enabled && shadowMap.depthTexture != 0) {
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, shadowMap.depthTexture);
+                rhi::setUniformInt(terrainShader, "u_shadowMap", 0);
+                rhi::setUniformInt(terrainShader, "u_shadowsEnabled", 1);
+                rhi::setUniformFloat(terrainShader, "u_shadowBias", shadowCfg.bias);
+                rhi::setUniformMat4(terrainShader, "u_lightSpaceMatrix", lightSpaceMat);
+            } else {
+                rhi::setUniformInt(terrainShader, "u_shadowsEnabled", 0);
+                rhi::setUniformMat4(terrainShader, "u_lightSpaceMatrix", glm::mat4{1.0f});
+            }
+
+            // Fog uniforms
+            if (fog.enabled) {
+                rhi::setUniformInt(terrainShader, "u_fogEnabled", 1);
+                rhi::setUniformVec3(terrainShader, "u_fogColor", glm::vec3(fog.r, fog.g, fog.b));
+                rhi::setUniformFloat(terrainShader, "u_fogNear", fog.nearDist);
+                rhi::setUniformFloat(terrainShader, "u_fogFar", fog.farDist);
+            } else {
+                rhi::setUniformInt(terrainShader, "u_fogEnabled", 0);
+            }
+
+            // Per-terrain uniforms
+            rhi::setUniformMat4(terrainShader, "u_model", model);
+            rhi::setUniformMat3(terrainShader, "u_normalMatrix", normalMatrix);
+
+            // Bind splat map to texture unit 1
+            rhi::bindTexture(asset->material.splatTexture, 1);
+            rhi::setUniformInt(terrainShader, "u_splatMap", 1);
+
+            // Bind layer textures to units 2-5
+            for (u32 li = 0; li < 4; ++li) {
+                if (rhi::isValid(asset->material.layers[li].texture)) {
+                    rhi::bindTexture(asset->material.layers[li].texture, 2 + li);
+                } else if (rhi::isValid(defaultWhite)) {
+                    rhi::bindTexture(defaultWhite, 2 + li);
+                } else {
+                    rhi::bindTexture(rhi::TextureHandle{0}, 2 + li);
+                }
+            }
+            rhi::setUniformInt(terrainShader, "u_layer0", 2);
+            rhi::setUniformInt(terrainShader, "u_layer1", 3);
+            rhi::setUniformInt(terrainShader, "u_layer2", 4);
+            rhi::setUniformInt(terrainShader, "u_layer3", 5);
+
+            // Layer UV scales
+            rhi::setUniformFloat(terrainShader, "u_layerScale0", asset->material.layers[0].uvScale);
+            rhi::setUniformFloat(terrainShader, "u_layerScale1", asset->material.layers[1].uvScale);
+            rhi::setUniformFloat(terrainShader, "u_layerScale2", asset->material.layers[2].uvScale);
+            rhi::setUniformFloat(terrainShader, "u_layerScale3", asset->material.layers[3].uvScale);
+
+            // Triplanar uniforms
+            rhi::setUniformInt(terrainShader, "u_triplanarEnabled",
+                               asset->material.triplanarEnabled ? 1 : 0);
+            rhi::setUniformFloat(terrainShader, "u_triplanarThreshold",
+                                 asset->material.triplanarThreshold);
+
+            // Draw all chunks
+            for (u32 ci = 0; ci < asset->chunkCount; ++ci) {
+                const TerrainChunkGpu& chunk = asset->chunks[ci];
+                if (chunk.vaoId == 0 || chunk.indexCount == 0) { continue; }
+
+                glBindVertexArray(chunk.vaoId);
+                glDrawElements(GL_TRIANGLES,
+                               static_cast<GLsizei>(chunk.indexCount),
+                               GL_UNSIGNED_INT, nullptr);
+            }
+
+            // Unbind splat-map textures
+            for (u32 li = 0; li < 6; ++li) {
+                glActiveTexture(GL_TEXTURE0 + li);
+                glBindTexture(GL_TEXTURE_2D, 0);
+            }
+
+            // Re-bind mesh shader for any subsequent entities using fallback path
+            rhi::bindShader(meshShader);
+        } else {
+            // --- M1 fallback path (MESH_BLINN_PHONG shader) ---
+            rhi::setUniformMat4(meshShader, "u_model", model);
+            rhi::setUniformMat3(meshShader, "u_normalMatrix", normalMatrix);
+
+            // Material: use terrain diffuse texture or default green-ish color
+            if (rhi::isValid(asset->diffuseTexture)) {
+                rhi::bindTexture(asset->diffuseTexture, 0);
+                rhi::setUniformInt(meshShader, "u_diffuseTexture", 0);
+                rhi::setUniformVec4(meshShader, "u_diffuseColor", {1.0f, 1.0f, 1.0f, 1.0f});
+            } else if (rhi::isValid(defaultWhite)) {
+                rhi::bindTexture(defaultWhite, 0);
+                rhi::setUniformInt(meshShader, "u_diffuseTexture", 0);
+                // Default terrain color: earthy green
+                rhi::setUniformVec4(meshShader, "u_diffuseColor", {0.3f, 0.5f, 0.2f, 1.0f});
+            }
+
+            // Default specular: low shininess for terrain
+            rhi::setUniformVec3(meshShader, "u_specularColor", {0.2f, 0.2f, 0.2f});
+            rhi::setUniformFloat(meshShader, "u_shininess", 8.0f);
+            rhi::setUniformInt(meshShader, "u_hasNormalMap", 0);
+            rhi::setUniformInt(meshShader, "u_hasSpecularMap", 0);
+
+            // Draw all chunks
+            for (u32 ci = 0; ci < asset->chunkCount; ++ci) {
+                const TerrainChunkGpu& chunk = asset->chunks[ci];
+                if (chunk.vaoId == 0 || chunk.indexCount == 0) { continue; }
+
+                glBindVertexArray(chunk.vaoId);
+                glDrawElements(GL_TRIANGLES,
+                               static_cast<GLsizei>(chunk.indexCount),
+                               GL_UNSIGNED_INT, nullptr);
+            }
         }
     }
     glBindVertexArray(0);

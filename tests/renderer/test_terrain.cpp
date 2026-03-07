@@ -73,3 +73,62 @@ TEST_CASE("Terrain component is lightweight (8 bytes or less)", "[terrain]") {
 TEST_CASE("TerrainConfig fits in cache line", "[terrain]") {
     CHECK(sizeof(ffe::renderer::TerrainConfig) <= 64);
 }
+
+// -----------------------------------------------------------------------
+// TerrainLayer defaults (M2)
+// -----------------------------------------------------------------------
+
+TEST_CASE("TerrainLayer default texture is 0", "[terrain]") {
+    const ffe::renderer::TerrainLayer layer;
+    CHECK(layer.texture.id == 0);
+}
+
+TEST_CASE("TerrainLayer default uvScale is 16.0", "[terrain]") {
+    const ffe::renderer::TerrainLayer layer;
+    CHECK(layer.uvScale == 16.0f);
+}
+
+// -----------------------------------------------------------------------
+// TerrainMaterial defaults (M2)
+// -----------------------------------------------------------------------
+
+TEST_CASE("TerrainMaterial default splatTexture is 0", "[terrain]") {
+    const ffe::renderer::TerrainMaterial mat;
+    CHECK(mat.splatTexture.id == 0);
+}
+
+TEST_CASE("TerrainMaterial default triplanar is disabled", "[terrain]") {
+    const ffe::renderer::TerrainMaterial mat;
+    CHECK_FALSE(mat.triplanarEnabled);
+}
+
+TEST_CASE("TerrainMaterial default triplanar threshold is 0.7", "[terrain]") {
+    const ffe::renderer::TerrainMaterial mat;
+    CHECK(mat.triplanarThreshold == 0.7f);
+}
+
+TEST_CASE("TerrainMaterial all layer textures default to 0", "[terrain]") {
+    const ffe::renderer::TerrainMaterial mat;
+    for (int i = 0; i < 4; ++i) {
+        CHECK(mat.layers[i].texture.id == 0);
+        CHECK(mat.layers[i].uvScale == 16.0f);
+    }
+}
+
+TEST_CASE("TerrainMaterial size is reasonable (< 64 bytes)", "[terrain]") {
+    CHECK(sizeof(ffe::renderer::TerrainMaterial) < 64);
+}
+
+// -----------------------------------------------------------------------
+// BuiltinShader::TERRAIN enum (M2)
+// -----------------------------------------------------------------------
+
+#include "renderer/shader_library.h"
+
+TEST_CASE("BuiltinShader::TERRAIN exists at index 19", "[terrain]") {
+    CHECK(static_cast<ffe::u32>(ffe::renderer::BuiltinShader::TERRAIN) == 19);
+}
+
+TEST_CASE("BuiltinShader::COUNT is 20 after TERRAIN addition", "[terrain]") {
+    CHECK(static_cast<ffe::u32>(ffe::renderer::BuiltinShader::COUNT) == 20);
+}

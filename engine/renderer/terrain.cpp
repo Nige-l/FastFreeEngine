@@ -532,6 +532,7 @@ void unloadTerrain(const TerrainHandle handle) {
     asset.active = false;
     asset.chunkCount = 0;
     asset.diffuseTexture = rhi::TextureHandle{0};
+    asset.material = TerrainMaterial{};
 
     FFE_LOG_INFO("terrain", "Unloaded terrain handle=%u", handle.id);
 }
@@ -576,6 +577,55 @@ void setTerrainTexture(const TerrainHandle handle, const rhi::TextureHandle text
     if (!asset.active) { return; }
 
     asset.diffuseTexture = texture;
+}
+
+void setTerrainSplatMap(const TerrainHandle handle, const rhi::TextureHandle splatTexture) {
+    if (!isValid(handle)) { return; }
+    if (handle.id > MAX_TERRAIN_ASSETS) { return; }
+
+    TerrainAsset& asset = s_terrains[handle.id - 1];
+    if (!asset.active) { return; }
+
+    asset.material.splatTexture = splatTexture;
+}
+
+void setTerrainLayer(const TerrainHandle handle, const u32 layerIndex,
+                     const rhi::TextureHandle texture, const f32 uvScale) {
+    if (!isValid(handle)) { return; }
+    if (handle.id > MAX_TERRAIN_ASSETS) { return; }
+
+    TerrainAsset& asset = s_terrains[handle.id - 1];
+    if (!asset.active) { return; }
+
+    if (layerIndex >= 4) {
+        FFE_LOG_ERROR("terrain", "setTerrainLayer: layerIndex %u out of range (0-3)", layerIndex);
+        return;
+    }
+    if (!isFinite(uvScale) || uvScale <= 0.0f) {
+        FFE_LOG_ERROR("terrain", "setTerrainLayer: uvScale must be positive and finite");
+        return;
+    }
+
+    asset.material.layers[layerIndex].texture = texture;
+    asset.material.layers[layerIndex].uvScale = uvScale;
+}
+
+void setTerrainTriplanar(const TerrainHandle handle, const bool enabled, f32 threshold) {
+    if (!isValid(handle)) { return; }
+    if (handle.id > MAX_TERRAIN_ASSETS) { return; }
+
+    TerrainAsset& asset = s_terrains[handle.id - 1];
+    if (!asset.active) { return; }
+
+    // Clamp threshold to (0.0, 1.0]
+    if (!isFinite(threshold)) {
+        threshold = 0.7f;
+    }
+    if (threshold <= 0.0f) { threshold = 0.01f; }
+    if (threshold > 1.0f) { threshold = 1.0f; }
+
+    asset.material.triplanarEnabled = enabled;
+    asset.material.triplanarThreshold = threshold;
 }
 
 TerrainHandle getFirstActiveTerrain() {

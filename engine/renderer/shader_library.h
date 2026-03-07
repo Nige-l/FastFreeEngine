@@ -25,6 +25,7 @@ enum class BuiltinShader : u8 {
     POST_FXAA                  = 16, // FXAA 3.11 anti-aliasing (post tone-map, pre gamma)
     SSAO_PASS                  = 17, // Screen-space ambient occlusion (hemisphere sampling)
     SSAO_BLUR                  = 18, // 4x4 box blur for SSAO noise reduction
+    TERRAIN                    = 19, // Terrain splat-map texturing with triplanar projection
     COUNT
 };
 

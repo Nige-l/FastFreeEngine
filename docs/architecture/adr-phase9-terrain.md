@@ -315,3 +315,258 @@ The frustum is extracted from the view-projection matrix (Griess-Hartmann method
 | Draw calls per frame | <= 256 (worst case) | 16x16 chunk grid, all visible. Typical: 64-128 after frustum culling. |
 
 All targets assume LEGACY tier hardware (~2012 GPU, OpenGL 3.3, 1 GB VRAM). STANDARD and MODERN tiers will have significant headroom.
+
+---
+
+## 7. Phase 9 M2: Terrain Texturing
+
+**Status:** PROPOSED
+**Date:** 2026-03-07
+
+M1 renders terrain with a single diffuse texture via the existing `MESH_BLINN_PHONG` shader. This is adequate for prototyping but visually insufficient for shipping games — real terrains blend multiple surface types (grass, dirt, rock, snow) based on artist-painted weight maps, and steep cliff faces suffer from texture stretching under standard UV projection.
+
+M2 introduces **splat-map texturing**, **4-layer blending**, and **triplanar projection** for steep surfaces, all behind a new dedicated `TERRAIN` shader that stays within LEGACY tier (GLSL 330 core, OpenGL 3.3).
+
+### 7.1 Splat Map
+
+A splat map is an RGBA texture where each channel encodes the blend weight for one of four terrain layers:
+
+| Channel | Default Layer | Purpose |
+|---------|--------------|---------|
+| R | Layer 0 (e.g. grass) | Primary ground cover |
+| G | Layer 1 (e.g. dirt) | Paths, exposed earth |
+| B | Layer 2 (e.g. rock) | Cliff faces, outcrops |
+| A | Layer 3 (e.g. snow) | High altitude, caps |
+
+**Authoring convention:** Channels should sum to ~1.0 per texel, but the fragment shader normalizes weights (`weights /= dot(weights, vec4(1.0))`) to guarantee correctness regardless of authoring precision.
+
+**Resolution:** The splat map resolution is independent of the heightmap resolution. A 512x512 splat map provides sufficient blending detail for a 2048x2048 heightmap — each splat texel covers a ~4x4 patch of height samples. Lower resolutions (256x256) are acceptable; higher resolutions (1024x1024) are supported but rarely needed since blend transitions are inherently soft.
+
+**Loading:** The splat map is loaded through the existing `loadTexture` pipeline (stb_image, RGBA8). Same path validation and size guards apply. The texture is bound to unit 1 during the terrain render pass.
+
+### 7.2 Texture Layers
+
+Each terrain supports exactly 4 texture layers. Each layer consists of:
+
+```cpp
+struct TerrainLayer {
+    rhi::TextureHandle texture;   // Diffuse texture for this layer (0 = unused)
+    f32                uvScale;   // Tiling multiplier (default 16.0)
+};
+```
+
+Layer textures are sampled with **tiled UVs**: the terrain's base UV (which spans [0,1] over the entire terrain) is multiplied by the layer's `uvScale`. At the default `uvScale = 16.0`, a 512x512 grass texture repeats 16 times across the terrain — providing good detail without visible stretching at ground level.
+
+**UV computation per fragment:**
+
+```glsl
+vec2 tiledUV = v_texCoord * u_layerScale[i];
+vec4 layerColor = texture(u_layer0, tiledUV); // (layer 0 example)
+```
+
+Layers are sampled from texture units 2–5. Unused layers (texture handle 0) contribute zero weight — the shader skips their sample via the splat weight being zero. No branching needed; multiplication by zero eliminates the contribution.
+
+### 7.3 Triplanar Projection
+
+Standard UV mapping projects textures from above (the XZ plane). On steep surfaces — cliff faces, overhangs — this causes severe stretching because the UV gradient approaches zero along the face normal.
+
+**Triplanar projection** solves this by blending three axis-aligned projections weighted by the surface normal:
+
+| Projection | UV Source | Dominant When |
+|------------|-----------|---------------|
+| XZ (top-down) | worldPos.xz | `abs(normal.y)` is large (flat ground) |
+| XY (front/back) | worldPos.xy | `abs(normal.z)` is large |
+| YZ (left/right) | worldPos.yz | `abs(normal.x)` is large |
+
+**Blend weights:**
+
+```glsl
+vec3 blend = abs(v_worldNormal);
+blend = pow(blend, vec3(4.0));          // Sharpen the transition
+blend /= (blend.x + blend.y + blend.z); // Normalize
+```
+
+**Activation threshold:** Triplanar sampling is only applied on fragments where `abs(normal.y) < u_triplanarThreshold` (default 0.7). On flat ground (`normal.y ≈ 1.0`), the standard top-down UV is used — this is the common case and avoids the extra texture samples. The threshold is configurable per terrain.
+
+**Per-layer triplanar:** When triplanar is active for a fragment, each layer texture is sampled 3 times (XZ, XY, YZ projections) and blended. This means steep fragments perform up to 12 layer samples (3 projections x 4 layers) plus 1 splat sample, versus 5 samples (1 splat + 4 layers) on flat ground.
+
+**Implementation in GLSL:**
+
+```glsl
+vec4 sampleLayerTriplanar(sampler2D tex, float scale, vec3 worldPos, vec3 blend) {
+    vec4 xz = texture(tex, worldPos.xz * scale);
+    vec4 xy = texture(tex, worldPos.xy * scale);
+    vec4 yz = texture(tex, worldPos.yz * scale);
+    return xz * blend.y + xy * blend.z + yz * blend.x;
+}
+```
+
+### 7.4 TERRAIN Shader
+
+A new builtin shader is added to the `BuiltinShader` enum:
+
+```cpp
+TERRAIN = 19, // Terrain splat-map texturing with triplanar projection
+```
+
+This follows `SSAO_BLUR = 18` and increments `COUNT` to 20.
+
+**Vertex shader:** Identical to `MESH_BLINN_PHONG` — MVP transform, world-space position and normal passed to fragment stage, UV passthrough. No new vertex attributes; terrain continues to use the `MeshVertex` layout.
+
+**Fragment shader (GLSL 330 core):**
+
+Uniforms:
+
+| Uniform | Type | Binding | Purpose |
+|---------|------|---------|---------|
+| `u_splatMap` | `sampler2D` | unit 1 | RGBA splat weight texture |
+| `u_layer0` | `sampler2D` | unit 2 | Layer 0 diffuse texture |
+| `u_layer1` | `sampler2D` | unit 3 | Layer 1 diffuse texture |
+| `u_layer2` | `sampler2D` | unit 4 | Layer 2 diffuse texture |
+| `u_layer3` | `sampler2D` | unit 5 | Layer 3 diffuse texture |
+| `u_layerScale[4]` | `float[4]` | — | UV tiling scale per layer |
+| `u_triplanarEnabled` | `int` | — | 0 = off, 1 = on |
+| `u_triplanarThreshold` | `float` | — | Normal.y threshold for triplanar activation |
+| (existing) | — | unit 0 | Shadow depth map (reused from Blinn-Phong) |
+| (existing) | — | — | All lighting, shadow, and fog uniforms from MESH_BLINN_PHONG |
+
+The fragment shader logic:
+
+1. Sample splat map at base UV → `vec4 weights`; normalize.
+2. Determine if triplanar is needed: `bool steep = u_triplanarEnabled && abs(v_worldNormal.y) < u_triplanarThreshold`.
+3. For each layer: sample with tiled UV (flat) or triplanar (steep), multiply by splat weight, accumulate.
+4. Apply Blinn-Phong lighting (directional + point lights), shadow sampling, fog — identical to `MESH_BLINN_PHONG` fragment logic.
+
+**Why a new shader instead of extending MESH_BLINN_PHONG?** The terrain shader has fundamentally different texture binding semantics (5 textures with specific roles vs. 1 diffuse + optional normal/specular). Extending MESH_BLINN_PHONG with conditionals would add branching to every mesh draw call. A separate shader keeps mesh rendering lean and terrain rendering self-contained.
+
+### 7.5 Texture Unit Layout
+
+| Unit | Content | Used By |
+|------|---------|---------|
+| 0 | Shadow depth map | Shadow sampling (existing) |
+| 1 | Splat map (RGBA) | Terrain blend weights |
+| 2 | Layer 0 texture | First terrain surface |
+| 3 | Layer 1 texture | Second terrain surface |
+| 4 | Layer 2 texture | Third terrain surface |
+| 5 | Layer 3 texture | Fourth terrain surface |
+
+OpenGL 3.3 guarantees a minimum of 16 texture units. This layout uses 6, leaving 10 units free for future extensions (e.g., layer normal maps in M3).
+
+### 7.6 Performance Budget
+
+| Scenario | Texture Samples/Fragment | Target (1080p, LEGACY) |
+|----------|--------------------------|----------------------|
+| Flat ground (common case) | 6 (1 splat + 4 layers + 1 shadow) | < 1.5 ms |
+| Steep surface (triplanar) | 14 (1 splat + 4 layers x 3 projections + 1 shadow) | < 2.0 ms |
+| Mixed scene (typical) | ~7 average | < 2.0 ms total terrain pass |
+
+Triplanar fragments are a minority of the screen (cliff faces, steep slopes). On a typical terrain, <15% of visible fragments activate triplanar sampling. The average sample count stays close to 7, well within LEGACY tier budget.
+
+**Splat map fetch is coherent** — neighboring fragments sample nearby texels in the splat map, which is cache-friendly. Layer texture fetches tile at `uvScale` frequency, which is also cache-friendly for typical tiling factors (8–32).
+
+**No per-frame allocations.** All textures are bound once per terrain draw pass. Splat map and layer textures are loaded at scene load time (cold path).
+
+### 7.7 TerrainMaterial Struct
+
+```cpp
+struct TerrainMaterial {
+    rhi::TextureHandle splatTexture;         // RGBA splat map
+    TerrainLayer       layers[4];            // Per-layer texture + UV scale
+    bool               triplanarEnabled;     // Default: true
+    f32                triplanarThreshold;   // Default: 0.7
+};
+```
+
+This struct is stored per terrain asset slot (alongside the existing height data and chunk metadata). It is set via the API functions below and read by the terrain render pass when binding uniforms.
+
+### 7.8 API Changes
+
+**New C++ API (cold path only):**
+
+```cpp
+// Set the splat map texture for a terrain.
+// The texture must be an RGBA image loaded via loadTexture().
+void setTerrainSplatMap(TerrainHandle handle, rhi::TextureHandle splatTexture);
+
+// Set a layer texture and UV tiling scale.
+// layerIndex: 0-3 (corresponding to splat map R, G, B, A channels).
+// uvScale: tiling multiplier (default 16.0). Higher = more repetitions.
+void setTerrainLayer(TerrainHandle handle, u32 layerIndex,
+                     rhi::TextureHandle texture, f32 uvScale = 16.0f);
+
+// Enable/disable triplanar projection and set the normal.y threshold.
+// threshold: fragments with abs(normal.y) < threshold use triplanar (default 0.7).
+void setTerrainTriplanar(TerrainHandle handle, bool enabled, f32 threshold = 0.7f);
+```
+
+**New Lua bindings:**
+
+```lua
+-- Load splat map and assign to terrain
+local splatTex = ffe.loadTexture("terrain_splat.png")
+ffe.setTerrainSplatMap(terrain, splatTex)
+
+-- Set layer textures with tiling
+local grass = ffe.loadTexture("grass_diffuse.png")
+local dirt  = ffe.loadTexture("dirt_diffuse.png")
+local rock  = ffe.loadTexture("rock_diffuse.png")
+local snow  = ffe.loadTexture("snow_diffuse.png")
+
+ffe.setTerrainLayer(terrain, 0, grass, 16.0)
+ffe.setTerrainLayer(terrain, 1, dirt,  16.0)
+ffe.setTerrainLayer(terrain, 2, rock,  12.0)
+ffe.setTerrainLayer(terrain, 3, snow,  20.0)
+
+-- Enable triplanar for cliff faces
+ffe.setTerrainTriplanar(terrain, true, 0.7)
+```
+
+**Validation:**
+- `layerIndex` must be 0–3; values outside this range log an error and return.
+- `uvScale` must be > 0 and finite; NaN/Inf rejected.
+- `threshold` must be in (0.0, 1.0]; values outside this range are clamped.
+- Invalid `TerrainHandle` or `TextureHandle` → no-op with error log.
+
+### 7.9 Rendering Flow Change
+
+The terrain render pass (called after `meshRenderSystem`, before 2D pass) changes from:
+
+**M1:** Bind `MESH_BLINN_PHONG` → set lighting/shadow uniforms → for each visible chunk: bind VAO, draw.
+
+**M2:** Bind `TERRAIN` → set lighting/shadow/fog uniforms → bind splat map (unit 1) → bind layer textures (units 2–5) → set layer scales + triplanar uniforms → for each visible chunk: bind VAO, draw.
+
+If no splat map is set (M1 fallback), the terrain render pass falls back to `MESH_BLINN_PHONG` with the single diffuse texture — preserving backward compatibility with existing terrain code and Lua scripts that do not use the M2 API.
+
+### 7.10 File Plan (M2 Additions)
+
+**Modified files:**
+
+| File | Owner | Changes |
+|------|-------|---------|
+| `engine/renderer/terrain.h` | renderer-specialist | Add `TerrainLayer`, `TerrainMaterial` structs; declare `setTerrainSplatMap`, `setTerrainLayer`, `setTerrainTriplanar` |
+| `engine/renderer/terrain.cpp` | renderer-specialist | Implement new API functions; update terrain render pass to use TERRAIN shader when splat map is set |
+| `engine/renderer/shader_library.h` | renderer-specialist | Add `TERRAIN = 19` to `BuiltinShader` enum, update `COUNT` |
+| `engine/renderer/shader_library.cpp` | renderer-specialist | Add TERRAIN vertex/fragment shader source strings |
+| `engine/scripting/script_engine.cpp` | engine-dev | Add Lua bindings: `ffe.setTerrainSplatMap`, `ffe.setTerrainLayer`, `ffe.setTerrainTriplanar` |
+| `engine/renderer/.context.md` | api-designer | Document M2 terrain texturing API |
+| `tests/renderer/test_terrain.cpp` | engine-dev | Add tests: splat map assignment, layer configuration, triplanar parameter validation, fallback behavior |
+
+No new files required — M2 extends the files created in M1.
+
+### 7.11 Consequences
+
+**What M2 delivers:**
+- Artist-controlled multi-texture terrain blending via industry-standard splat maps.
+- Visually correct cliff-face texturing via triplanar projection.
+- Full backward compatibility — terrains without a splat map render identically to M1.
+- All within LEGACY tier constraints (GLSL 330, 6 texture units, no compute shaders).
+
+**What is deferred to M3+:**
+
+| Feature | Milestone | Rationale |
+|---------|-----------|-----------|
+| Per-layer normal maps | M3 | Requires 4 additional texture units (units 6–9) and tangent-space computation; deferred to keep M2 focused |
+| Height-based blending (parallax splatting) | M3 | Requires per-layer height textures; visual improvement over linear splat blending |
+| Runtime splat map painting | M3+ | Editor feature; requires FBO render-to-texture for splat map modification |
+| More than 4 layers | M3+ | Requires multi-pass rendering or texture arrays; 4 layers cover the vast majority of terrains |
+| Procedural splat generation (slope/height rules) | M3 | Quality-of-life feature; artists can generate splat maps externally for M2 |
