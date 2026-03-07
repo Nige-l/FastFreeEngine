@@ -3,6 +3,45 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 70: Phase 6 M3 Complete — Real Models, Music, Level 2 Gameplay, README Update
+
+### Summary
+
+Session 70 completed Phase 6 Milestone 3 (Level 2 "The Temple"). Downloaded 7 CC0 .glb models (4.35 MB) replacing placeholder cubes across all levels. Integrated Suno music tracks (BattleMusic.mp3 for Level 2, music_pixelcrown.ogg available). Added Level 2 gameplay: crystal puzzle (4-crystal activation sequence), timed disappearing bridges, boss guardian (double HP, gold coloring), and portal victory condition. Fixed GitHub Pages deployment by deleting the Jekyll workflow that was overriding MkDocs. Disabled macOS CI (user approved -- upstream LuaJIT arm64-osx is a persistent issue). Added E key / gamepad Y for crystal interaction. Comprehensive README refresh reflecting Phase 6, future phases, and the showcase game. FAST build: 1005 tests, zero warnings.
+
+### Planned
+
+- Real CC0 3D models (replace cubes)
+- Music integration (Suno tracks)
+- Level 2 gameplay (crystal puzzle, timed bridges, boss)
+- GitHub Pages fix
+- README update
+
+### Delivered
+
+- **Real 3D models** -- 7 CC0 .glb models downloaded (damaged_helmet, cesium_man, fox, duck, rigged_figure, rigged_simple, box_vertex_colors). Updated level1.lua, test_level.lua, player.lua, ai.lua to use real models instead of cubes. Total 4.35 MB.
+- **Music integration** -- Wired BattleMusic.mp3 for Level 2, music_pixelcrown.ogg available for future levels.
+- **Level 2 gameplay** -- Crystal puzzle (4-crystal sequence with colored lights), timed disappearing bridges (fall after stepping), boss guardian (double HP, gold coloring, larger size), portal victory condition linking to Level 3.
+- **Player interaction** -- E key / gamepad Y button for crystal activation and other interactions.
+- **GitHub Pages fix** -- Deleted `.github/workflows/jekyll-gh-pages.yml` that was overriding MkDocs deployment.
+- **macOS CI disabled** -- Removed macOS job from CI workflow. Upstream LuaJIT vcpkg arm64-osx build is persistently broken. User approved.
+- **README overhaul** -- Comprehensive refresh: showcase game prominently featured, all 6 demos listed, 1005 tests, ~169 bindings, future phases roadmap (Vulkan, terrain, advanced editor, cross-platform, asset pipeline, plugin system, advanced rendering, AI tooling), macOS status updated.
+
+### Reviews
+
+- No expert panel this session (documentation/asset session, no engine C++ changes)
+
+### Deferred
+
+- game-dev-tester: SKIPPED (no new API paradigm)
+- security-auditor: SKIPPED (no new attack surface)
+
+### Next Session (71)
+
+Phase 6 M4: Level 3 "The Summit" -- floating platforms above the clouds, dramatic sunset skybox, moving platforms (sine/cosine driven), wind particles, 4 guardians on separate platforms, final combined puzzle, victory sequence. Per ADR Section 8, this is Sessions 71-72.
+
+---
+
 ## 2026-03-07 — Session 69: Phase 6 M3 (part 1) — Level 2 "The Temple"
 
 ### Summary

@@ -53,8 +53,9 @@ function Player.create(x, y, z, cubeMeshHandle)
         return
     end
 
-    -- Set transform: position, no rotation, slightly scaled
-    ffe.setTransform3D(playerEntity, x, y, z, 0, 0, 0, 0.8, 1.0, 0.8)
+    -- Set transform: position, no rotation
+    -- Character models (CesiumMan etc) need different scale than cube fallback
+    ffe.setTransform3D(playerEntity, x, y, z, 0, 0, 0, 0.5, 0.5, 0.5)
 
     -- Distinct player color: bright cyan
     ffe.setMeshColor(playerEntity, 0.1, 0.8, 0.9, 1.0)
@@ -193,7 +194,7 @@ function Player.update(dt)
         ffe.setTransform3D(playerEntity,
             px, py, pz,
             0, facingDeg, 0,
-            0.8, 1.0, 0.8)
+            0.5, 0.5, 0.5)
     end
 end
 
@@ -261,6 +262,19 @@ end
 --------------------------------------------------------------------
 function Player.isAlive()
     return health > 0
+end
+
+--------------------------------------------------------------------
+-- Player.isInteracting() -> boolean
+-- Returns true on the frame the player presses E (keyboard) or
+-- Y (gamepad). Level scripts poll this for crystal activation, etc.
+--------------------------------------------------------------------
+function Player.isInteracting()
+    local interact = ffe.isKeyPressed(ffe.KEY_E)
+    if ffe.isGamepadConnected(0) then
+        interact = interact or ffe.isGamepadButtonPressed(0, ffe.GAMEPAD_Y)
+    end
+    return interact
 end
 
 --------------------------------------------------------------------

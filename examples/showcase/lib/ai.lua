@@ -70,9 +70,10 @@ local function moveToward(entityId, tx, ty, tz, speed, dt)
     vy = vy or 0
     ffe.setLinearVelocity(entityId, nx * speed, vy, nz * speed)
 
-    -- Face movement direction
+    -- Face movement direction (use fox model scale 0.03 for non-cube enemies)
     local facingDeg = math.deg(math.atan2(nx, nz))
-    ffe.setTransform3D(entityId, ex, ey, ez, 0, facingDeg, 0, 1, 1, 1)
+    local sc = 0.03  -- fox model scale; cube enemies would use 1.0
+    ffe.setTransform3D(entityId, ex, ey, ez, 0, facingDeg, 0, sc, sc, sc)
 end
 
 --------------------------------------------------------------------

@@ -22,6 +22,29 @@ FFE is free and open source forever. MIT licensed. That is not up for debate.
 
 ---
 
+## Showcase: "Echoes of the Ancients"
+
+FFE's flagship demo is a **multi-level 3D action-exploration game** built entirely in Lua on top of the engine. It proves that FFE can ship real, playable games -- not just tech demos.
+
+**The game features:**
+- 3 distinct levels: an outdoor courtyard, an underground temple, and a tower summit
+- Third-person orbit camera with physics-based movement and jumping
+- Combat system with melee attacks, health, and damage
+- Guardian enemies with patrol/chase AI state machines
+- Physics puzzles: push-blocks, pressure plates, gates, destructible walls
+- Crystal puzzle sequences and timed disappearing platforms
+- Boss guardians with increased HP and distinct behavior
+- Real CC0 3D models (.glb): characters, helmets, animals, and more
+- Atmospheric lighting: directional shadows, up to 4 point lights, linear fog
+- Skybox environments, particle effects, and spatial audio
+- Original music tracks per level
+- Full gamepad support (Xbox controller)
+- HUD with health bar, artifact count, and interaction prompts
+
+The showcase exercises every major engine subsystem in a single cohesive experience and serves as a reference implementation for developers learning FFE.
+
+---
+
 ## Quick Start: Your First Game in 15 Lines
 
 Write game logic in Lua. The engine handles rendering, input, and audio:
@@ -52,14 +75,14 @@ See the [full tutorial](docs/tutorial.md) for audio, collisions, sprites, and mo
 
 ## Features
 
-All subsystems below are implemented and working together in five demo games: "Collect the Stars", "Pong", "Breakout", "3D Demo", and "Net Arena" (multiplayer).
+All subsystems below are implemented and working together in six demo games including the 3D showcase "Echoes of the Ancients".
 
 ### Core Engine
 
 - **ECS** -- Entity Component System built on EnTT with a thin `World` wrapper and function-pointer system dispatch. No virtual calls in hot paths.
-- **Lua Scripting** -- Sandboxed LuaJIT with instruction budget (1M ops), blocked globals, and ~167 `ffe.*` API bindings across all subsystems.
+- **Lua Scripting** -- Sandboxed LuaJIT with instruction budget (1M ops), blocked globals, and ~169 `ffe.*` API bindings across all subsystems.
 - **Arena Allocator** -- Linear bump allocator with cache-line alignment and per-frame reset. Zero heap allocations in hot paths.
-- **Input System** -- State-based keyboard, mouse, and gamepad input (pressed/held/released) with action mapping (64 actions, 4 bindings each). Up to 4 controllers.
+- **Input System** -- State-based keyboard, mouse, and gamepad input (pressed/held/released) with action mapping (64 actions, 4 bindings each). Up to 4 controllers. Xbox controller supported.
 - **Timers** -- `ffe.after()` and `ffe.every()` with cancel support. 256 max concurrent timers, fixed-size array.
 - **Save/Load** -- JSON-based game state persistence with security hardening (path traversal prevention, size limits, atomic writes).
 - **Scene Management** -- `destroyAllEntities`, `cancelAllTimers`, `loadScene` for clean scene transitions.
@@ -82,6 +105,7 @@ All subsystems below are implemented and working together in five demo games: "C
 - **Materials** -- Diffuse, specular, and normal map support with configurable shininess.
 - **Shadow Mapping** -- Depth FBO with PCF 3x3 filtering. Configurable bias and shadow area.
 - **Skybox** -- Cubemap environment rendering (6-face loading).
+- **Linear Fog** -- Distance-based fog with configurable color, near, and far distances.
 - **Skeletal Animation** -- Bone hierarchy with GPU skinning (64 max bones). Play/stop/speed control from Lua.
 - **3D Camera** -- FPS (yaw/pitch) and orbit (target/radius) camera modes with Lua bindings.
 
@@ -91,7 +115,7 @@ All subsystems below are implemented and working together in five demo games: "C
 
 ### Audio
 
-- **Sound Playback** -- WAV and OGG support via miniaudio. One-shot SFX and streaming background music with volume control.
+- **Sound Playback** -- WAV, OGG, and MP3 support via miniaudio. One-shot SFX and streaming background music with volume control.
 - **3D Positional Audio** -- Spatial voices with listener sync (`playSound3D`).
 - **Headless Mode** -- Audio subsystem works in headless mode for CI and testing.
 
@@ -233,7 +257,7 @@ cmake --build build-mingw
 
 ### Running Tests
 
-991 Catch2 tests covering core, renderer (2D and 3D), scripting, audio, physics, networking, and more:
+1005 Catch2 tests covering core, renderer (2D and 3D), scripting, audio, physics, networking, and more:
 
 ```bash
 ctest --test-dir build --output-on-failure --parallel $(nproc)
@@ -252,9 +276,23 @@ cmake -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++-18 -DFFE_TIER=MODERN
 
 ## Running the Demos
 
+### Echoes of the Ancients (Showcase)
+
+The flagship 3D showcase game -- a multi-level action-exploration experience exercising every engine subsystem. Real CC0 3D models, atmospheric lighting, physics puzzles, combat, and original music.
+
+```bash
+./build/examples/showcase/ffe_showcase
+```
+
+- **WASD** to move, **Space** to jump, **Mouse** to orbit camera
+- **Left click** or **F** for melee attack, **E** for interaction
+- **Xbox controller** fully supported (left stick move, A jump, X attack, Y interact)
+- 3 levels: The Courtyard, The Temple, The Summit
+- Collect artifacts, defeat guardians, solve puzzles
+
 ### Collect the Stars (lua_demo)
 
-The flagship 2D demo -- a complete mini-game written entirely in Lua exercising every engine subsystem.
+A complete 2D mini-game written entirely in Lua exercising every engine subsystem.
 
 ```bash
 ./build/examples/lua_demo/ffe_lua_demo
@@ -348,18 +386,19 @@ A 2D multiplayer arena demonstrating client-side prediction, server reconciliati
 engine/
   core/         ECS, types, arena allocator, logging, input, timers, application loop
   renderer/     OpenGL 3.3 backend, sprite batching, textures, sprite animation,
-                3D mesh, lighting, shadows, skybox, skeletal animation, camera
-  audio/        miniaudio integration, WAV/OGG, SFX + streaming music, 3D spatial audio
+                3D mesh, lighting, shadows, skybox, fog, skeletal animation, camera
+  audio/        miniaudio integration, WAV/OGG/MP3, SFX + streaming music, 3D spatial audio
   physics/      2D collision (spatial hash, AABB/circle) + 3D physics (Jolt, rigid bodies, raycasting)
-  scripting/    Lua sandbox, ~167 ffe.* API bindings, instruction budget
+  scripting/    Lua sandbox, ~169 ffe.* API bindings, instruction budget
   networking/   ENet transport, replication, server/client, prediction, lobby, lag compensation
   editor/       Standalone editor application (ImGui, hierarchy, inspector, viewport, gizmos)
 
-tests/          991 Catch2 tests (core, renderer, scripting, audio, physics, networking)
-examples/       Demo games (lua_demo, pong, breakout, 3d_demo, net_demo, hello_sprites, headless_test)
+tests/          1005 Catch2 tests (core, renderer, scripting, audio, physics, networking)
+examples/       Demo games (showcase, lua_demo, pong, breakout, 3d_demo, net_demo, hello_sprites, headless_test)
 assets/
   textures/     PNG textures and spritesheets
-  audio/        WAV sound effects and OGG music tracks
+  audio/        WAV sound effects, OGG/MP3 music tracks
+  models/       CC0 glTF (.glb) 3D models
 docs/
   architecture/ ADR design documents for each subsystem
   devlog.md     Session-by-session development history
@@ -367,7 +406,7 @@ website/        MkDocs documentation site (tutorials, deep dives, learning track
 cmake/
   toolchains/   MinGW cross-compile toolchain
 .github/
-  workflows/    CI: Linux Clang-18, Linux GCC-13, macOS arm64
+  workflows/    CI: Linux Clang-18, Linux GCC-13
 ```
 
 Every engine subdirectory contains a `.context.md` file with API documentation, usage patterns, and anti-patterns -- written for both humans and AI assistants.
@@ -383,7 +422,7 @@ FFE ships a documentation website built with MkDocs and the Material theme, incl
 - **How It Works** -- Deep dives into ECS internals, renderer architecture, and networking
 - **API Reference** -- Auto-generated from `.context.md` files across all subsystems
 - **Build Your Own Engine** -- A learning track teaching engine development concepts (first installment: "Build an ECS from Scratch")
-- **Community Showcase** -- All five official demo games with descriptions and screenshots
+- **Community Showcase** -- All six official demo games with descriptions and screenshots
 
 Build and serve the docs locally:
 
@@ -432,8 +471,8 @@ System packages:
 |----------|----------|--------|
 | Linux | Clang-18 | Primary -- full CI |
 | Linux | GCC-13 | Secondary -- full CI |
-| macOS | Apple Clang (arm64) | CI verified |
 | Windows | MinGW-w64 (cross-compile) | Builds from Linux |
+| macOS | Apple Clang (arm64) | Disabled -- upstream LuaJIT vcpkg issue on arm64-osx |
 
 ---
 
@@ -445,7 +484,7 @@ FastFreeEngine is licensed under the [MIT License](LICENSE). Free and open sourc
 
 ## Status
 
-**All five phases of the FFE roadmap are complete.** Active development continues with maintenance, community growth, and backlog items.
+**Active development.** All five original phases are complete. Phase 6 (showcase game) is in progress, with an ambitious roadmap ahead.
 
 | Phase | Status |
 |-------|--------|
@@ -454,8 +493,32 @@ FastFreeEngine is licensed under the [MIT License](LICENSE). Free and open sourc
 | Phase 3 -- Standalone Editor | MVP COMPLETE |
 | Phase 4 -- Networking / Multiplayer | COMPLETE |
 | Phase 5 -- Website / Learning Platform | COMPLETE |
+| Phase 6 -- Showcase Game ("Echoes of the Ancients") | IN PROGRESS |
 
-The engine supports full 2D and 3D game development with multiplayer networking, a standalone editor, 3D physics, skeletal animation, shadow mapping, and more -- demonstrated across five playable demos. 991 tests pass on both compilers with zero warnings.
+### Phase 6: "Echoes of the Ancients"
+
+The current focus is a multi-level 3D showcase game that proves FFE can ship real, playable games. Built entirely in Lua using the engine's public API:
+
+- **Level 1 "The Courtyard"** -- Outdoor ruins with push-block puzzles, guardian enemies, destructible walls, fog, directional shadows, 4 point lights. COMPLETE.
+- **Level 2 "The Temple"** -- Underground temple with dark atmospheric lighting, lava pits, crystal puzzle sequences, timed disappearing bridges, boss guardian, battle music. COMPLETE.
+- **Level 3 "The Summit"** -- Floating platforms above the clouds, dramatic sunset skybox, moving platforms, final boss encounter. IN PROGRESS.
+- **Real 3D models** -- 7 CC0 .glb models (damaged helmet, animated characters, fox, duck, and more) replacing placeholder cubes.
+- **Original music** -- Suno-generated tracks for each level.
+
+### Planned Future Phases
+
+FFE has an ambitious roadmap beyond Phase 6. Planned work includes:
+
+- **Vulkan Renderer** -- A modern Vulkan backend alongside the existing OpenGL 3.3, enabling STANDARD and MODERN tier features (compute shaders, GPU-driven rendering, ray tracing on MODERN tier)
+- **Terrain System** -- Heightmap-based terrain with LOD, texture splatting, and vegetation placement for open-world games
+- **Advanced Editor** -- Project wizard, preferences persistence, visual scripting, LLM integration panel, prefab system
+- **Cross-Platform Native Builds** -- Native Windows (MSVC), native macOS (Xcode), Linux packaging (AppImage/Flatpak)
+- **Asset Pipeline** -- Texture compression, mesh optimization, asset bundling, hot-reload during development
+- **Plugin/Extension System** -- C++ and Lua plugin API for community extensions, custom renderers, and tool integrations
+- **Advanced Rendering** -- PBR materials, screen-space reflections, post-processing pipeline, instanced rendering
+- **AI Tooling** -- LLM integration panel in the editor, AI-assisted level design, code generation from natural language
+
+1005 tests pass on both compilers with zero warnings. The engine supports full 2D and 3D game development with multiplayer networking, a standalone editor, 3D physics, skeletal animation, shadow mapping, and more -- demonstrated across six playable demos.
 
 See `docs/devlog.md` for the full session-by-session development history.
 

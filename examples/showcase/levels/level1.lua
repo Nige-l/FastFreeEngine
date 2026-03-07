@@ -10,13 +10,33 @@
 ffe.log("[Level1] Loading The Courtyard...")
 
 --------------------------------------------------------------------
--- Load the shared cube mesh (used for all geometry)
+-- Load meshes: cube for structural geometry, real models for characters/props
 --------------------------------------------------------------------
 local cubeMesh = ffe.loadMesh("models/cube.glb")
 if cubeMesh == 0 then
     ffe.log("[Level1] WARNING: cube.glb not found -- geometry will be missing")
     ffe.log("[Level1] Place cube.glb at assets/models/cube.glb")
 end
+
+-- Character / prop meshes (graceful fallback to cube if missing)
+local helmetMesh   = ffe.loadMesh("models/damaged_helmet.glb")
+if helmetMesh == 0 then helmetMesh = cubeMesh end
+
+local foxMesh      = ffe.loadMesh("models/fox.glb")
+if foxMesh == 0 then foxMesh = cubeMesh end
+
+local duckMesh     = ffe.loadMesh("models/duck.glb")
+if duckMesh == 0 then duckMesh = cubeMesh end
+
+local figureMesh   = ffe.loadMesh("models/rigged_figure.glb")
+if figureMesh == 0 then figureMesh = cubeMesh end
+
+local cesiumMesh   = ffe.loadMesh("models/cesium_man.glb")
+if cesiumMesh == 0 then cesiumMesh = cubeMesh end
+
+ffe.log("[Level1] Meshes loaded: helmet=" .. tostring(helmetMesh)
+    .. " fox=" .. tostring(foxMesh) .. " duck=" .. tostring(duckMesh)
+    .. " figure=" .. tostring(figureMesh) .. " cesium=" .. tostring(cesiumMesh))
 
 --------------------------------------------------------------------
 -- Load audio assets (optional -- game plays fine without audio)
@@ -164,7 +184,7 @@ createStaticBox(-15, 2.5,  15,  0.7, 3, 0.7,  0.52, 0.5, 0.45)
 createStaticBox( 15, 2.5,  15,  0.7, 3, 0.7,  0.52, 0.5, 0.45)
 
 --------------------------------------------------------------------
--- Central fountain (decorative stack of boxes)
+-- Central fountain (decorative stack of boxes + statue figure on top)
 --------------------------------------------------------------------
 -- Base pool
 createStaticBox(0, 0.3, 0,  3, 0.3, 3,  0.45, 0.5, 0.55)
@@ -174,6 +194,15 @@ createStaticBox(0, 0.7, 0,  2.2, 0.1, 2.2,  0.5, 0.55, 0.6)
 createStaticBox(0, 1.5, 0,  0.4, 1.2, 0.4,  0.55, 0.55, 0.6)
 -- Top basin
 createStaticBox(0, 2.5, 0,  1.0, 0.15, 1.0,  0.5, 0.52, 0.58)
+-- Statue figure atop the fountain (rigged figure as ancient statue)
+if figureMesh ~= 0 then
+    local statue = ffe.createEntity3D(figureMesh, 0, 2.8, 0)
+    if statue ~= 0 then
+        ffe.setTransform3D(statue, 0, 2.8, 0, 0, 0, 0, 0.6, 0.6, 0.6)
+        ffe.setMeshColor(statue, 0.55, 0.6, 0.5, 1.0)  -- weathered bronze
+        ffe.setMeshSpecular(statue, 0.5, 0.5, 0.4, 64)
+    end
+end
 
 --------------------------------------------------------------------
 -- Decorative rubble / obstacles around the courtyard
@@ -280,18 +309,19 @@ end
 -- Reset AI for fresh level load
 AI.reset()
 
--- Guardian 1: patrols east side
+-- Guardian 1: patrols east side (fox model -- menacing beast!)
 local guardian1 = 0
-if cubeMesh ~= 0 then
+if foxMesh ~= 0 then
     local gx, gy, gz = 10, 0.8, -5
-    guardian1 = ffe.createEntity3D(cubeMesh, gx, gy, gz)
+    guardian1 = ffe.createEntity3D(foxMesh, gx, gy, gz)
     if guardian1 ~= 0 then
-        ffe.setTransform3D(guardian1, gx, gy, gz, 0, 0, 0, 1.0, 1.3, 1.0)
-        ffe.setMeshColor(guardian1, 0.75, 0.18, 0.12, 1.0)
+        -- Fox model is small; scale up to make it imposing
+        ffe.setTransform3D(guardian1, gx, gy, gz, 0, 0, 0, 0.03, 0.03, 0.03)
+        ffe.setMeshColor(guardian1, 0.85, 0.25, 0.15, 1.0)  -- fiery red tint
         ffe.setMeshSpecular(guardian1, 0.4, 0.15, 0.15, 32)
         ffe.createPhysicsBody(guardian1, {
             shape       = "box",
-            halfExtents = { 0.5, 0.65, 0.5 },
+            halfExtents = { 0.7, 0.65, 1.0 },
             motion      = "dynamic",
             mass        = 3.0,
             restitution = 0.0,
@@ -306,18 +336,18 @@ if cubeMesh ~= 0 then
     end
 end
 
--- Guardian 2: patrols west side
+-- Guardian 2: patrols west side (fox model)
 local guardian2 = 0
-if cubeMesh ~= 0 then
+if foxMesh ~= 0 then
     local gx, gy, gz = -10, 0.8, 5
-    guardian2 = ffe.createEntity3D(cubeMesh, gx, gy, gz)
+    guardian2 = ffe.createEntity3D(foxMesh, gx, gy, gz)
     if guardian2 ~= 0 then
-        ffe.setTransform3D(guardian2, gx, gy, gz, 0, 0, 0, 1.0, 1.3, 1.0)
-        ffe.setMeshColor(guardian2, 0.75, 0.18, 0.12, 1.0)
+        ffe.setTransform3D(guardian2, gx, gy, gz, 0, 0, 0, 0.03, 0.03, 0.03)
+        ffe.setMeshColor(guardian2, 0.85, 0.25, 0.15, 1.0)  -- fiery red tint
         ffe.setMeshSpecular(guardian2, 0.4, 0.15, 0.15, 32)
         ffe.createPhysicsBody(guardian2, {
             shape       = "box",
-            halfExtents = { 0.5, 0.65, 0.5 },
+            halfExtents = { 0.7, 0.65, 1.0 },
             motion      = "dynamic",
             mass        = 3.0,
             restitution = 0.0,
@@ -335,17 +365,18 @@ end
 --------------------------------------------------------------------
 -- Artifacts / collectibles
 --------------------------------------------------------------------
--- Main artifact: behind the destructible wall (west side)
+-- Main artifact: ancient damaged helmet behind the destructible wall (west side)
 local mainArtifact = 0
 local mainArtifactPos = { x = -18, y = 1.0, z = 8 }
 
-if cubeMesh ~= 0 then
-    mainArtifact = ffe.createEntity3D(cubeMesh,
+if helmetMesh ~= 0 then
+    mainArtifact = ffe.createEntity3D(helmetMesh,
         mainArtifactPos.x, mainArtifactPos.y, mainArtifactPos.z)
     if mainArtifact ~= 0 then
+        -- Damaged helmet model -- scale to look like a relic on a pedestal
         ffe.setTransform3D(mainArtifact,
             mainArtifactPos.x, mainArtifactPos.y, mainArtifactPos.z,
-            0, 0, 0, 0.45, 0.45, 0.45)
+            0, 0, 0, 0.8, 0.8, 0.8)
         ffe.setMeshColor(mainArtifact, 1.0, 0.85, 0.1, 1.0)
         ffe.setMeshSpecular(mainArtifact, 1.0, 0.9, 0.4, 128)
         ffe.createPhysicsBody(mainArtifact, {
@@ -370,10 +401,11 @@ local gemColors = {
 }
 
 for i, pos in ipairs(gemPositions) do
-    if cubeMesh ~= 0 then
-        local gem = ffe.createEntity3D(cubeMesh, pos.x, pos.y, pos.z)
+    if duckMesh ~= 0 then
+        local gem = ffe.createEntity3D(duckMesh, pos.x, pos.y, pos.z)
         if gem ~= 0 then
-            ffe.setTransform3D(gem, pos.x, pos.y, pos.z, 0, 0, 0, 0.3, 0.3, 0.3)
+            -- Duck model as gem collectible -- tinted with gem colors
+            ffe.setTransform3D(gem, pos.x, pos.y, pos.z, 0, 0, 0, 0.008, 0.008, 0.008)
             local c = gemColors[i]
             ffe.setMeshColor(gem, c[1], c[2], c[3], 1.0)
             ffe.setMeshSpecular(gem, 0.8, 0.8, 0.8, 128)
@@ -393,7 +425,7 @@ if mainArtifact ~= 0 then
     artifactEntities[#artifactEntities + 1] = {
         entity = mainArtifact,
         pos    = mainArtifactPos,
-        scale  = 0.45,
+        scale  = 0.8,       -- helmet model scale
         isMain = true,
     }
 end
@@ -401,7 +433,7 @@ for entId, data in pairs(gems) do
     artifactEntities[#artifactEntities + 1] = {
         entity = entId,
         pos    = data.pos,
-        scale  = 0.3,
+        scale  = 0.008,     -- duck model scale
         isMain = false,
     }
 end
@@ -528,7 +560,7 @@ end
 --------------------------------------------------------------------
 -- Player spawn (south side of courtyard, at the entrance)
 --------------------------------------------------------------------
-Player.create(0, 1.5, -17, cubeMesh)
+Player.create(0, 1.5, -17, cesiumMesh)
 Camera.setPosition(0, 1.5, -17)
 Camera.setYawPitch(0, 25)
 
@@ -634,7 +666,7 @@ ffe.every(TICK_RATE, function()
         -- Fall-off detection: respawn if player falls below ground
         if py < -5 then
             Player.cleanup()
-            Player.create(0, 1.5, -17, cubeMesh)
+            Player.create(0, 1.5, -17, cesiumMesh)
             Camera.setPosition(0, 1.5, -17)
             if HUD then HUD.showPrompt("Watch your step!", 2.0) end
         end

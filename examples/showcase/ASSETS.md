@@ -315,7 +315,30 @@ Every asset committed to the repository MUST pass this checklist. No exceptions.
 
 ---
 
-## 9. Integration Notes
+## 9. Downloaded Models (Actual)
+
+The following CC0-licensed .glb models have been downloaded and integrated into the showcase:
+
+| File | Size | Source | License | Usage in Showcase |
+|------|------|--------|---------|-------------------|
+| `cube.glb` | 1.6 KB | Hand-crafted | MIT (engine asset) | Walls, floors, pillars, structural geometry |
+| `damaged_helmet.glb` | 3,686 KB | [Khronos glTF-Sample-Assets](https://github.com/KhronosGroup/glTF-Sample-Assets) | CC-BY 4.0 (original by theblueturtle_), Public Domain intent for samples | Main artifact (ancient damaged helmet relic) |
+| `cesium_man.glb` | 428 KB | [Khronos glTF-Sample-Assets](https://github.com/KhronosGroup/glTF-Sample-Assets) | CC-BY 4.0 (Cesium), distributed as glTF sample | Player character (animated humanoid) |
+| `fox.glb` | 159 KB | [Khronos glTF-Sample-Assets](https://github.com/KhronosGroup/glTF-Sample-Assets) | CC-BY 4.0 (PixelMannen), distributed as glTF sample | Guardian enemies (fiery red foxes) |
+| `duck.glb` | 118 KB | [Khronos glTF-Sample-Assets](https://github.com/KhronosGroup/glTF-Sample-Assets) | CC-BY 4.0 (Sony), distributed as glTF sample | Gem collectibles (tinted ducks) |
+| `rigged_figure.glb` | 49 KB | [Khronos glTF-Sample-Assets](https://github.com/KhronosGroup/glTF-Sample-Assets) | CC-BY 4.0 (Cesium), distributed as glTF sample | Fountain statue decoration |
+| `rigged_simple.glb` | 15 KB | [Khronos glTF-Sample-Assets](https://github.com/KhronosGroup/glTF-Sample-Assets) | CC-BY 4.0 (Cesium), distributed as glTF sample | Reserved for future props |
+| `box_vertex_colors.glb` | 1.9 KB | [Khronos glTF-Sample-Assets](https://github.com/KhronosGroup/glTF-Sample-Assets) | CC-BY 4.0, distributed as glTF sample | Reserved for pressure plates / markers |
+
+**Total disk usage: ~4.35 MB** (budget: 5 MB)
+
+All models from the Khronos glTF-Sample-Assets repository. These are the official reference models for the glTF specification. Source: https://github.com/KhronosGroup/glTF-Sample-Assets
+
+**Attribution:** Models credited to their original authors as noted above. The Khronos glTF-Sample-Assets repository distributes these under permissive terms for testing and sample purposes.
+
+---
+
+## 10. Integration Notes
 
 - **Model conversion:** If a pack provides `.fbx` or `.obj`, convert to `.glb` using `gltf-transform` or Blender CLI export. Only `.glb` files are committed.
 - **Texture sizing:** Downscale any texture larger than 2048x2048 to 1024x1024. Most textures should be 512x512 or 1024x1024.

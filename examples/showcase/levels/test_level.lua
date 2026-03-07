@@ -17,13 +17,23 @@
 ffe.log("[TestLevel] Loading test level...")
 
 --------------------------------------------------------------------
--- Load the shared cube mesh (used for all placeholder geometry)
+-- Load meshes: cube for structural geometry, real models for characters
 --------------------------------------------------------------------
 local cubeMesh = ffe.loadMesh("models/cube.glb")
 if cubeMesh == 0 then
-    ffe.log("[TestLevel] WARNING: cube.glb not found — visual geometry will be missing")
+    ffe.log("[TestLevel] WARNING: cube.glb not found -- visual geometry will be missing")
     ffe.log("[TestLevel] Place a cube.glb at assets/models/cube.glb for full visuals")
 end
+
+-- Character / prop meshes (graceful fallback to cube if missing)
+local foxMesh = ffe.loadMesh("models/fox.glb")
+if foxMesh == 0 then foxMesh = cubeMesh end
+
+local duckMesh = ffe.loadMesh("models/duck.glb")
+if duckMesh == 0 then duckMesh = cubeMesh end
+
+local cesiumMesh = ffe.loadMesh("models/cesium_man.glb")
+if cesiumMesh == 0 then cesiumMesh = cubeMesh end
 
 --------------------------------------------------------------------
 -- Lighting
@@ -130,10 +140,11 @@ local artifactColors = {
 }
 
 for i, pos in ipairs(artifactPositions) do
-    if cubeMesh ~= 0 then
-        local art = ffe.createEntity3D(cubeMesh, pos.x, pos.y, pos.z)
+    if duckMesh ~= 0 then
+        local art = ffe.createEntity3D(duckMesh, pos.x, pos.y, pos.z)
         if art ~= 0 then
-            ffe.setTransform3D(art, pos.x, pos.y, pos.z, 0, 0, 0, 0.4, 0.4, 0.4)
+            -- Duck model as artifact collectible, tinted with artifact color
+            ffe.setTransform3D(art, pos.x, pos.y, pos.z, 0, 0, 0, 0.008, 0.008, 0.008)
             local c = artifactColors[i]
             ffe.setMeshColor(art, c[1], c[2], c[3], 1.0)
             ffe.setMeshSpecular(art, 1.0, 0.9, 0.5, 128)
@@ -167,17 +178,18 @@ local artifactAngle = 0
 -- Guardian: 1 red box enemy with patrol waypoints
 --------------------------------------------------------------------
 local guardian = 0
-if cubeMesh ~= 0 then
+if foxMesh ~= 0 then
     local gx, gy, gz = -5, 0.5, -3
-    guardian = ffe.createEntity3D(cubeMesh, gx, gy, gz)
+    guardian = ffe.createEntity3D(foxMesh, gx, gy, gz)
     if guardian ~= 0 then
-        ffe.setTransform3D(guardian, gx, gy, gz, 0, 0, 0, 1, 1.2, 1)
-        ffe.setMeshColor(guardian, 0.8, 0.2, 0.15, 1.0)
+        -- Fox model -- scale to fit the scene
+        ffe.setTransform3D(guardian, gx, gy, gz, 0, 0, 0, 0.03, 0.03, 0.03)
+        ffe.setMeshColor(guardian, 0.85, 0.25, 0.15, 1.0)  -- fiery red tint
         ffe.setMeshSpecular(guardian, 0.4, 0.2, 0.2, 32)
 
         ffe.createPhysicsBody(guardian, {
             shape       = "box",
-            halfExtents = { 0.5, 0.6, 0.5 },
+            halfExtents = { 0.7, 0.6, 1.0 },
             motion      = "dynamic",
             mass        = 2.0,
             restitution = 0.0,
@@ -245,7 +257,7 @@ totalArtifacts = 3
 --------------------------------------------------------------------
 -- Player spawn
 --------------------------------------------------------------------
-Player.create(0, 2, 0, cubeMesh)
+Player.create(0, 2, 0, cesiumMesh)
 Camera.setPosition(0, 2, 0)
 Camera.setYawPitch(0, 20)
 
@@ -270,7 +282,7 @@ ffe.every(0.016, function()
     artifactAngle = artifactAngle + 90 * 0.016
     if artifactAngle > 360 then artifactAngle = artifactAngle - 360 end
 
-    -- Rotate and bob each uncollected artifact
+    -- Rotate and bob each uncollected artifact (duck model scale)
     for _, entId in ipairs(artifactEntities) do
         local data = artifacts[entId]
         if data and not data.collected then
@@ -278,7 +290,7 @@ ffe.every(0.016, function()
             local bobY = pos.y + math.sin(math.rad(artifactAngle * 2)) * 0.3
             ffe.setTransform3D(entId, pos.x, bobY, pos.z,
                 0, artifactAngle, 0,
-                0.4, 0.4, 0.4)
+                0.008, 0.008, 0.008)
         end
     end
 
