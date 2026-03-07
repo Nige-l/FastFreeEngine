@@ -3,6 +3,45 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-34 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 52: Editor Milestone 2 — FBO Viewport, Component Commands, File Dialogs
+
+### Summary
+
+Session 52 delivered Editor Milestone 2: the scene now renders to an offscreen FBO displayed in the ImGui viewport panel, component edits go through the undo/redo command system, and a full file dialog system enables Open/Save/Save As through the menu bar. FAST build passed: 780 tests on Clang-18, zero warnings.
+
+### New Features
+
+- **EditorFramebuffer** (`editor/rendering/`) — offscreen FBO class that renders the scene to a texture, displayed as an ImGui image in the viewport panel. Handles resize when the panel dimensions change.
+- **ModifyComponentCommand<T>** (`editor/commands/component_commands.h`) — templated command for undo/redo of any ECS component modification. Snapshots old and new values for full reversibility.
+- **File dialog** (`editor/panels/file_dialog.cpp/.h`) — ImGui-based file browser with Open and Save modes, `.json` filter, project-root security boundary preventing path traversal outside the project directory.
+- **Menu bar wiring** — File > Open, Save, Save As all functional: Open triggers the file dialog then deserialises via SceneSerialiser; Save/Save As serialise to the selected path.
+
+### Tests
+
+- **14 new tests** (780 total, up from 766)
+- Component command tests: modify, undo, redo for Transform and Name components
+- Integration tests for command history with component modifications
+
+### Reviews
+
+- **performance-critic:** PASS
+- **api-designer:** Updated `editor/.context.md` with FBO, component commands, and file dialog documentation
+- **game-dev-tester:** SKIP (editor internals, not game developer API)
+
+### Files Changed
+
+- `editor/rendering/editor_framebuffer.cpp`, `editor/rendering/editor_framebuffer.h` (new)
+- `editor/commands/component_commands.h` (new)
+- `editor/panels/file_dialog.cpp`, `editor/panels/file_dialog.h` (new)
+- `editor/panels/viewport_panel.cpp`, `editor/panels/viewport_panel.h` (modified — FBO integration)
+- `editor/editor_app.cpp`, `editor/editor_app.h` (modified — file dialog + menu wiring)
+- `editor/CMakeLists.txt` (modified — new source files)
+- `editor/.context.md` (updated)
+- `tests/editor/test_component_commands.cpp` (new)
+- `tests/CMakeLists.txt` (modified)
+
+---
+
 ## 2026-03-07 — Session 51: Phase 3 Kickoff — Standalone Editor Milestone 1
 
 ### Summary
