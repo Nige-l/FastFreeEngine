@@ -3,7 +3,21 @@
 #include "core/types.h"
 #include <glm/glm.hpp>
 
+// Forward declare GLFWwindow to avoid pulling in GLFW header
+struct GLFWwindow;
+
 namespace ffe::rhi {
+
+// --- Backend selection ---
+// The active backend is determined at compile time via FFE_BACKEND CMake variable.
+// This enum exists for runtime queries (logging, diagnostics) without preprocessor checks.
+enum class RhiBackend : u8 {
+    OPENGL = 0,
+    VULKAN = 1,
+};
+
+// Maximum swap chain images for Vulkan backend (static array bound)
+static constexpr u32 MAX_SWAPCHAIN_IMAGES = 4;
 
 // --- Opaque resource handles ---
 // Integer IDs, not pointers. Handle value 0 is always invalid (null handle).
@@ -34,7 +48,11 @@ struct RhiConfig {
     i32 viewportHeight = 720;
     bool headless      = false;
     bool vsync         = true;
-    bool debugGL       = false;
+    bool debugGL       = false;          // Enable OpenGL debug output
+    bool debugVulkan   = false;          // Enable Vulkan validation layers
+    RhiBackend backend = RhiBackend::OPENGL;  // Informational; actual backend is compile-time
+    u32 preferredSwapImages = 2;         // Preferred swap chain image count (Vulkan)
+    GLFWwindow* window = nullptr;        // Required for Vulkan surface creation; ignored by OpenGL
 };
 
 // --- Buffer types ---

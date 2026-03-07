@@ -3,14 +3,16 @@
 #include "renderer/rhi.h"
 #include "renderer/render_system.h"
 #include "renderer/animation_system.h"
+#ifndef FFE_BACKEND_VULKAN
 #include "renderer/mesh_loader.h"
 #include "renderer/mesh_renderer.h"
 #include "renderer/shadow_map.h"
 #include "renderer/post_process.h"
 #include "renderer/ssao.h"
+#include "renderer/texture_loader.h"
+#endif
 #include "renderer/text_renderer.h"
 #include "renderer/texture_atlas.h"
-#include "renderer/texture_loader.h"
 #include "physics/collider2d.h"
 #include "physics/collision_system.h"
 #include "physics/physics3d.h"
@@ -22,7 +24,9 @@
 #include <cmath>
 
 // GLFW/glad — must define GLFW_INCLUDE_NONE to prevent GLFW from pulling in system GL headers
+#ifndef FFE_BACKEND_VULKAN
 #include <glad/glad.h>
+#endif
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 
@@ -271,10 +275,21 @@ Result Application::initSubsystemsInternal() {
         rhiConfig.viewportHeight = m_config.windowHeight;
         rhiConfig.headless       = m_config.headless;
         rhiConfig.vsync          = true;
+        rhiConfig.window         = m_window;
+#ifdef FFE_BACKEND_VULKAN
+        rhiConfig.backend        = rhi::RhiBackend::VULKAN;
+#if defined(FFE_DEBUG)
+        rhiConfig.debugVulkan    = true;
+#else
+        rhiConfig.debugVulkan    = false;
+#endif
+#else
+        rhiConfig.backend        = rhi::RhiBackend::OPENGL;
 #if defined(FFE_DEBUG)
         rhiConfig.debugGL        = true;
 #else
         rhiConfig.debugGL        = false;
+#endif
 #endif
 
         const rhi::RhiResult rhiResult = rhi::init(rhiConfig);
@@ -288,6 +303,7 @@ Result Application::initSubsystemsInternal() {
         return Result::fail("Shader library initialization failed");
     }
 
+#ifndef FFE_BACKEND_VULKAN
     // 5b2. Initialize post-processing pipeline (after shaders, before sprite batch).
     // Uses the window dimensions for FBO creation. Post-processing is optional —
     // only active when a PostProcessConfig is placed in the ECS context.
@@ -299,6 +315,7 @@ Result Application::initSubsystemsInternal() {
 
     // 5b3. Initialize GPU instancing (shared instance VBO for batched mesh draws).
     renderer::initInstancing();
+#endif
 
     // 5c. Initialize sprite batch
     renderer::initSpriteBatch(m_spriteBatch,
@@ -480,6 +497,11 @@ Result Application::startup() {
             return Result::fail("GLFW initialization failed");
         }
 
+#ifdef FFE_BACKEND_VULKAN
+        // Vulkan: no OpenGL context — GLFW creates a plain window
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+        glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+#else
         // OpenGL 3.3 core profile for LEGACY tier
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -490,6 +512,7 @@ Result Application::startup() {
         // Explicitly request a 24-bit depth buffer for the 3D pass (ADR-007 Section 7.1).
         // GLFW defaults to 24 on most platforms for GL 3.3 core, but explicit is safer.
         glfwWindowHint(GLFW_DEPTH_BITS, 24);
+#endif
 
 #ifdef __APPLE__
         // Disable Retina framebuffer scaling. Without this, a 1280×720 window
@@ -511,15 +534,18 @@ Result Application::startup() {
             return Result::fail("Failed to create GLFW window");
         }
 
+        // Set window callbacks (shared by both backends)
+        glfwSetWindowUserPointer(m_window, this);
+        glfwSetWindowCloseCallback(m_window, glfwWindowCloseCallback);
+        glfwSetFramebufferSizeCallback(m_window, glfwFramebufferSizeCallback);
+
+#ifdef FFE_BACKEND_VULKAN
+        // Vulkan: no GL context needed. Surface creation happens in rhi::init().
+#else
         glfwMakeContextCurrent(m_window);
 
         // VSync ON by default
         glfwSwapInterval(1);
-
-        // Set window callbacks
-        glfwSetWindowUserPointer(m_window, this);
-        glfwSetWindowCloseCallback(m_window, glfwWindowCloseCallback);
-        glfwSetFramebufferSizeCallback(m_window, glfwFramebufferSizeCallback);
 
         // Load OpenGL function pointers via glad
         if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress))) {
@@ -536,6 +562,7 @@ Result Application::startup() {
             glfwTerminate();
             return Result::fail("OpenGL version too low");
         }
+#endif
     }
 
     // Delegate to shared subsystem init (renderer, audio, physics, ECS, systems)
@@ -569,11 +596,13 @@ void Application::onFramebufferResize(const i32 width, const i32 height) {
     m_textRenderer.screenWidth  = fw;
     m_textRenderer.screenHeight = fh;
 
+#ifndef FFE_BACKEND_VULKAN
     // Resize post-processing FBOs to match the new framebuffer size
     renderer::resizePostProcessing(width, height);
 
     // Resize SSAO FBOs to match the new framebuffer size
     renderer::resizeSSAO(width, height);
+#endif
 }
 
 void Application::shutdown() {
@@ -592,6 +621,7 @@ void Application::shutdown() {
     // but clean teardown order is important).
     physics::shutdownPhysics3D();
 
+#ifndef FFE_BACKEND_VULKAN
     // 5e0. Destroy skybox cubemap texture (if any) before RHI shutdown.
     if (m_skyboxConfig.cubemapTexture != 0) {
         renderer::unloadCubemap(m_skyboxConfig.cubemapTexture);
@@ -607,6 +637,7 @@ void Application::shutdown() {
 
     // 5e2. Unload all 3D meshes before shutting down the RHI
     renderer::unloadAllMeshes();
+#endif
 
     // 5e. Destroy render queue
     renderer::destroyRenderQueue(m_renderQueue);
@@ -626,6 +657,7 @@ void Application::shutdown() {
     // 5c. Shutdown sprite batch
     renderer::shutdownSpriteBatch(m_spriteBatch);
 
+#ifndef FFE_BACKEND_VULKAN
     // 5b3. Shutdown GPU instancing (shared instance VBO)
     renderer::shutdownInstancing();
 
@@ -634,6 +666,7 @@ void Application::shutdown() {
 
     // 5b2. Shutdown post-processing pipeline (before shader library — shaders still valid)
     renderer::shutdownPostProcessing();
+#endif
 
     // 5b. Shutdown shader library
     renderer::shutdownShaderLibrary(m_shaderLibrary);
@@ -719,6 +752,11 @@ void Application::render(const float alpha) {
 
     if (m_config.headless) return;
 
+#ifdef FFE_BACKEND_VULKAN
+    // Vulkan M1: clear-color only — no mesh, sprite, or post-processing rendering yet.
+    const auto& cc = m_world.registry().ctx().get<ClearColor>();
+    rhi::beginFrame({cc.r, cc.g, cc.b, 1.0f});
+#else
     // Sort the render queue now that renderPrepareSystem has populated it.
     renderer::sortRenderQueue(m_renderQueue);
 
@@ -850,6 +888,7 @@ void Application::render(const float alpha) {
     m_editorOverlay.beginFrame();
     m_editorOverlay.render(m_world);
 #endif
+#endif // !FFE_BACKEND_VULKAN
 
     // End frame — swap buffers
     rhi::endFrame(m_window);

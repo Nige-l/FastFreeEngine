@@ -32,6 +32,24 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(FFE_TIER "LEGACY" CACHE STRING "Hardware tier: RETRO, LEGACY, STANDARD, MODERN")
 set_property(CACHE FFE_TIER PROPERTY STRINGS RETRO LEGACY STANDARD MODERN)
 
+# --- RHI backend selection ---
+set(FFE_BACKEND "OPENGL" CACHE STRING "RHI backend: OPENGL, VULKAN")
+set_property(CACHE FFE_BACKEND PROPERTY STRINGS OPENGL VULKAN)
+
+# Validate tier/backend combinations
+if(FFE_BACKEND STREQUAL "VULKAN")
+    if(FFE_TIER STREQUAL "RETRO" OR FFE_TIER STREQUAL "LEGACY")
+        message(FATAL_ERROR "Vulkan backend requires STANDARD or MODERN tier. "
+                "Set -DFFE_TIER=STANDARD or -DFFE_TIER=MODERN.")
+    endif()
+endif()
+if(FFE_TIER STREQUAL "MODERN" AND NOT FFE_BACKEND STREQUAL "VULKAN")
+    message(FATAL_ERROR "MODERN tier requires Vulkan backend. "
+            "Set -DFFE_BACKEND=VULKAN.")
+endif()
+
+message(STATUS "FFE RHI Backend: ${FFE_BACKEND}")
+
 include(cmake/CompilerFlags.cmake)
 include(cmake/TierDefinitions.cmake)
 

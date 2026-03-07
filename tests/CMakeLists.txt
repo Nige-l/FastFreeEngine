@@ -24,6 +24,7 @@ add_executable(ffe_tests
     renderer/test_anti_aliasing.cpp
     renderer/test_ssao.cpp
     renderer/test_texture_atlas.cpp
+    renderer/test_rhi_vulkan.cpp
 )
 
 target_link_libraries(ffe_tests
