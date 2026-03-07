@@ -26,6 +26,7 @@ add_executable(ffe_tests
     renderer/test_texture_atlas.cpp
     renderer/test_rhi_vulkan.cpp
     renderer/test_terrain.cpp
+    renderer/test_water.cpp
     renderer/test_frustum.cpp
 )
 
@@ -71,6 +72,7 @@ add_executable(ffe_tests_scripting
     scripting/test_postprocess_bindings.cpp
     scripting/test_ssao_bindings.cpp
     scripting/test_terrain_bindings.cpp
+    scripting/test_water_bindings.cpp
 )
 
 target_link_libraries(ffe_tests_scripting

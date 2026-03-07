@@ -350,24 +350,24 @@ MeshHandle loadMesh(const char* const path) {
         return MeshHandle{0};
     }
 
-    // --- SEC-M3: Indices required (unindexed meshes not supported) ---
-    if (prim.indices == nullptr) {
-        FFE_LOG_ERROR("MeshLoader",
-                      "loadMesh: unindexed meshes are not supported in \"%s\"", canonPath);
-        cgltf_free(data);
-        return MeshHandle{0};
-    }
+    // --- Unindexed mesh support ---
+    // glTF primitives may omit the indices accessor. In that case we generate
+    // a trivial index buffer (0, 1, 2, ..., vertexCount-1) so the rest of the
+    // renderer can use the indexed draw path uniformly.
+    const bool isUnindexed = (prim.indices == nullptr);
+    const cgltf_accessor* idxAccessor = prim.indices; // nullptr when unindexed
 
-    // --- SEC-M3: Validate index accessor component type ---
-    const cgltf_accessor* idxAccessor = prim.indices;
-    if (idxAccessor->component_type != cgltf_component_type_r_16u &&
-        idxAccessor->component_type != cgltf_component_type_r_32u &&
-        idxAccessor->component_type != cgltf_component_type_r_8u) {
-        FFE_LOG_ERROR("MeshLoader",
-                      "loadMesh: unsupported index component type (%d) in \"%s\"",
-                      static_cast<int>(idxAccessor->component_type), canonPath);
-        cgltf_free(data);
-        return MeshHandle{0};
+    // --- SEC-M3: Validate index accessor component type (only when indexed) ---
+    if (!isUnindexed) {
+        if (idxAccessor->component_type != cgltf_component_type_r_16u &&
+            idxAccessor->component_type != cgltf_component_type_r_32u &&
+            idxAccessor->component_type != cgltf_component_type_r_8u) {
+            FFE_LOG_ERROR("MeshLoader",
+                          "loadMesh: unsupported index component type (%d) in \"%s\"",
+                          static_cast<int>(idxAccessor->component_type), canonPath);
+            cgltf_free(data);
+            return MeshHandle{0};
+        }
     }
 
     // --- Locate POSITION, NORMAL, TEXCOORD_0, JOINTS_0, WEIGHTS_0 accessors ---
@@ -420,7 +420,9 @@ MeshHandle loadMesh(const char* const path) {
 
     // --- SEC-M4: Vertex and index count limits ---
     const u32 vertexCount = static_cast<u32>(posAccessor->count);
-    const u32 indexCount  = static_cast<u32>(idxAccessor->count);
+    // For unindexed meshes, index count equals vertex count (trivial 0..N-1).
+    const u32 indexCount  = isUnindexed ? vertexCount
+                                        : static_cast<u32>(idxAccessor->count);
 
     if (vertexCount > MAX_MESH_VERTICES) {
         FFE_LOG_ERROR("MeshLoader",
@@ -749,11 +751,22 @@ MeshHandle loadMesh(const char* const path) {
         }
     }
 
-    // --- Extract index data using safe accessor API ---
-    // All indices widened to u32 (ADR-007 Section 13.7).
-    for (u32 ii = 0; ii < indexCount; ++ii) {
-        indices[ii] = static_cast<u32>(cgltf_accessor_read_index(idxAccessor,
-                                                                  static_cast<cgltf_size>(ii)));
+    // --- Extract index data ---
+    if (isUnindexed) {
+        // Generate trivial index buffer: 0, 1, 2, ..., vertexCount-1
+        // This lets the rest of the renderer use the indexed draw path uniformly.
+        for (u32 ii = 0; ii < indexCount; ++ii) {
+            indices[ii] = ii;
+        }
+        FFE_LOG_INFO("MeshLoader",
+                     "loadMesh: generated trivial index buffer (%u indices) for unindexed mesh in \"%s\"",
+                     indexCount, canonPath);
+    } else {
+        // All indices widened to u32 (ADR-007 Section 13.7).
+        for (u32 ii = 0; ii < indexCount; ++ii) {
+            indices[ii] = static_cast<u32>(cgltf_accessor_read_index(idxAccessor,
+                                                                      static_cast<cgltf_size>(ii)));
+        }
     }
 
     // --- SEC-M6: cgltf data no longer needed — free before GPU upload ---

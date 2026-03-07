@@ -1,6 +1,7 @@
 #include "renderer/shader_library.h"
 #include "renderer/post_process.h"
 #include "renderer/ssao.h"
+#include "renderer/water.h"
 #include "renderer/rhi.h"
 #include "core/logging.h"
 
@@ -124,6 +125,7 @@ uniform mat4 u_model;
 uniform mat4 u_viewProjection;
 uniform mat3 u_normalMatrix;
 uniform mat4 u_lightSpaceMatrix;
+uniform vec4 u_clipPlane;
 
 out vec3 v_fragPos;
 out vec3 v_normal;
@@ -138,6 +140,7 @@ void main() {
     v_tangent           = u_normalMatrix * a_tangent;
     v_texcoord          = a_texcoord;
     v_fragPosLightSpace = u_lightSpaceMatrix * worldPos;
+    gl_ClipDistance[0]  = (dot(u_clipPlane, u_clipPlane) < 0.001) ? 1.0 : dot(worldPos, u_clipPlane);
     gl_Position         = u_viewProjection * worldPos;
 }
 )glsl";
@@ -337,12 +340,18 @@ layout(location = 0) in vec3 a_position;
 
 uniform mat4 u_viewNoTranslation;
 uniform mat4 u_projection;
+uniform vec4 u_clipPlane;
 
 out vec3 v_texCoord;
 
 void main() {
     v_texCoord = a_position;
     vec4 pos = u_projection * u_viewNoTranslation * vec4(a_position, 1.0);
+    // Skybox is always above water -- clip plane set to (0,0,0,0) when inactive.
+    // When clip plane length is near zero (disabled), pass 1.0 to never clip.
+    // When active, use a large positive value so skybox is never clipped.
+    float clipLen = dot(u_clipPlane, u_clipPlane);
+    gl_ClipDistance[0] = (clipLen < 0.001) ? 1.0 : dot(vec4(a_position * 1000.0, 1.0), u_clipPlane);
     // Set z = w so that after perspective divide, depth = 1.0 (max depth).
     // This ensures the skybox is drawn behind all other geometry.
     gl_Position = pos.xyww;
@@ -386,6 +395,7 @@ uniform mat4 u_viewProjection;
 uniform mat3 u_normalMatrix;
 uniform mat4 u_lightSpaceMatrix;
 uniform mat4 u_boneMatrices[MAX_BONES];
+uniform vec4 u_clipPlane;
 
 out vec3 v_fragPos;
 out vec3 v_normal;
@@ -409,6 +419,7 @@ void main() {
     v_tangent           = u_normalMatrix * (mat3(skinMatrix) * a_tangent);
     v_texcoord          = a_texcoord;
     v_fragPosLightSpace = u_lightSpaceMatrix * worldPos;
+    gl_ClipDistance[0]  = (dot(u_clipPlane, u_clipPlane) < 0.001) ? 1.0 : dot(worldPos, u_clipPlane);
     gl_Position         = u_viewProjection * worldPos;
 }
 )glsl";
@@ -734,6 +745,7 @@ uniform mat4 u_viewProjection;
 uniform mat3 u_normalMatrix;
 uniform mat4 u_lightSpaceMatrix;
 uniform mat4 u_boneMatrices[MAX_BONES];
+uniform vec4 u_clipPlane;
 
 out vec3 v_fragPos;
 out vec3 v_normal;
@@ -756,6 +768,7 @@ void main() {
     v_tangent           = u_normalMatrix * (mat3(skinMatrix) * a_tangent);
     v_texcoord          = a_texcoord;
     v_fragPosLightSpace = u_lightSpaceMatrix * worldPos;
+    gl_ClipDistance[0]  = (dot(u_clipPlane, u_clipPlane) < 0.001) ? 1.0 : dot(worldPos, u_clipPlane);
     gl_Position         = u_viewProjection * worldPos;
 }
 )glsl";
@@ -783,6 +796,7 @@ layout(location = 11) in vec4 a_instanceModel3;
 
 uniform mat4 u_viewProjection;
 uniform mat4 u_lightSpaceMatrix;
+uniform vec4 u_clipPlane;
 
 out vec3 v_fragPos;
 out vec3 v_normal;
@@ -801,6 +815,7 @@ void main() {
     v_tangent           = normalMatrix * a_tangent;
     v_texcoord          = a_texcoord;
     v_fragPosLightSpace = u_lightSpaceMatrix * worldPos;
+    gl_ClipDistance[0]  = (dot(u_clipPlane, u_clipPlane) < 0.001) ? 1.0 : dot(worldPos, u_clipPlane);
     gl_Position         = u_viewProjection * worldPos;
 }
 )glsl";
@@ -825,6 +840,7 @@ layout(location = 11) in vec4 a_instanceModel3;
 
 uniform mat4 u_viewProjection;
 uniform mat4 u_lightSpaceMatrix;
+uniform vec4 u_clipPlane;
 
 out vec3 v_fragPos;
 out vec3 v_normal;
@@ -843,6 +859,7 @@ void main() {
     v_tangent           = normalMatrix * a_tangent;
     v_texcoord          = a_texcoord;
     v_fragPosLightSpace = u_lightSpaceMatrix * worldPos;
+    gl_ClipDistance[0]  = (dot(u_clipPlane, u_clipPlane) < 0.001) ? 1.0 : dot(worldPos, u_clipPlane);
     gl_Position         = u_viewProjection * worldPos;
 }
 )glsl";
@@ -1327,6 +1344,7 @@ uniform mat4 u_model;
 uniform mat4 u_viewProjection;
 uniform mat3 u_normalMatrix;
 uniform mat4 u_lightSpaceMatrix;
+uniform vec4 u_clipPlane;
 
 out vec3 v_fragPos;
 out vec3 v_normal;
@@ -1339,6 +1357,7 @@ void main() {
     v_normal            = u_normalMatrix * a_normal;
     v_texcoord          = a_texcoord;
     v_fragPosLightSpace = u_lightSpaceMatrix * worldPos;
+    gl_ClipDistance[0]  = (dot(u_clipPlane, u_clipPlane) < 0.001) ? 1.0 : dot(worldPos, u_clipPlane);
     gl_Position         = u_viewProjection * worldPos;
 }
 )glsl";
@@ -1506,6 +1525,116 @@ void main() {
 }
 )glsl";
 
+// --- Water shader (planar water with reflection, fresnel, animated distortion) ---
+
+static const char* const WATER_VERT_SOURCE = R"glsl(
+#version 330 core
+
+layout(location = 0) in vec3 a_position;
+layout(location = 1) in vec2 a_texcoord;
+
+uniform mat4 u_model;
+uniform mat4 u_viewProjection;
+uniform float u_waterLevel;
+
+out vec3 v_worldPos;
+out vec4 v_clipSpace;
+out vec2 v_texCoord;
+
+void main() {
+    vec4 worldPos = u_model * vec4(a_position, 1.0);
+    v_worldPos    = worldPos.xyz;
+    v_clipSpace   = u_viewProjection * worldPos;
+    v_texCoord    = a_texcoord;
+    gl_Position   = v_clipSpace;
+}
+)glsl";
+
+static const char* const WATER_FRAG_SOURCE = R"glsl(
+#version 330 core
+
+in vec3 v_worldPos;
+in vec4 v_clipSpace;
+in vec2 v_texCoord;
+
+uniform sampler2D u_reflectionTex;
+uniform sampler2D u_depthTex;
+uniform int       u_hasDepthTex;
+uniform float     u_time;
+uniform vec3      u_cameraPos;
+uniform vec4      u_shallowColor;
+uniform vec4      u_deepColor;
+uniform float     u_maxDepth;
+uniform float     u_waveSpeed;
+uniform float     u_waveScale;
+uniform float     u_fresnelPower;
+uniform float     u_fresnelBias;
+uniform float     u_reflDistortion;
+uniform float     u_nearPlane;
+uniform float     u_farPlane;
+
+// Fog uniforms (same as MESH_BLINN_PHONG)
+uniform int       u_fogEnabled;
+uniform vec3      u_fogColor;
+uniform float     u_fogNear;
+uniform float     u_fogFar;
+
+out vec4 FragColor;
+
+float linearizeDepth(float d) {
+    float z = d * 2.0 - 1.0; // Back to NDC
+    return (2.0 * u_nearPlane * u_farPlane) / (u_farPlane + u_nearPlane - z * (u_farPlane - u_nearPlane));
+}
+
+void main() {
+    // 1. Procedural wave normal (no texture file needed)
+    vec2 uv1 = v_texCoord * 8.0 + vec2(u_time * u_waveSpeed, u_time * u_waveSpeed * 0.7);
+    vec2 uv2 = v_texCoord * 6.0 - vec2(u_time * u_waveSpeed * 0.5, u_time * u_waveSpeed * 1.1);
+    vec3 waveNormal = normalize(vec3(
+        sin(uv1.x * 6.28) * cos(uv2.y * 6.28) * u_waveScale,
+        1.0,
+        cos(uv1.y * 6.28) * sin(uv2.x * 6.28) * u_waveScale
+    ));
+
+    // 2. Projective reflection UV
+    vec2 reflUV = (v_clipSpace.xy / v_clipSpace.w) * 0.5 + 0.5;
+    reflUV.y = 1.0 - reflUV.y;  // flip vertically for reflection
+    reflUV += waveNormal.xz * u_reflDistortion;  // distort by wave
+    reflUV = clamp(reflUV, 0.001, 0.999);  // prevent edge artifacts
+    vec3 reflColor = texture(u_reflectionTex, reflUV).rgb;
+
+    // 3. Depth-based transparency (edge fade)
+    float depthFactor = 0.5; // default mid-blend when no depth texture
+    if (u_hasDepthTex != 0) {
+        vec2 screenUV = (v_clipSpace.xy / v_clipSpace.w) * 0.5 + 0.5;
+        float sceneDepth = linearizeDepth(texture(u_depthTex, screenUV).r);
+        float waterDepth = linearizeDepth(gl_FragCoord.z);
+        float depthDiff = sceneDepth - waterDepth;
+        depthFactor = clamp(depthDiff / u_maxDepth, 0.0, 1.0);
+    }
+    vec4 waterColor = mix(u_shallowColor, u_deepColor, depthFactor);
+
+    // 4. Fresnel (Schlick approximation)
+    vec3 viewDir = normalize(u_cameraPos - v_worldPos);
+    float fresnel = u_fresnelBias + (1.0 - u_fresnelBias) *
+        pow(1.0 - max(dot(viewDir, waveNormal), 0.0), u_fresnelPower);
+    fresnel = clamp(fresnel, 0.0, 1.0);
+
+    // 5. Final blend
+    vec3 finalColor = mix(waterColor.rgb, reflColor, fresnel);
+    float finalAlpha = mix(waterColor.a, 1.0, fresnel);
+
+    // 6. Fog
+    if (u_fogEnabled != 0) {
+        float dist = length(v_worldPos - u_cameraPos);
+        float fogFactor = clamp((u_fogFar - dist) / (u_fogFar - u_fogNear), 0.0, 1.0);
+        finalColor = mix(u_fogColor, finalColor, fogFactor);
+    }
+
+    FragColor = vec4(finalColor, finalAlpha);
+}
+)glsl";
+
 // ==================== Library Implementation ====================
 
 struct ShaderPair {
@@ -1535,6 +1664,7 @@ static const ShaderPair PAIRS[] = {
     { FULLSCREEN_VERT_SOURCE,          SSAO_PASS_FRAG_SOURCE,           "ssao_pass"             },
     { FULLSCREEN_VERT_SOURCE,          SSAO_BLUR_FRAG_SOURCE,           "ssao_blur"             },
     { TERRAIN_VERT_SOURCE,             TERRAIN_FRAG_SOURCE,             "terrain"               },
+    { WATER_VERT_SOURCE,               WATER_FRAG_SOURCE,               "water"                 },
 };
 static_assert(sizeof(PAIRS) / sizeof(PAIRS[0]) == static_cast<u32>(BuiltinShader::COUNT));
 
@@ -1565,6 +1695,9 @@ bool initShaderLibrary(ShaderLibrary& library) {
     setSSAOShaders(
         library.handles[static_cast<u32>(BuiltinShader::SSAO_PASS)],
         library.handles[static_cast<u32>(BuiltinShader::SSAO_BLUR)]);
+
+    // Register water shader handle for the water rendering pipeline.
+    setWaterShader(library.handles[static_cast<u32>(BuiltinShader::WATER)]);
 
     FFE_LOG_INFO("Shader", "Loaded %u built-in shaders", static_cast<u32>(BuiltinShader::COUNT));
     return true;

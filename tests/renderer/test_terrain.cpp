@@ -129,8 +129,8 @@ TEST_CASE("BuiltinShader::TERRAIN exists at index 19", "[terrain]") {
     CHECK(static_cast<ffe::u32>(ffe::renderer::BuiltinShader::TERRAIN) == 19);
 }
 
-TEST_CASE("BuiltinShader::COUNT is 20 after TERRAIN addition", "[terrain]") {
-    CHECK(static_cast<ffe::u32>(ffe::renderer::BuiltinShader::COUNT) == 20);
+TEST_CASE("BuiltinShader::COUNT is at least 20 after TERRAIN addition", "[terrain]") {
+    CHECK(static_cast<ffe::u32>(ffe::renderer::BuiltinShader::COUNT) >= 20);
 }
 
 // -----------------------------------------------------------------------

@@ -59,7 +59,8 @@ struct MeshGpuRecord {
 // realpath check). Additionally, the path must end with ".glb" (SEC-M8).
 //
 // Loads the FIRST mesh primitive from the FIRST mesh in the glTF scene.
-// Unindexed meshes are not supported — the primitive must have indices.
+// Unindexed meshes are supported — a trivial index buffer (0, 1, 2, ...)
+// is generated automatically when the primitive has no indices.
 //
 // On success: returns a valid MeshHandle (handle.id > 0).
 // On failure: returns MeshHandle{0} and logs via FFE_LOG_ERROR.

@@ -8,6 +8,7 @@
 #include "renderer/mesh_renderer.h"
 #include "renderer/terrain.h"
 #include "renderer/terrain_renderer.h"
+#include "renderer/water.h"
 #include "renderer/shadow_map.h"
 #include "renderer/post_process.h"
 #include "renderer/ssao.h"
@@ -315,6 +316,11 @@ Result Application::initSubsystemsInternal() {
     // SSAO is optional — only active when an SSAOConfig is placed in the ECS context.
     renderer::initSSAO(m_config.windowWidth, m_config.windowHeight);
 
+    // 5b2c. Initialize water rendering pipeline (reflection FBO + water quad VAO).
+    // Water is optional — only active when a WaterConfig is placed in the ECS context
+    // and a Water entity exists.
+    renderer::initWater(m_config.windowWidth, m_config.windowHeight);
+
     // 5b3. Initialize GPU instancing (shared instance VBO for batched mesh draws).
     renderer::initInstancing();
 #endif
@@ -407,6 +413,10 @@ Result Application::initSubsystemsInternal() {
     // Emplace fog params pointer into ECS context for Lua access.
     // Fog is disabled by default (FogParams::enabled = false).
     m_world.registry().ctx().emplace<renderer::FogParams*>(&m_fogParams);
+
+    // Emplace water config into ECS context for Lua access.
+    // Water is disabled by default (WaterConfig::enabled = false).
+    m_world.registry().ctx().emplace<renderer::WaterConfig>();
 
     // 5e0. Initialize 3D physics (Jolt)
     if (!physics::initPhysics3D()) {
@@ -604,6 +614,9 @@ void Application::onFramebufferResize(const i32 width, const i32 height) {
 
     // Resize SSAO FBOs to match the new framebuffer size
     renderer::resizeSSAO(width, height);
+
+    // Resize water reflection FBOs to match the new framebuffer size
+    renderer::resizeWaterFBOs(width, height);
 #endif
 }
 
@@ -665,6 +678,9 @@ void Application::shutdown() {
 #ifndef FFE_BACKEND_VULKAN
     // 5b3. Shutdown GPU instancing (shared instance VBO)
     renderer::shutdownInstancing();
+
+    // 5b2c. Shutdown water rendering pipeline (before shader library — shaders still valid)
+    renderer::shutdownWater();
 
     // 5b2b. Shutdown SSAO pipeline (before shader library — shaders still valid)
     renderer::shutdownSSAO();
@@ -783,6 +799,16 @@ void Application::render(const float alpha) {
         rhi::beginFrame({cc.r, cc.g, cc.b, 1.0f});
     }
 
+    // --- Water reflection pass: render scene into reflection FBO (before main scene) ---
+    // Only active when WaterConfig::enabled is true and a Water entity exists.
+    {
+        const auto& waterCfg = m_world.registry().ctx().get<renderer::WaterConfig>();
+        if (waterCfg.enabled) {
+            renderer::renderWaterReflection(m_world, m_camera3d,
+                                            m_fogParams, waterCfg);
+        }
+    }
+
     // --- 3D pass: render all mesh entities before 2D sprites ---
     // meshRenderSystem sets its own pipeline state (depth LESS, cull BACK, no blend),
     // draws all Transform3D + Mesh entities, then restores 2D-compatible state.
@@ -802,6 +828,16 @@ void Application::render(const float alpha) {
     // meshRenderSystem already restored 2D-compatible state; renderSkybox temporarily
     // re-enables depth test for the skybox draw and restores state after.
     renderer::renderSkybox(m_world, m_camera3d, m_skyboxConfig);
+
+    // --- Water pass: render water quad after opaque geometry, before 2D ---
+    // Uses alpha blending, reads depth for correct occlusion.
+    {
+        const auto& waterCfg = m_world.registry().ctx().get<renderer::WaterConfig>();
+        if (waterCfg.enabled) {
+            const f32 waterTime = static_cast<f32>(glfwGetTime());
+            renderer::renderWater(m_world, m_camera3d, m_fogParams, waterCfg, waterTime);
+        }
+    }
 
     // Apply camera shake (if active) and compute VP matrix.
     // Shake uses exponential decay for a punchy start that fades naturally.

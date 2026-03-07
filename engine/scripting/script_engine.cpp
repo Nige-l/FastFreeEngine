@@ -25,6 +25,7 @@ extern "C" {
 #include "renderer/post_process.h"
 #include "renderer/ssao.h"
 #include "renderer/terrain.h"
+#include "renderer/water.h"
 
 #include "audio/audio.h"
 #include "renderer/text_renderer.h"
@@ -7241,6 +7242,34 @@ void ScriptEngine::registerEcsBindings() {
 
         const ffe::renderer::TerrainHandle handle =
             ffe::renderer::loadTerrainFromImage(path, cfg);
+
+        if (!ffe::renderer::isValid(handle)) {
+            lua_pushinteger(state, 0);
+            return 1;
+        }
+
+        // Create an ECS entity with Transform3D + Terrain components so that
+        // terrainRenderSystem() can find and render this terrain.
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (!lua_isnil(state, -1)) {
+            auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+            lua_pop(state, 1);
+
+            const ffe::EntityId entityId = world->createEntity();
+            auto& t3d = world->registry().emplace<ffe::Transform3D>(
+                static_cast<entt::entity>(entityId));
+            t3d.position = glm::vec3(0.0f, 0.0f, 0.0f);
+            t3d.scale    = glm::vec3(1.0f, 1.0f, 1.0f);
+
+            ffe::Terrain terrainComp;
+            terrainComp.terrainHandle = handle;
+            world->registry().emplace<ffe::Terrain>(
+                static_cast<entt::entity>(entityId), terrainComp);
+        } else {
+            lua_pop(state, 1);
+        }
+
         lua_pushinteger(state, static_cast<lua_Integer>(handle.id));
         return 1;
     };
@@ -7371,6 +7400,173 @@ void ScriptEngine::registerEcsBindings() {
     };
     lua_pushcfunction(L, ffe_setTerrainLodDistances);
     lua_setfield(L, -2, "setTerrainLodDistances");
+
+    // ----------------------------------------------------------------
+    // Water bindings
+    // ----------------------------------------------------------------
+
+    // ffe.createWater(waterLevel: number) -> integer
+    // Create a water entity with Water + Transform3D components.
+    // Sets WaterConfig::enabled = true and waterLevel. Returns entity ID.
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); lua_pushinteger(state, 0); return 1; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const double rawLevel = lua_tonumber(state, 1);
+        const ffe::f32 waterLevel = static_cast<ffe::f32>(rawLevel);
+
+        // Create entity with Water + Transform3D
+        const ffe::EntityId entityId = world->createEntity();
+        world->registry().emplace<ffe::renderer::Water>(static_cast<entt::entity>(entityId));
+        auto& t3d = world->registry().emplace<ffe::Transform3D>(static_cast<entt::entity>(entityId));
+        t3d.position = glm::vec3(0.0f, waterLevel, 0.0f);
+        t3d.scale    = glm::vec3(1.0f, 1.0f, 1.0f);
+
+        // Enable water in the config
+        auto& waterCfg = world->registry().ctx().get<ffe::renderer::WaterConfig>();
+        waterCfg.enabled    = true;
+        waterCfg.waterLevel = waterLevel;
+
+        lua_pushinteger(state, static_cast<lua_Integer>(entityId));
+        return 1;
+    });
+    lua_setfield(L, -2, "createWater");
+
+    // ffe.setWaterLevel(level: number) -> nothing
+    // Set the Y height of the water plane.
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const double rawLevel = lua_tonumber(state, 1);
+        auto& waterCfg = world->registry().ctx().get<ffe::renderer::WaterConfig>();
+        waterCfg.waterLevel = static_cast<ffe::f32>(rawLevel);
+        return 0;
+    });
+    lua_setfield(L, -2, "setWaterLevel");
+
+    // ffe.setWaterColor(r: number, g: number, b: number, a: number) -> nothing
+    // Set the shallow water color. Deep color is auto-derived (RGB * 0.3, A * 1.5 clamped).
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const ffe::f32 r = static_cast<ffe::f32>(lua_tonumber(state, 1));
+        const ffe::f32 g = static_cast<ffe::f32>(lua_tonumber(state, 2));
+        const ffe::f32 b = static_cast<ffe::f32>(lua_tonumber(state, 3));
+        const ffe::f32 a = lua_gettop(state) >= 4
+            ? static_cast<ffe::f32>(lua_tonumber(state, 4)) : 0.6f;
+
+        auto& waterCfg = world->registry().ctx().get<ffe::renderer::WaterConfig>();
+        waterCfg.shallowColor = glm::vec4(r, g, b, a);
+        // Auto-derive deep color: darken RGB by 0.3, increase alpha by 1.5 (clamped)
+        const ffe::f32 deepA = (a * 1.5f > 1.0f) ? 1.0f : a * 1.5f;
+        waterCfg.deepColor = glm::vec4(r * 0.3f, g * 0.3f, b * 0.3f, deepA);
+        return 0;
+    });
+    lua_setfield(L, -2, "setWaterColor");
+
+    // ffe.setWaterDeepColor(r: number, g: number, b: number) -> nothing
+    // Directly set the deep water color (advanced usage).
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const ffe::f32 r = static_cast<ffe::f32>(lua_tonumber(state, 1));
+        const ffe::f32 g = static_cast<ffe::f32>(lua_tonumber(state, 2));
+        const ffe::f32 b = static_cast<ffe::f32>(lua_tonumber(state, 3));
+
+        auto& waterCfg = world->registry().ctx().get<ffe::renderer::WaterConfig>();
+        waterCfg.deepColor.x = r;
+        waterCfg.deepColor.y = g;
+        waterCfg.deepColor.z = b;
+        return 0;
+    });
+    lua_setfield(L, -2, "setWaterDeepColor");
+
+    // ffe.setWaterOpacity(opacity: number) -> nothing
+    // Set shallow color alpha (0.0 = invisible, 1.0 = opaque).
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const ffe::f32 opacity = static_cast<ffe::f32>(lua_tonumber(state, 1));
+        auto& waterCfg = world->registry().ctx().get<ffe::renderer::WaterConfig>();
+        waterCfg.shallowColor.w = opacity;
+        return 0;
+    });
+    lua_setfield(L, -2, "setWaterOpacity");
+
+    // ffe.setWaterWaveSpeed(speed: number) -> nothing
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const ffe::f32 speed = static_cast<ffe::f32>(lua_tonumber(state, 1));
+        auto& waterCfg = world->registry().ctx().get<ffe::renderer::WaterConfig>();
+        waterCfg.waveSpeed = speed;
+        return 0;
+    });
+    lua_setfield(L, -2, "setWaterWaveSpeed");
+
+    // ffe.setWaterWaveScale(scale: number) -> nothing
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const ffe::f32 scale = static_cast<ffe::f32>(lua_tonumber(state, 1));
+        auto& waterCfg = world->registry().ctx().get<ffe::renderer::WaterConfig>();
+        waterCfg.waveScale = scale;
+        return 0;
+    });
+    lua_setfield(L, -2, "setWaterWaveScale");
+
+    // ffe.removeWater() -> nothing
+    // Destroy all Water entities and disable water rendering.
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        // Collect Water entity IDs first, then destroy (avoid iterator invalidation)
+        std::vector<ffe::EntityId> toDestroy;
+        auto waterView = world->registry().view<ffe::renderer::Water>();
+        for (const auto entity : waterView) {
+            toDestroy.push_back(static_cast<ffe::EntityId>(entt::to_integral(entity)));
+        }
+        for (const auto eid : toDestroy) {
+            world->destroyEntity(eid);
+        }
+
+        // Disable water in config
+        auto& waterCfg = world->registry().ctx().get<ffe::renderer::WaterConfig>();
+        waterCfg.enabled = false;
+        return 0;
+    });
+    lua_setfield(L, -2, "removeWater");
 
     lua_setglobal(L, "ffe");
 }
