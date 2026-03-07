@@ -23,6 +23,8 @@
 
 #include <glad/glad.h>
 
+#include <cstdio>
+
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -166,6 +168,42 @@ void meshRenderSystem(World& world, const Camera& camera3d,
     // Explicitly upload here too for clarity — the RHI caches it in the shader program.
     rhi::setUniformMat4(meshShader, "u_viewProjection", vpMatrix);
 
+    // --- Upload point light uniforms ---
+    // Count active point lights and upload their data to the shader.
+    // Fixed-size arrays — no heap allocation.
+    {
+        u32 activeCount = 0;
+        glm::vec3 positions[MAX_POINT_LIGHTS];
+        glm::vec3 colors[MAX_POINT_LIGHTS];
+        float radii[MAX_POINT_LIGHTS];
+
+        for (u32 i = 0; i < MAX_POINT_LIGHTS; ++i) {
+            if (lighting->pointLights[i].active) {
+                positions[activeCount] = lighting->pointLights[i].position;
+                colors[activeCount]    = lighting->pointLights[i].color;
+                radii[activeCount]     = lighting->pointLights[i].radius;
+                ++activeCount;
+            }
+        }
+
+        rhi::setUniformInt(meshShader, "u_pointLightCount", static_cast<i32>(activeCount));
+
+        // Upload arrays via individual indexed uniforms (GL 3.3 compatible).
+        // Only upload active lights to minimise uniform calls.
+        char uniformName[64];
+        for (u32 i = 0; i < activeCount; ++i) {
+            const auto idx = static_cast<unsigned int>(i);
+            std::snprintf(uniformName, sizeof(uniformName), "u_pointLightPos[%u]", idx);
+            rhi::setUniformVec3(meshShader, uniformName, positions[i]);
+
+            std::snprintf(uniformName, sizeof(uniformName), "u_pointLightColor[%u]", idx);
+            rhi::setUniformVec3(meshShader, uniformName, colors[i]);
+
+            std::snprintf(uniformName, sizeof(uniformName), "u_pointLightRadius[%u]", idx);
+            rhi::setUniformFloat(meshShader, uniformName, radii[i]);
+        }
+    }
+
     // --- Shadow map uniforms for the Blinn-Phong pass ---
     if (shadowCfg.enabled && shadowMap.depthTexture != 0) {
         glActiveTexture(GL_TEXTURE0 + 1);
@@ -210,6 +248,10 @@ void meshRenderSystem(World& world, const Camera& camera3d,
         // --- Per-entity material (from Material3D if present, else defaults) ---
         glm::vec4 diffuseColor{1.0f, 1.0f, 1.0f, 1.0f};
         rhi::TextureHandle diffuseTex = defaultWhite;
+        glm::vec3 specularColor{1.0f, 1.0f, 1.0f};
+        f32 shininess = 32.0f;
+        rhi::TextureHandle normalMapTex{};
+        rhi::TextureHandle specularMapTex{};
 
         const Material3D* mat = world.registry().try_get<Material3D>(entity);
         if (mat != nullptr) {
@@ -217,6 +259,10 @@ void meshRenderSystem(World& world, const Camera& camera3d,
             if (rhi::isValid(mat->diffuseTexture)) {
                 diffuseTex = mat->diffuseTexture;
             }
+            specularColor = mat->specularColor;
+            shininess     = mat->shininess;
+            normalMapTex  = mat->normalMapTexture;
+            specularMapTex = mat->specularMapTexture;
         }
 
         rhi::setUniformVec4(meshShader, "u_diffuseColor", diffuseColor);
@@ -224,6 +270,30 @@ void meshRenderSystem(World& world, const Camera& camera3d,
         // Bind diffuse texture to unit 0
         rhi::bindTexture(diffuseTex, 0);
         rhi::setUniformInt(meshShader, "u_diffuseTexture", 0);
+
+        // Upload specular material properties
+        rhi::setUniformVec3(meshShader, "u_specularColor", specularColor);
+        rhi::setUniformFloat(meshShader, "u_shininess", shininess);
+
+        // Bind normal map to unit 2 (unit 1 is shadow map)
+        if (rhi::isValid(normalMapTex)) {
+            glActiveTexture(GL_TEXTURE0 + 2);
+            glBindTexture(GL_TEXTURE_2D, normalMapTex.id);
+            rhi::setUniformInt(meshShader, "u_normalMap", 2);
+            rhi::setUniformInt(meshShader, "u_hasNormalMap", 1);
+        } else {
+            rhi::setUniformInt(meshShader, "u_hasNormalMap", 0);
+        }
+
+        // Bind specular map to unit 3
+        if (rhi::isValid(specularMapTex)) {
+            glActiveTexture(GL_TEXTURE0 + 3);
+            glBindTexture(GL_TEXTURE_2D, specularMapTex.id);
+            rhi::setUniformInt(meshShader, "u_specularMap", 3);
+            rhi::setUniformInt(meshShader, "u_hasSpecularMap", 1);
+        } else {
+            rhi::setUniformInt(meshShader, "u_hasSpecularMap", 0);
+        }
 
         // --- Issue indexed draw call via the mesh VAO ---
         // The VAO already has VBO attribs and IBO bound.
@@ -235,12 +305,17 @@ void meshRenderSystem(World& world, const Camera& camera3d,
     }
     glBindVertexArray(0);
 
-    // --- Unbind shadow texture from unit 1 after all entities drawn ---
+    // --- Unbind textures from units 1-3 after all entities drawn ---
+    // Unit 1: shadow map, Unit 2: normal map, Unit 3: specular map
+    glActiveTexture(GL_TEXTURE0 + 3);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE0 + 2);
+    glBindTexture(GL_TEXTURE_2D, 0);
     if (shadowCfg.enabled && shadowMap.depthTexture != 0) {
         glActiveTexture(GL_TEXTURE0 + 1);
         glBindTexture(GL_TEXTURE_2D, 0);
-        glActiveTexture(GL_TEXTURE0);
     }
+    glActiveTexture(GL_TEXTURE0);
 
     // --- Restore 2D-compatible pipeline state ---
     // Depth test disabled, culling disabled, alpha blending re-enabled.

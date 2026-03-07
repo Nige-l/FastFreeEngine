@@ -141,9 +141,9 @@ TEST_CASE("Mesh: sizeof == 8") {
     REQUIRE(sizeof(Mesh) == 8u);
 }
 
-TEST_CASE("Material3D: sizeof == 24") {
-    static_assert(sizeof(Material3D) == 24, "Material3D must be 24 bytes");
-    REQUIRE(sizeof(Material3D) == 24u);
+TEST_CASE("Material3D: sizeof == 48") {
+    static_assert(sizeof(Material3D) == 48, "Material3D must be 48 bytes");
+    REQUIRE(sizeof(Material3D) == 48u);
 }
 
 TEST_CASE("MeshHandle: isValid returns false for id==0") {

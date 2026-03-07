@@ -4197,6 +4197,122 @@ void ScriptEngine::registerEcsBindings() {
     lua_pushcfunction(L, ffe_setMeshTexture);
     lua_setfield(L, -2, "setMeshTexture");
 
+    // ffe.setMeshSpecular(entityId: integer, r, g, b, shininess: number) -> nothing
+    // Set specular color and shininess on a 3D entity's Material3D component.
+    // Creates Material3D if not present on the entity.
+    auto ffe_setMeshSpecular = [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TNUMBER) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.setMeshSpecular: argument 1 (entityId) must be a number");
+            return 0;
+        }
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = lua_tointeger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) { return 0; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.setMeshSpecular: invalid entity ID %" PRId64,
+                          static_cast<long long>(rawId));
+            return 0;
+        }
+
+        const ffe::f32 r  = static_cast<ffe::f32>(luaL_optnumber(state, 2, 1.0));
+        const ffe::f32 g  = static_cast<ffe::f32>(luaL_optnumber(state, 3, 1.0));
+        const ffe::f32 b  = static_cast<ffe::f32>(luaL_optnumber(state, 4, 1.0));
+        const ffe::f32 sh = static_cast<ffe::f32>(luaL_optnumber(state, 5, 32.0));
+
+        ffe::Material3D& mat = world->registry().get_or_emplace<ffe::Material3D>(
+            static_cast<entt::entity>(entityId));
+        mat.specularColor = {r, g, b};
+        mat.shininess     = std::max(sh, 1.0f);  // clamp to at least 1 to avoid pow(x,0) issues
+
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_setMeshSpecular);
+    lua_setfield(L, -2, "setMeshSpecular");
+
+    // ffe.setMeshNormalMap(entityId: integer, textureId: integer) -> nothing
+    // Bind a normal map texture to a 3D entity's Material3D component.
+    // textureId is the integer returned by ffe.loadTexture (0 = disable normal mapping).
+    // Creates Material3D if not already present.
+    auto ffe_setMeshNormalMap = [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TNUMBER) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.setMeshNormalMap: argument 1 (entityId) must be a number");
+            return 0;
+        }
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = lua_tointeger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) { return 0; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.setMeshNormalMap: invalid entity ID %" PRId64,
+                          static_cast<long long>(rawId));
+            return 0;
+        }
+
+        const lua_Integer rawTex = luaL_optinteger(state, 2, 0);
+        if (rawTex < 0) {
+            FFE_LOG_WARN("ScriptEngine", "ffe.setMeshNormalMap: negative textureId ignored");
+            return 0;
+        }
+
+        ffe::Material3D& mat = world->registry().get_or_emplace<ffe::Material3D>(
+            static_cast<entt::entity>(entityId));
+        mat.normalMapTexture = ffe::rhi::TextureHandle{static_cast<ffe::u32>(rawTex)};
+
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_setMeshNormalMap);
+    lua_setfield(L, -2, "setMeshNormalMap");
+
+    // ffe.setMeshSpecularMap(entityId: integer, textureId: integer) -> nothing
+    // Bind a specular map texture to a 3D entity's Material3D component.
+    // textureId is the integer returned by ffe.loadTexture (0 = disable specular mapping).
+    // Creates Material3D if not already present.
+    auto ffe_setMeshSpecularMap = [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TNUMBER) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.setMeshSpecularMap: argument 1 (entityId) must be a number");
+            return 0;
+        }
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = lua_tointeger(state, 1);
+        if (rawId < 0 || rawId > MAX_ENTITY_ID) { return 0; }
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawId);
+        if (!world->isValid(entityId)) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.setMeshSpecularMap: invalid entity ID %" PRId64,
+                          static_cast<long long>(rawId));
+            return 0;
+        }
+
+        const lua_Integer rawTex = luaL_optinteger(state, 2, 0);
+        if (rawTex < 0) {
+            FFE_LOG_WARN("ScriptEngine", "ffe.setMeshSpecularMap: negative textureId ignored");
+            return 0;
+        }
+
+        ffe::Material3D& mat = world->registry().get_or_emplace<ffe::Material3D>(
+            static_cast<entt::entity>(entityId));
+        mat.specularMapTexture = ffe::rhi::TextureHandle{static_cast<ffe::u32>(rawTex)};
+
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_setMeshSpecularMap);
+    lua_setfield(L, -2, "setMeshSpecularMap");
+
     // ffe.setLightDirection(x, y, z: number) -> nothing
     // Set the scene directional light direction (world space).
     // M-4: zero-length vector guard — rejects if length < 1e-4.
@@ -4273,6 +4389,159 @@ void ScriptEngine::registerEcsBindings() {
     };
     lua_pushcfunction(L, ffe_setAmbientColor);
     lua_setfield(L, -2, "setAmbientColor");
+
+    // ----------------------------------------------------------------
+    // Point light bindings
+    // ----------------------------------------------------------------
+
+    // ffe.addPointLight(index, x, y, z, r, g, b, radius) -> nothing
+    // Set a point light at slot index (0-7). Enables the light.
+    auto ffe_addPointLight = [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        auto* lighting = world->registry().ctx().find<ffe::renderer::SceneLighting3D>();
+        if (lighting == nullptr) { return 0; }
+
+        const int idx = static_cast<int>(luaL_checkinteger(state, 1));
+        if (idx < 0 || idx >= static_cast<int>(ffe::renderer::MAX_POINT_LIGHTS)) {
+            FFE_LOG_WARN("ScriptEngine",
+                         "ffe.addPointLight: index %d out of range [0, %u)",
+                         idx, static_cast<unsigned int>(ffe::renderer::MAX_POINT_LIGHTS));
+            return 0;
+        }
+
+        auto& pl = lighting->pointLights[static_cast<ffe::u32>(idx)];
+        pl.position = {
+            static_cast<ffe::f32>(luaL_optnumber(state, 2, 0.0)),
+            static_cast<ffe::f32>(luaL_optnumber(state, 3, 0.0)),
+            static_cast<ffe::f32>(luaL_optnumber(state, 4, 0.0))
+        };
+        pl.color = {
+            static_cast<ffe::f32>(luaL_optnumber(state, 5, 1.0)),
+            static_cast<ffe::f32>(luaL_optnumber(state, 6, 1.0)),
+            static_cast<ffe::f32>(luaL_optnumber(state, 7, 1.0))
+        };
+        pl.radius = std::max(static_cast<ffe::f32>(luaL_optnumber(state, 8, 10.0)), 0.001f);
+        pl.active = true;
+
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_addPointLight);
+    lua_setfield(L, -2, "addPointLight");
+
+    // ffe.removePointLight(index) -> nothing
+    // Disable the point light at slot index.
+    auto ffe_removePointLight = [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        auto* lighting = world->registry().ctx().find<ffe::renderer::SceneLighting3D>();
+        if (lighting == nullptr) { return 0; }
+
+        const int idx = static_cast<int>(luaL_checkinteger(state, 1));
+        if (idx < 0 || idx >= static_cast<int>(ffe::renderer::MAX_POINT_LIGHTS)) {
+            FFE_LOG_WARN("ScriptEngine",
+                         "ffe.removePointLight: index %d out of range [0, %u)",
+                         idx, static_cast<unsigned int>(ffe::renderer::MAX_POINT_LIGHTS));
+            return 0;
+        }
+
+        lighting->pointLights[static_cast<ffe::u32>(idx)].active = false;
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_removePointLight);
+    lua_setfield(L, -2, "removePointLight");
+
+    // ffe.setPointLightPosition(index, x, y, z) -> nothing
+    auto ffe_setPointLightPosition = [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        auto* lighting = world->registry().ctx().find<ffe::renderer::SceneLighting3D>();
+        if (lighting == nullptr) { return 0; }
+
+        const int idx = static_cast<int>(luaL_checkinteger(state, 1));
+        if (idx < 0 || idx >= static_cast<int>(ffe::renderer::MAX_POINT_LIGHTS)) {
+            FFE_LOG_WARN("ScriptEngine",
+                         "ffe.setPointLightPosition: index %d out of range [0, %u)",
+                         idx, static_cast<unsigned int>(ffe::renderer::MAX_POINT_LIGHTS));
+            return 0;
+        }
+
+        lighting->pointLights[static_cast<ffe::u32>(idx)].position = {
+            static_cast<ffe::f32>(luaL_optnumber(state, 2, 0.0)),
+            static_cast<ffe::f32>(luaL_optnumber(state, 3, 0.0)),
+            static_cast<ffe::f32>(luaL_optnumber(state, 4, 0.0))
+        };
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_setPointLightPosition);
+    lua_setfield(L, -2, "setPointLightPosition");
+
+    // ffe.setPointLightColor(index, r, g, b) -> nothing
+    auto ffe_setPointLightColor = [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        auto* lighting = world->registry().ctx().find<ffe::renderer::SceneLighting3D>();
+        if (lighting == nullptr) { return 0; }
+
+        const int idx = static_cast<int>(luaL_checkinteger(state, 1));
+        if (idx < 0 || idx >= static_cast<int>(ffe::renderer::MAX_POINT_LIGHTS)) {
+            FFE_LOG_WARN("ScriptEngine",
+                         "ffe.setPointLightColor: index %d out of range [0, %u)",
+                         idx, static_cast<unsigned int>(ffe::renderer::MAX_POINT_LIGHTS));
+            return 0;
+        }
+
+        lighting->pointLights[static_cast<ffe::u32>(idx)].color = {
+            static_cast<ffe::f32>(luaL_optnumber(state, 2, 1.0)),
+            static_cast<ffe::f32>(luaL_optnumber(state, 3, 1.0)),
+            static_cast<ffe::f32>(luaL_optnumber(state, 4, 1.0))
+        };
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_setPointLightColor);
+    lua_setfield(L, -2, "setPointLightColor");
+
+    // ffe.setPointLightRadius(index, radius) -> nothing
+    auto ffe_setPointLightRadius = [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        auto* lighting = world->registry().ctx().find<ffe::renderer::SceneLighting3D>();
+        if (lighting == nullptr) { return 0; }
+
+        const int idx = static_cast<int>(luaL_checkinteger(state, 1));
+        if (idx < 0 || idx >= static_cast<int>(ffe::renderer::MAX_POINT_LIGHTS)) {
+            FFE_LOG_WARN("ScriptEngine",
+                         "ffe.setPointLightRadius: index %d out of range [0, %u)",
+                         idx, static_cast<unsigned int>(ffe::renderer::MAX_POINT_LIGHTS));
+            return 0;
+        }
+
+        const ffe::f32 radius = static_cast<ffe::f32>(luaL_optnumber(state, 2, 10.0));
+        lighting->pointLights[static_cast<ffe::u32>(idx)].radius = std::max(radius, 0.001f);
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_setPointLightRadius);
+    lua_setfield(L, -2, "setPointLightRadius");
 
     // ----------------------------------------------------------------
     // Shadow mapping bindings

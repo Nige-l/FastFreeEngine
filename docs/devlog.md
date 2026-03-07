@@ -837,6 +837,46 @@ ROADMAP Phase 2 remaining: materials system (specular maps, normal maps), skelet
 - Zero warnings on both compilers
 - Commits: `7c22337` (Session 42), `81db188` (Session 43)
 
-### Next Session (44)
+### Session 44: Point Lights + Materials System
 
-Phase 2 remaining: materials system (specular/normal maps), skeletal animation, 3D physics, skybox, 3D audio, point lights. PM to select priority.
+**Point lights implementation:**
+- Up to 4 point lights with position, color, and attenuation (constant/linear/quadratic)
+- Fragment shader extended: per-light diffuse + specular contribution, additive blending with directional light
+- 5 new Lua bindings: `ffe.addPointLight(x,y,z, r,g,b, constant,linear,quadratic)`, `ffe.updatePointLight(index, ...)`, `ffe.removePointLight(index)`, `ffe.clearPointLights()`, `ffe.getPointLightCount()`
+- `render_system.h`: `PointLight` struct, `MAX_POINT_LIGHTS = 4`, storage in `RenderSystem`
+- `mesh_renderer.cpp`: uploads point light uniforms per frame
+
+**Materials system implementation:**
+- `Material3D` component extended: `specularStrength`, `shininess`, `normalMapTexture`
+- Specular maps: per-fragment specular intensity from texture (texture unit 2)
+- Normal maps: tangent-space normal mapping with TBN matrix (texture unit 3)
+- 3 new Lua bindings: `ffe.setMeshSpecularMap(entity, path)`, `ffe.setMeshNormalMap(entity, path)`, `ffe.setMeshShininess(entity, value)`
+- Fragment shader: `u_specularMap`, `u_normalMap`, `u_hasSpecularMap`, `u_hasNormalMap`, `u_shininess`
+
+**RHI optimization:**
+- Uniform location cache bumped from 32 to 64 entries (performance-critic recommendation — more uniforms from lights/materials)
+
+**3D demo updated:**
+- Two point lights added (warm orange + cool blue) demonstrating multi-light setup
+- Material properties set on mesh entities
+
+**Files modified:** `mesh_renderer.h`, `render_system.h`, `shader_library.cpp`, `mesh_renderer.cpp`, `script_engine.cpp`, `rhi_opengl.cpp`, `test_mesh_loader.cpp`, `tests/CMakeLists.txt`, `examples/3d_demo/game.lua`
+**Files created:** `tests/renderer/test_point_lights_materials.cpp`, `tests/scripting/test_point_light_material_bindings.cpp`
+
+**Expert panel:**
+- performance-critic: PASS (MINOR ISSUES — uniform cache bump applied as fix)
+- security-auditor: SKIPPED (no new attack surface per CLAUDE.md Section 5)
+- api-designer: PASS — updated `engine/renderer/.context.md` and `engine/scripting/.context.md`
+- game-dev-tester: SKIPPED (existing API patterns, no new paradigm)
+
+**Build results:**
+
+| Compiler | Tests | Warnings | Result |
+|----------|-------|----------|--------|
+| Clang-18 | 618/618 | 0 | PASS |
+
+**Stats:** 50 new tests, 8 new Lua bindings (~95 total), zero build fix cycles
+
+### Next Session (45)
+
+Phase 2 remaining: skeletal animation, 3D physics, skybox, 3D audio. PM to select priority.

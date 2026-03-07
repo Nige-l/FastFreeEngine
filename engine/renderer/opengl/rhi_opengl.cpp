@@ -84,7 +84,7 @@ struct GlShader {
     GLuint vertexId      = 0;
     GLuint fragmentId    = 0;
     bool alive           = false;
-    static constexpr u32 MAX_CACHED_UNIFORMS = 32;
+    static constexpr u32 MAX_CACHED_UNIFORMS = 64;
     struct UniformEntry {
         u32 nameHash = 0;
         GLint location = -1;

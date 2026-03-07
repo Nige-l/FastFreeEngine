@@ -48,7 +48,7 @@ See the [full tutorial](docs/tutorial.md) for audio, collisions, sprites, and mo
 
 ## Features
 
-All subsystems below are implemented and working together in three demo games: "Collect the Stars", "Pong", and "Breakout".
+All subsystems below are implemented and working together in four demo games: "Collect the Stars", "Pong", "Breakout", and a 3D Demo.
 
 - **ECS** -- Entity Component System built on EnTT with a thin `World` wrapper and function-pointer system dispatch. No virtual calls in hot paths.
 - **2D Sprite Rendering** -- OpenGL 3.3 backend with batched draw calls (2048 sprites per batch), packed 64-bit sort keys, and render queue.
@@ -62,6 +62,12 @@ All subsystems below are implemented and working together in three demo games: "
 - **Logging** -- printf-style logging with compile-time macro filtering and minimal lock scope.
 - **Bitmap Text Rendering** -- Built-in 8x8 pixel font with screen-space HUD text. `ffe.drawText()` from Lua with position, scale, and color. No external font files needed.
 - **Texture Loading** -- stb_image-based loader with path traversal prevention, write-once asset root, and configurable filter/wrap modes (LINEAR or NEAREST for pixel art).
+- **3D Mesh Rendering** -- glTF (.glb) mesh loading via cgltf. Blinn-Phong lighting with directional and point lights (up to 4). Materials system with diffuse, specular, and normal maps. Shadow mapping with PCF 3x3 filtering.
+- **3D Camera** -- FPS (yaw/pitch) and orbit (target/radius) camera modes with Lua bindings.
+- **Gamepad Input** -- GLFW gamepad support for up to 4 controllers with button and axis state tracking.
+- **TTF Font Rendering** -- stb_truetype-based TrueType font loading with atlas generation. Up to 8 fonts loaded simultaneously.
+- **Save/Load** -- JSON-based game state persistence with security hardening (path traversal prevention, size limits, atomic writes).
+- **Screenshot** -- In-engine screenshot capture to PNG via glReadPixels.
 
 ---
 
@@ -146,7 +152,7 @@ cmake --build build-gcc
 
 ### Running Tests
 
-371 Catch2 tests covering core, renderer, scripting, audio, physics, and texture loading:
+618 Catch2 tests covering core, renderer (2D and 3D), scripting, audio, physics, and texture loading:
 
 ```bash
 ctest --test-dir build --output-on-failure
@@ -210,6 +216,19 @@ Classic brick-breaking game with particle effects -- brick destruction particles
 - Particle effects on brick destruction, ball pulsing before launch
 - 3 lives, **M** music toggle, **F1** editor, **ESC** quit
 
+### 3D Demo
+
+A 3D scene demonstrating mesh loading, Blinn-Phong lighting with directional and point lights, materials (specular/normal maps), and shadow mapping.
+
+```bash
+./build/examples/3d_demo/ffe_3d_demo
+```
+
+- 3D mesh rendering with .glb models
+- Directional light with PCF shadow mapping
+- Two point lights (warm orange + cool blue)
+- Orbit camera with mouse control
+
 ### Other Demos
 
 ```bash
@@ -236,7 +255,7 @@ engine/
   scripting/    Lua sandbox, ffe.* API bindings, instruction budget
   editor/       Dear ImGui overlay, entity inspector
 
-tests/          371 Catch2 tests (core, renderer, scripting, audio, physics)
+tests/          618 Catch2 tests (core, renderer, scripting, audio, physics)
 examples/       Demo games (lua_demo, pong, breakout, hello_sprites, interactive_demo, headless_test)
 assets/
   textures/     PNG textures and spritesheets
@@ -284,7 +303,7 @@ FastFreeEngine is licensed under the [MIT License](LICENSE). Free and open sourc
 
 ## Status
 
-Active development. The engine has a working game loop, 2D rendering, audio, physics, scripting, and an editor overlay -- all demonstrated in three playable demo games. See `docs/devlog.md` for the full session-by-session development history.
+Active development. Phase 2 (3D Foundation) is in progress. The engine supports 2D and 3D rendering, point lights, materials (specular/normal maps), shadow mapping, audio, physics, scripting, and an editor overlay -- demonstrated in four playable demos including a 3D scene. See `docs/devlog.md` for the full session-by-session development history.
 
 **Getting started?** Read the [Quick-Start Tutorial](docs/tutorial.md) to build your first game in Lua.
 

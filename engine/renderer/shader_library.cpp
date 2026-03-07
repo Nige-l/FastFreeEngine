@@ -108,6 +108,7 @@ void main() {
 )glsl";
 
 // --- 3D Blinn-Phong shaders (ADR-007 Section 9) ---
+// Extended with point lights, specular maps, and normal maps (Session 44).
 
 static const char* const MESH_BLINN_PHONG_VERT_SOURCE = R"glsl(
 #version 330 core
@@ -115,6 +116,7 @@ static const char* const MESH_BLINN_PHONG_VERT_SOURCE = R"glsl(
 layout(location = 0) in vec3 a_position;
 layout(location = 1) in vec3 a_normal;
 layout(location = 2) in vec2 a_texcoord;
+layout(location = 3) in vec3 a_tangent;
 
 uniform mat4 u_model;
 uniform mat4 u_viewProjection;
@@ -125,11 +127,13 @@ out vec3 v_fragPos;
 out vec3 v_normal;
 out vec2 v_texcoord;
 out vec4 v_fragPosLightSpace;
+out vec3 v_tangent;
 
 void main() {
     vec4 worldPos       = u_model * vec4(a_position, 1.0);
     v_fragPos           = worldPos.xyz;
     v_normal            = u_normalMatrix * a_normal;
+    v_tangent           = u_normalMatrix * a_tangent;
     v_texcoord          = a_texcoord;
     v_fragPosLightSpace = u_lightSpaceMatrix * worldPos;
     gl_Position         = u_viewProjection * worldPos;
@@ -139,10 +143,13 @@ void main() {
 static const char* const MESH_BLINN_PHONG_FRAG_SOURCE = R"glsl(
 #version 330 core
 
+#define MAX_POINT_LIGHTS 8
+
 in vec3 v_fragPos;
 in vec3 v_normal;
 in vec2 v_texcoord;
 in vec4 v_fragPosLightSpace;
+in vec3 v_tangent;
 
 uniform sampler2D u_diffuseTexture;
 uniform vec4      u_diffuseColor;
@@ -151,15 +158,66 @@ uniform vec3      u_lightColor;
 uniform vec3      u_ambientColor;
 uniform vec3      u_viewPos;
 
+// Material specular properties
+uniform vec3      u_specularColor;
+uniform float     u_shininess;
+
+// Normal map (texture unit 2, 0 = disabled via u_hasNormalMap)
+uniform sampler2D u_normalMap;
+uniform int       u_hasNormalMap;
+
+// Specular map (texture unit 3, 0 = disabled via u_hasSpecularMap)
+uniform sampler2D u_specularMap;
+uniform int       u_hasSpecularMap;
+
 // Shadow map uniforms — inactive when u_shadowsEnabled == 0
 uniform sampler2D u_shadowMap;
 uniform int       u_shadowsEnabled;
 uniform float     u_shadowBias;
 
+// Point lights — fixed array, only u_pointLightCount are active
+uniform int   u_pointLightCount;
+uniform vec3  u_pointLightPos[MAX_POINT_LIGHTS];
+uniform vec3  u_pointLightColor[MAX_POINT_LIGHTS];
+uniform float u_pointLightRadius[MAX_POINT_LIGHTS];
+
 out vec4 fragColor;
 
+vec3 getNormal() {
+    vec3 N = normalize(v_normal);
+    if (u_hasNormalMap != 0) {
+        // Only apply normal mapping if tangent data is available.
+        // If the mesh has no tangent attribute (location 3 not enabled),
+        // v_tangent will be (0,0,0) — fall back to vertex normal gracefully.
+        float tangentLen = length(v_tangent);
+        if (tangentLen > 0.001) {
+            // Build TBN matrix from vertex normal and tangent
+            vec3 T = v_tangent / tangentLen;
+            // Re-orthogonalize T with respect to N (Gram-Schmidt)
+            T = normalize(T - dot(T, N) * N);
+            vec3 B = cross(N, T);
+            mat3 TBN = mat3(T, B, N);
+            // Sample normal map and remap from [0,1] to [-1,1]
+            vec3 mapNormal = texture(u_normalMap, v_texcoord).rgb * 2.0 - 1.0;
+            N = normalize(TBN * mapNormal);
+        }
+    }
+    return N;
+}
+
+vec3 getSpecularFactor() {
+    if (u_hasSpecularMap != 0) {
+        return texture(u_specularMap, v_texcoord).rgb;
+    }
+    return u_specularColor;
+}
+
 void main() {
-    vec3  norm      = normalize(v_normal);
+    vec3  norm      = getNormal();
+    vec3  viewDir   = normalize(u_viewPos - v_fragPos);
+    vec3  specFactor = getSpecularFactor();
+
+    // --- Directional light ---
     vec3  lightDir  = normalize(-u_lightDir);
 
     // Diffuse
@@ -167,10 +225,9 @@ void main() {
     vec3  diffuse   = diff * u_lightColor;
 
     // Specular (Blinn-Phong half-vector)
-    vec3  viewDir   = normalize(u_viewPos - v_fragPos);
     vec3  halfDir   = normalize(lightDir + viewDir);
-    float spec      = pow(max(dot(norm, halfDir), 0.0), 32.0);
-    vec3  specular  = spec * u_lightColor * 0.3;
+    float spec      = pow(max(dot(norm, halfDir), 0.0), u_shininess);
+    vec3  specular  = spec * u_lightColor * specFactor * 0.3;
 
     // Shadow factor (1.0 = fully lit, 0.0 = fully shadowed)
     float shadowFactor = 1.0;
@@ -195,9 +252,37 @@ void main() {
         }
     }
 
-    // Combine: ambient is never shadowed; diffuse + specular scale with shadow factor
+    // Directional light contribution (shadow-affected)
+    vec3 dirLighting = shadowFactor * (diffuse + specular);
+
+    // --- Point lights (additive, not shadow-mapped) ---
+    vec3 pointLighting = vec3(0.0);
+    for (int i = 0; i < u_pointLightCount; ++i) {
+        vec3  toLight  = u_pointLightPos[i] - v_fragPos;
+        float dist     = length(toLight);
+        float r        = u_pointLightRadius[i];
+
+        // Distance attenuation: 1 / (1 + (d/r)*2 + (d/r)^2)
+        float dr       = dist / max(r, 0.001);
+        float atten    = 1.0 / (1.0 + 2.0 * dr + dr * dr);
+
+        vec3  pLightDir = normalize(toLight);
+
+        // Diffuse
+        float pDiff    = max(dot(norm, pLightDir), 0.0);
+        vec3  pDiffuse = pDiff * u_pointLightColor[i] * atten;
+
+        // Specular (Blinn-Phong)
+        vec3  pHalf    = normalize(pLightDir + viewDir);
+        float pSpec    = pow(max(dot(norm, pHalf), 0.0), u_shininess);
+        vec3  pSpecular = pSpec * u_pointLightColor[i] * specFactor * 0.3 * atten;
+
+        pointLighting += pDiffuse + pSpecular;
+    }
+
+    // Combine: ambient is never shadowed; directional + point lights
     vec4  texSample = texture(u_diffuseTexture, v_texcoord);
-    vec3  lighting  = u_ambientColor + shadowFactor * (diffuse + specular);
+    vec3  lighting  = u_ambientColor + dirLighting + pointLighting;
     fragColor       = vec4(lighting, 1.0) * texSample * u_diffuseColor;
 }
 )glsl";

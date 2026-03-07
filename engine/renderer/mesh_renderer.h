@@ -23,6 +23,19 @@
 
 namespace ffe::renderer {
 
+// Maximum point lights supported on LEGACY tier (OpenGL 3.3).
+// Fixed-size array — no heap allocation in the render path.
+inline constexpr u32 MAX_POINT_LIGHTS = 8;
+
+// Point light data. Position in world space, color, and attenuation radius.
+// Attenuation uses 1 / (1 + (d/radius)*2 + (d/radius)^2) where d = distance.
+struct PointLight {
+    glm::vec3 position = {0.0f, 0.0f, 0.0f};
+    glm::vec3 color    = {1.0f, 1.0f, 1.0f};
+    f32       radius   = 10.0f;   // Attenuation radius (world units)
+    bool      active   = false;   // Whether this light slot is in use
+};
+
 // Scene-global directional lighting parameters.
 // Stored in the ECS context (emplaced by Application::startup).
 // Settable from Lua via ffe.setLightDirection, ffe.setLightColor, ffe.setAmbientColor.
@@ -30,6 +43,10 @@ struct SceneLighting3D {
     glm::vec3 lightDir     = glm::normalize(glm::vec3{0.5f, -1.0f, 0.3f});
     glm::vec3 lightColor   = {1.0f, 1.0f, 1.0f};
     glm::vec3 ambientColor = {0.15f, 0.15f, 0.15f};
+
+    // Point lights — fixed-size array, no heap allocation.
+    PointLight pointLights[MAX_POINT_LIGHTS] = {};
+    u32        activePointLightCount = 0;  // Cached count of active lights for shader upload
 };
 
 // Render all entities with Transform3D + Mesh components using the Blinn-Phong shader.

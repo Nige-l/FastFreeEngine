@@ -18,7 +18,7 @@ Claude has two jobs: (1) relay between the user and the agent team, and (2) disp
 
 ### The Plan-Dispatch-Relay Loop
 
-1. **PM plans.** Claude invokes `project-manager` with the user's goal. PM reads context (CLAUDE.md, `docs/project-state.md` which includes current-phase roadmap items, and recent devlog if needed) and outputs an ordered plan: which agents to invoke, in what order, with what instructions, and which can run in parallel.
+1. **PM plans.** Claude invokes `project-manager` with the user's goal. PM reads context (CLAUDE.md, `docs/project-state.md`, `docs/architecture-map.md`, and recent devlog if needed) and outputs an ordered plan: which agents to invoke, in what order, with what instructions, and which can run in parallel. PM does NOT read engine source files — `architecture-map.md` provides the technical reference PM needs for planning.
 2. **Claude dispatches.** Claude reads PM's plan and spawns agents exactly as specified. When PM says agents can run in parallel, Claude dispatches them simultaneously. When PM says sequential, Claude waits for each to complete before spawning the next.
 3. **Claude relays results.** After agents complete, Claude feeds their output back to PM for decisions (fix cycles, commit, devlog).
 4. **Repeat.** PM may issue follow-up dispatches based on results. Claude executes those too.

@@ -1,17 +1,20 @@
 -- game.lua -- "3D Spinning Cubes" demo for FFE
 --
--- Demonstrates the 3D Mesh Rendering API introduced in Phase 2 / Session 42:
+-- Demonstrates the 3D Mesh Rendering API:
 --   ffe.loadMesh / ffe.unloadMesh
 --   ffe.createEntity3D
 --   ffe.setTransform3D
---   ffe.setMeshColor
---   ffe.set3DCameraOrbit  (replaces manual math.sin/cos camera computation)
+--   ffe.setMeshColor / ffe.setMeshSpecular
+--   ffe.set3DCameraOrbit
 --   ffe.setLightDirection / ffe.setLightColor / ffe.setAmbientColor
+--   ffe.addPointLight / ffe.setPointLightPosition / ffe.removePointLight
 --
 -- Three mesh entities orbit the world origin at different speeds and radii,
--- each tinted a distinct color.  A 2D HUD (entity count, FPS, controls) is
--- drawn on top using the standard ffe.drawText / ffe.drawRect API, showing
--- how 3D and 2D coexist in the same frame.
+-- each tinted a distinct color with specular highlights. Two point lights
+-- orbit the scene to demonstrate dynamic local illumination. A 2D HUD
+-- (entity count, FPS, controls) is drawn on top using the standard
+-- ffe.drawText / ffe.drawRect API, showing how 3D and 2D coexist in the
+-- same frame.
 --
 -- Controls:
 --   WASD          orbit camera left/right, zoom in/out
@@ -41,6 +44,11 @@ local ORBIT_RADIUS_C = 4.0       -- wider orbit
 local ORBIT_SPEED_B  = 30.0      -- degrees per second for orbit
 local ORBIT_SPEED_C  = 20.0      -- degrees per second for orbit
 
+-- Point light orbit parameters
+local POINT_LIGHT_ORBIT_SPEED = 40.0  -- degrees per second
+local POINT_LIGHT_RADIUS      = 3.5   -- orbit radius around origin
+local POINT_LIGHT_HEIGHT      = 1.5   -- Y elevation above ground
+
 -- Camera defaults
 local CAM_DEFAULT_DIST = 8.0
 local CAM_DEFAULT_ELEV = 4.0
@@ -69,6 +77,9 @@ local rotC = 0.0
 -- Orbit angle accumulators (degrees)
 local orbitB = 0.0
 local orbitC = 120.0   -- start offset so cubes are not bunched together
+
+-- Point light orbit angle (degrees)
+local pointLightAngle = 0.0
 
 -- Camera state
 local camYaw  = 45.0          -- horizontal angle around Y axis (degrees)
@@ -110,6 +121,14 @@ ffe.setLightDirection(1.0, -1.5, 0.8)
 ffe.setLightColor(1.0, 0.92, 0.78)       -- warm white / golden hour
 ffe.setAmbientColor(0.08, 0.08, 0.18)    -- cool blue-grey fill
 
+-- Add two point lights that will orbit the scene:
+--   Point light 0: warm orange/yellow — orbits CW
+--   Point light 1: cool blue/cyan — orbits CCW (offset 180 degrees)
+ffe.addPointLight(0,  POINT_LIGHT_RADIUS, POINT_LIGHT_HEIGHT, 0,
+                      1.0, 0.6, 0.2,  8.0)
+ffe.addPointLight(1, -POINT_LIGHT_RADIUS, POINT_LIGHT_HEIGHT, 0,
+                      0.2, 0.5, 1.0,  8.0)
+
 -- Position the camera at default location.
 updateCamera()
 
@@ -134,35 +153,42 @@ else
     local ground = ffe.createEntity3D(meshHandle, 0, -1.5, 0)
     if ground ~= 0 then
         ffe.setMeshColor(ground, 0.45, 0.45, 0.45, 1.0)
+        ffe.setMeshSpecular(ground, 0.3, 0.3, 0.3, 16)   -- subtle specular
         ffe.setTransform3D(ground, 0, -1.5, 0,  0, 0, 0,  12, 0.15, 12)
     end
 
     -- -----------------------------------------------------------------
     -- Entity A: red cube at the origin, spins on Y axis only
+    -- High shininess for bright specular highlights.
     -- -----------------------------------------------------------------
     entityA = ffe.createEntity3D(meshHandle, 0, 0, 0)
     if entityA ~= 0 then
         ffe.setMeshColor(entityA, 0.9, 0.25, 0.20, 1.0)   -- red tint
+        ffe.setMeshSpecular(entityA, 1.0, 0.8, 0.6, 128)   -- warm specular, high shine
         ffe.setTransform3D(entityA, 0, 0, 0,  0, 0, 0,  1, 1, 1)
         ffe.log("Entity A (red)   created id=" .. tostring(entityA))
     end
 
     -- -----------------------------------------------------------------
     -- Entity B: green cube, orbits the origin at radius 2.5
+    -- Medium shininess.
     -- -----------------------------------------------------------------
     entityB = ffe.createEntity3D(meshHandle, ORBIT_RADIUS_B, 0, 0)
     if entityB ~= 0 then
         ffe.setMeshColor(entityB, 0.20, 0.85, 0.35, 1.0)  -- green tint
+        ffe.setMeshSpecular(entityB, 0.6, 1.0, 0.6, 64)    -- green-tinted specular
         ffe.setTransform3D(entityB, ORBIT_RADIUS_B, 0, 0,  0, 0, 0,  0.8, 0.8, 0.8)
         ffe.log("Entity B (green) created id=" .. tostring(entityB))
     end
 
     -- -----------------------------------------------------------------
     -- Entity C: blue cube, wider orbit, smaller scale
+    -- Low shininess for a soft specular highlight.
     -- -----------------------------------------------------------------
     entityC = ffe.createEntity3D(meshHandle, ORBIT_RADIUS_C, 0, 0)
     if entityC ~= 0 then
         ffe.setMeshColor(entityC, 0.25, 0.50, 1.00, 1.0)  -- blue tint
+        ffe.setMeshSpecular(entityC, 0.5, 0.7, 1.0, 32)    -- cool specular, soft
         ffe.setTransform3D(entityC, ORBIT_RADIUS_C, 0, 0,  0, 0, 0,  0.6, 0.6, 0.6)
         ffe.log("Entity C (blue)  created id=" .. tostring(entityC))
     end
@@ -219,6 +245,24 @@ function update(entityId, dt)
     end
 
     updateCamera()
+
+    -- ------------------------------------------------------------------
+    -- Animate point lights (orbit around the scene)
+    -- ------------------------------------------------------------------
+    pointLightAngle = pointLightAngle + POINT_LIGHT_ORBIT_SPEED * dt
+    if pointLightAngle > 360 then pointLightAngle = pointLightAngle - 360 end
+
+    local plRad = math.rad(pointLightAngle)
+    -- Light 0: orbits clockwise
+    ffe.setPointLightPosition(0,
+        math.sin(plRad) * POINT_LIGHT_RADIUS,
+        POINT_LIGHT_HEIGHT,
+        math.cos(plRad) * POINT_LIGHT_RADIUS)
+    -- Light 1: orbits counter-clockwise (180-degree offset)
+    ffe.setPointLightPosition(1,
+        math.sin(plRad + math.pi) * POINT_LIGHT_RADIUS,
+        POINT_LIGHT_HEIGHT,
+        math.cos(plRad + math.pi) * POINT_LIGHT_RADIUS)
 
     -- ------------------------------------------------------------------
     -- Animate 3D entities
@@ -289,7 +333,7 @@ function update(entityId, dt)
 
     -- Status: mesh load result
     if meshLoaded then
-        local entStr = "Entities: 4  |  Mesh: cube.glb  |  Shadows: ON"
+        local entStr = "Entities: 4  |  Mesh: cube.glb  |  Shadows: ON  |  Point Lights: 2"
         ffe.drawText(entStr, sw / 2 - (#entStr * 8), 8, 2, 0.6, 0.8, 1.0, 0.85)
     else
         ffe.drawText("cube.glb NOT FOUND -- HUD only mode", 12, 44, 2, 1, 0.4, 0.2, 1)
@@ -301,11 +345,13 @@ function update(entityId, dt)
         "WASD: orbit/zoom  |  UP/DOWN: elevation  |  R: reset  |  ESC: quit",
         12, 697, 2, 0.45, 0.55, 0.65, 0.9)
 
-    -- Color key for the three cubes
+    -- Color key for the three cubes and point lights
     if meshLoaded then
-        ffe.drawText("RED: stationary", 12, 44, 2, 0.9, 0.3, 0.2, 1)
-        ffe.drawText("GREEN: inner orbit", 12, 68, 2, 0.2, 0.85, 0.35, 1)
-        ffe.drawText("BLUE: outer orbit", 12, 92, 2, 0.3, 0.55, 1.0, 1)
+        ffe.drawText("RED: stationary (shininess=128)", 12, 44, 2, 0.9, 0.3, 0.2, 1)
+        ffe.drawText("GREEN: inner orbit (shininess=64)", 12, 68, 2, 0.2, 0.85, 0.35, 1)
+        ffe.drawText("BLUE: outer orbit (shininess=32)", 12, 92, 2, 0.3, 0.55, 1.0, 1)
+        ffe.drawText("POINT LIGHT 0: warm orange (orbiting)", 12, 116, 2, 1.0, 0.6, 0.2, 1)
+        ffe.drawText("POINT LIGHT 1: cool blue (orbiting)", 12, 140, 2, 0.2, 0.5, 1.0, 1)
     end
 
     -- ------------------------------------------------------------------
@@ -320,8 +366,10 @@ end
 -- shutdown() -- called by ScriptEngine before lua_close()
 -- ---------------------------------------------------------------------------
 function shutdown()
-    -- Unload the mesh.  ffe.unloadMesh is a no-op when meshHandle == 0,
-    -- but we guard anyway for clarity.
+    -- Remove point lights before shutdown.
+    ffe.removePointLight(0)
+    ffe.removePointLight(1)
+
     -- Disable shadows before unloading mesh to release GPU resources.
     ffe.disableShadows()
 

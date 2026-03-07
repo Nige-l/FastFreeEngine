@@ -37,11 +37,19 @@ static_assert(sizeof(Mesh) == 8, "Mesh component must be 8 bytes");
 // Optional: if not present on a 3D entity, the mesh renderer uses default values
 // (white diffuse color, default white texture, builtin MESH_BLINN_PHONG shader).
 struct Material3D {
-    glm::vec4          diffuseColor   = {1.0f, 1.0f, 1.0f, 1.0f}; // 16 bytes
-    rhi::TextureHandle diffuseTexture;  // 4 bytes (0 = use default white texture)
-    rhi::ShaderHandle  shaderOverride; // 4 bytes (0 = use builtin MESH_BLINN_PHONG)
+    glm::vec4          diffuseColor    = {1.0f, 1.0f, 1.0f, 1.0f}; // 16 bytes
+    rhi::TextureHandle diffuseTexture;   // 4 bytes (0 = use default white texture)
+    rhi::ShaderHandle  shaderOverride;   // 4 bytes (0 = use builtin MESH_BLINN_PHONG)
+
+    // Specular properties (Blinn-Phong)
+    glm::vec3          specularColor   = {1.0f, 1.0f, 1.0f};       // 12 bytes
+    f32                shininess       = 32.0f;                      //  4 bytes
+
+    // Normal map and specular map textures (0 = none/disabled)
+    rhi::TextureHandle normalMapTexture;   // 4 bytes
+    rhi::TextureHandle specularMapTexture; // 4 bytes
 };
-static_assert(sizeof(Material3D) == 24, "Material3D must be 24 bytes");
+static_assert(sizeof(Material3D) == 48, "Material3D must be 48 bytes");
 
 // --- Transform component (needed by render system) ---
 // Defined here because the render system needs it and it is not yet in core.
