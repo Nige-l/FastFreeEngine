@@ -33,7 +33,11 @@ theme:
 markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.tabbed:
       alternate_style: true
   - admonition
@@ -66,4 +70,7 @@ nav:
     - Scene: api/scene.md
   - How It Works:
     - internals/index.md
+    - "Entity Component System": internals/ecs.md
+    - "The Renderer": internals/renderer.md
+    - "Multiplayer Networking": internals/networking.md
   - Community: community.md

@@ -6,14 +6,14 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 63 |
+| Last session | 64 |
 | Total tests | 991 (FULL build: Clang-18 + GCC-13, zero warnings) |
 | Total Lua bindings | ~152 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
 | Phase 2 (3D Foundation) | COMPLETE |
 | Phase 3 (Standalone Editor) | MVP COMPLETE (6 milestones, Sessions 51-56) |
 | Phase 4 (Networking) | COMPLETE (Sessions 57-60) |
-| Phase 5 (Website/Learning) | IN PROGRESS (Session 62+, tutorials delivered Session 63) |
+| Phase 5 (Website/Learning) | IN PROGRESS (Session 62+, deep dives + deployment Session 64) |
 | Windows build | DONE (MinGW-w64 cross-compilation) |
 | macOS build | DONE (arm64 + x86_64) |
 | GitHub Actions CI | DONE (Linux Clang-18, Linux GCC-13, macOS arm64) |
@@ -67,11 +67,11 @@
 
 | Session | Summary |
 |---------|---------|
+| 64 | Phase 5 deep dives — ECS, renderer, networking "How It Works" pages (~1243 lines total), GitHub Pages deployment workflow, Mermaid diagram support. 991 tests (FAST). |
 | 63 | Phase 5 tutorials — 3 complete tutorials (first 2D game, first 3D game, multiplayer basics), ffe.drawRect docs, review fixes (os.time sandbox violation, broken links). 991 tests (FAST). |
 | 62 | Phase 5 kickoff — website scaffolding (MkDocs + Material theme), Getting Started guide, API extraction pipeline (8 .context.md pages), 21 pages total. 991 tests (FAST). |
 | 61 | Phase 4 closeout. Skeletal animation .context.md update, architecture-map update. **Phase 4 (Networking) COMPLETE.** NAT traversal deferred to backlog. Phase 5 begins next. 991 tests (FULL). |
 | 60 | Lobby/matchmaking (LobbyServer/Client), lag compensation (LagCompensator), 7 new packet types, 13 new Lua bindings. 991 tests (FAST). |
-| 59 | Client-side prediction, server input processing, 5 new Lua bindings, Net Arena demo. 947 tests (FAST). |
 
 ## Phase 2 — 3D Foundation: COMPLETE
 
@@ -148,7 +148,8 @@ NAT traversal deferred to backlog — relay server is infrastructure/ops, not en
 - [x] API reference pipeline (generate_api_docs.py extracts from 8 .context.md files)
 - [x] Getting Started guide (install, build, first game in 15 minutes)
 - [x] Tutorial series — 3 complete tutorials (first 2D game, first 3D game, multiplayer basics)
-- [ ] "How It Works" deep dives (ECS internals, renderer architecture, networking)
+- [x] "How It Works" deep dives (ECS internals, renderer architecture, networking)
+- [x] GitHub Pages deployment workflow (auto-deploy on push to main)
 - [ ] Video/interactive content (embedded code editors, live examples)
 - [ ] Community showcase (games built with FFE)
 - [ ] Asset library (free textures, sounds, meshes for learning)

@@ -3,6 +3,51 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-34 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 64: Phase 5 Deep Dives + GitHub Pages Deployment
+
+### Summary
+
+Session 64 delivered the three "How It Works" deep dive pages for the FFE website: ECS internals (~418 lines), renderer architecture (~369 lines), and multiplayer networking (~456 lines). Also added a GitHub Pages deployment workflow (auto-deploy on push to main) and configured Mermaid diagram support. Review fixes corrected packet layout accuracy, renderer pipeline ordering, and Mermaid fence config. FAST build: 991 engine tests on Clang-18, zero warnings. Website builds cleanly (mkdocs --strict).
+
+### Planned
+
+- "How It Works" deep dive pages (ECS, renderer, networking)
+- GitHub Pages deployment pipeline
+
+### Delivered
+
+- **"How the ECS Works"** (`website/docs/internals/ecs.md`) — Deep dive covering entities, components, systems, memory layout, EnTT integration, iteration patterns, and performance characteristics.
+- **"How the Renderer Works"** (`website/docs/internals/renderer.md`) — Deep dive covering the rendering pipeline, sprite batching, 3D mesh rendering, shader system, and GPU resource management.
+- **"How Multiplayer Networking Works"** (`website/docs/internals/networking.md`) — Deep dive covering client-server architecture, replication, snapshot interpolation, client-side prediction, lag compensation, and lobby management.
+- **Internals index update** (`website/docs/internals/index.md`) — Links to all three deep dive pages.
+- **GitHub Pages deployment** (`.github/workflows/deploy-website.yml`) — Auto-deploy workflow triggered on push to main.
+- **Mermaid diagram support** — Configured in `website/mkdocs.yml` for architecture diagrams in deep dives.
+- **Deployment docs** — Added to `website/.context.md`.
+
+### Review Fixes
+
+- Corrected packet layout accuracy in networking deep dive.
+- Fixed renderer pipeline ordering description.
+- Fixed Mermaid fence configuration in mkdocs.yml.
+
+### Build
+
+- **FAST build** — 991 engine tests on Clang-18, zero warnings.
+- **Website** — `mkdocs build --strict` completes cleanly.
+
+### game-dev-tester: SKIPPED
+
+No engine API changes this session — website deep dive content and deployment only.
+
+### Next Session Should Start With
+
+- Video/interactive content (embedded code editors, live examples)
+- Community showcase page
+- Asset library for learning
+- Consider "Build Your Own Engine" learning track
+
+---
+
 ## 2026-03-07 — Session 63: Phase 5 Tutorials — 2D Game, 3D Scene, Multiplayer Basics
 
 ### Summary
