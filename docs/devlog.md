@@ -3,6 +3,48 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-07 — Session 81: Phase 7 M5 — Skeletal Animation Completion
+
+### Summary
+
+Session 81 completed skeletal animation (Phase 7 M5): crossfade blending via AnimationState expansion to 32 bytes with blend fields (blendFromClip, blendFromTime, blendAlpha, blendDuration, blendElapsed), TRS decomposition for per-bone lerp/slerp during transitions. Interpolation modes: STEP (hold previous keyframe), LINEAR (existing), CUBIC_SPLINE (falls back to linear with warning since tangent storage not yet implemented). InterpolationMode enum parsed from glTF animation sampler `interpolation` field. Root motion: extracts root bone XZ translation delta per frame, zeros the in-place animation contribution, stores in RootMotionDelta per-entity component for game code to apply to Transform3D. 3 new Lua bindings: `ffe.crossfadeAnimation3D(entity, clipIndex, duration)`, `ffe.setRootMotion3D(entity, enabled)`, `ffe.getRootMotionDelta3D(entity)`. 31 new tests (15 skeleton/animation, 13 scripting bindings, 3 misc). Performance-critic: PASS. api-designer: PASS (.context.md updated). game-dev-tester: SKIPPED (existing API pattern). FAST build: 1168 tests, zero warnings.
+
+### Planned
+
+- Phase 7 M5: Skeletal Animation Completion — crossfade blending, interpolation modes, root motion
+
+### Delivered
+
+- **Crossfade Blending** -- AnimationState expanded with blend fields, per-bone TRS lerp/slerp between outgoing and incoming clips, configurable crossfade duration
+- **Interpolation Modes** -- InterpolationMode enum (STEP, LINEAR, CUBIC_SPLINE), per-channel storage in AnimationChannel, glTF sampler `interpolation` field parsed at load time
+- **Root Motion** -- Root bone XZ delta extraction, in-place zeroing, RootMotionDelta per-entity component
+- **3 Lua Bindings** -- `ffe.crossfadeAnimation3D`, `ffe.setRootMotion3D`, `ffe.getRootMotionDelta3D`
+- **31 New Tests** -- 15 skeleton/animation + 13 scripting bindings + 3 misc
+
+### Files Changed
+
+- `engine/renderer/skeleton.h` (MODIFIED -- InterpolationMode enum, per-channel interp fields)
+- `engine/renderer/animation_system.cpp` (MODIFIED -- crossfade blending, interpolation dispatch, root motion extraction)
+- `engine/renderer/render_system.h` (MODIFIED -- AnimationState expanded, RootMotionDelta component)
+- `engine/renderer/mesh_loader.cpp` (MODIFIED -- glTF sampler interpolation parsing)
+- `engine/renderer/.context.md` (MODIFIED -- animation blending/root motion API docs)
+- `engine/scripting/script_engine.cpp` (MODIFIED -- 3 new Lua bindings)
+- `engine/scripting/.context.md` (MODIFIED -- new binding docs)
+- `tests/renderer/test_skeleton.cpp` (MODIFIED -- 15 new animation tests)
+- `tests/scripting/test_animation3d_bindings.cpp` (MODIFIED -- 13 new binding tests)
+
+### Reviews
+
+- performance-critic: PASS
+- api-designer: PASS (.context.md updated)
+- game-dev-tester: SKIPPED (existing API pattern, no examples/ changes)
+
+### Next Session (82)
+
+Phase 7 M6: SSAO (STANDARD+ tier only) — screen-space ambient occlusion with hemisphere sampling, bilateral blur, tier gating.
+
+---
+
 ## 2026-03-07 — Session 80: Phase 7 M4 — Anti-Aliasing (MSAA + FXAA)
 
 ### Summary
