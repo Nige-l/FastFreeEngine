@@ -39,6 +39,10 @@ When PM dispatches you for API validation (new paradigm or high discoverability 
 
 Rate API discoverability (1-10) and list friction points with severity.
 
+### Context Reference
+
+Before writing or editing any demo, read `docs/examples-map.md` for the current state of all demos: entry points, key bindings used, known issues, asset lists, lib module APIs, and common fix patterns. This is faster than reading the source files yourself and ensures you start from accurate context.
+
 ### Rules
 
 - You **never modify engine C++ code** — you only write Lua scripts under `examples/`

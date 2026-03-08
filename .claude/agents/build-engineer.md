@@ -68,11 +68,11 @@ This table is for reference. PM uses it to build the list; you use it to sanity-
 | `engine/physics/` 3D | 3d_demo |
 | `engine/networking/` | net_arena |
 | `engine/audio/` | collect_stars |
-| `examples/collect_stars/` | collect_stars |
+| `examples/lua_demo/` | collect_stars |
 | `examples/pong/` | pong |
 | `examples/breakout/` | breakout |
 | `examples/3d_demo/` | 3d_demo |
-| `examples/net_arena/` | net_arena |
+| `examples/net_demo/` | net_arena |
 | `examples/showcase/` | showcase_menu, showcase_level1, showcase_level2, showcase_level3 |
 | `engine/scripting/`, `engine/core/`, `tests/`, `docs/` | none |
 
@@ -92,12 +92,17 @@ Example for a session that changed `engine/renderer/` and `examples/showcase/`:
 
 ```bash
 # All launched as parallel background tasks simultaneously:
+# showcase_menu: game.lua starts at the title screen (MENU state)
 ./tools/take_screenshot.sh build/clang-release/examples/runtime/ffe_runtime docs/assets/screenshots/showcase_menu.png 5 examples/showcase/game.lua
-./tools/take_screenshot.sh build/clang-release/examples/runtime/ffe_runtime docs/assets/screenshots/showcase_level1.png 5 examples/showcase/level1.lua
-./tools/take_screenshot.sh build/clang-release/examples/runtime/ffe_runtime docs/assets/screenshots/showcase_level2.png 5 examples/showcase/level2.lua
-./tools/take_screenshot.sh build/clang-release/examples/runtime/ffe_runtime docs/assets/screenshots/showcase_level3.png 5 examples/showcase/level3.lua
+# showcase individual levels: use the ffe_showcase binary (not ffe_runtime) if built,
+# or use ffe_runtime with the test_level.lua shim for individual level captures.
+# Level screenshots are best taken by navigating from the menu — automated headless
+# capture of specific levels requires a dedicated test entry point.
+./tools/take_screenshot.sh build/clang-release/examples/runtime/ffe_runtime docs/assets/screenshots/showcase_level1.png 5 examples/showcase/levels/test_level.lua
 ./tools/take_screenshot.sh build/clang-release/examples/3d_demo/ffe_3d_demo docs/assets/screenshots/3d_demo.png 4
 ```
+
+**Note:** `showcase/levels/level1.lua`, `level2.lua`, `level3.lua` are NOT standalone entry points — they are loaded by `game.lua`'s state machine via `ffe.loadScene()`. For individual level screenshots, use `examples/showcase/levels/test_level.lua` if it exists, or capture from `showcase_menu` only.
 
 Include in your report: which demos were captured, output paths, file sizes, and any failures.
 
