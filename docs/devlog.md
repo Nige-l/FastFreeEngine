@@ -3,6 +3,76 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-08 — Session 112: Phase 10 M2 Visual Scripting
+
+### Goal
+
+Phase 10 Milestone 2: Visual Scripting — a node-based graph executor as an alternative to Lua, with an ImGui editor panel integrated into the standalone editor, full security hardening, 3 Lua bindings, 42 Catch2 tests, and a 918-line ADR.
+
+### Delivered
+
+**Phase 10 M2 — Visual Scripting:**
+
+- **engine/core/visual_scripting.h** — `NodeType` enum (11 nodes), `NodePort`, `NodePortType`, `GraphNode`, `GraphEdge`, `VisualGraph`, `VisualScriptingSystem` class with `loadGraph`/`attachGraph`/`detachGraph`/`update` API. `MAX_NODES` (512), `MAX_EDGES` (1024), `MAX_NODE_CALLS_PER_FRAME` (256) static limits. No heap allocation in hot path — per-graph sorted-order vector pre-computed at load time.
+- **engine/core/visual_scripting.cpp** — full implementation: 14-step security pipeline (UNC block, path length, null byte, canonicalize, asset-root prefix, JSON parse, node count limit, node type whitelist, port type validation, edge bounds check, port compatibility, cycle detection via DFS, reachability from event node, deferred-destroy validation), topological sort, per-frame function-pointer dispatch table for 11 built-in nodes.
+- **engine/core/CMakeLists.txt** — `visual_scripting.cpp` registered in build.
+- **engine/editor/graph_editor_panel.h / graph_editor_panel.cpp** — `GraphEditorPanel`: ImGui node canvas with pan/zoom (mouse drag + scroll wheel), bezier wire rendering between ports, port-type colour coding, RMB add-node context menu with all 11 node types, read-only mode during play, node selection and drag, canvas grid background.
+- **engine/editor/CMakeLists.txt** — `graph_editor_panel.cpp` registered in build.
+- **engine/scripting/script_engine.h / script_engine.cpp** — 3 new Lua bindings: `ffe.loadGraph(path)`, `ffe.attachGraph(handle, entity)`, `ffe.detachGraph(entity)`.
+- **engine/core/.context.md** — Visual Scripting System section added (node types, Lua API, security model, usage patterns, anti-patterns).
+- **engine/scripting/.context.md** — loadGraph/attachGraph/detachGraph documented.
+- **engine/renderer/.context.md** — minor refresh (existing section updates).
+- **tests/core/test_visual_scripting.cpp** — 42 Catch2 tests covering: system init, graph load (valid + invalid paths, malformed JSON, oversized graphs), all 14 security rejection cases (UNC, path traversal, unknown node types, cyclic graphs, unreachable nodes), attach/detach lifecycle, duplicate attach guard, update with no-op graphs.
+- **tests/core/fixtures/** — 4 JSON fixture files: `valid_graph.json` (3-node OnUpdate→Add→SetVelocity chain), `cyclic_graph.json` (2-node cycle for rejection test), `unknown_node_graph.json` (contains invalid node type), `large_graph.json` (513 nodes, exceeds MAX_NODES limit).
+- **tests/CMakeLists.txt** — `test_visual_scripting` registered.
+- **docs/architecture/adr-phase10-m2-visual-scripting.md** — 918-line ADR: problem statement, design options (Lua extension vs native graph vs plugin), chosen design rationale, security model (all 14 pipeline steps), node type catalogue, data layout, editor panel architecture, tier compatibility (LEGACY+), future extension points (user-defined node registration API).
+
+**Warning cleanup:**
+
+- **engine/renderer/terrain.cpp** — fixed unused-parameter warnings in LOD/culling methods (Clang-18 `-Wunused-parameter`).
+- **engine/renderer/vegetation.h** — removed dead field `m_cubeIbo` (was declared but never assigned or used).
+
+**Process update:**
+
+- **.claude/agents/build-engineer.md** — kill-stale-FFE-processes rule added: `pkill -f ffe_` before any screenshot capture to prevent window-focus conflicts from previously-crashed engine instances.
+
+### Security Review
+
+`security-auditor` reviewed the VisualScriptingSystem implementation in Phase 3. Two HIGH findings were raised:
+
+1. **Reachability validation missing** — graphs with nodes unreachable from any event node could execute orphaned logic. Fixed in ADR and implementation: reachability DFS from all event-type nodes added as security step 12.
+2. **Deferred destroy validation** — `DestroyEntity` node was executing immediately mid-frame, potentially invalidating other nodes' entity references. Fixed: destroy requests are queued and applied post-update via deferred list.
+
+Post-remediation review: PASS.
+
+### Build Fix Cycle
+
+`build-engineer` Phase 5 (Clang-18 FAST) found 2 errors on first build:
+
+1. **Macro redefinition / braced-init mismatch** — `MAX_NODE_CALLS_PER_FRAME` was defined as a preprocessor macro in the header but used in a `constexpr` context in the .cpp. Fixed: removed macro, promoted to `constexpr std::size_t` in the header.
+2. **Field name error** — `graph_editor_panel.cpp` referenced `m_panOffset` but the struct field was named `m_pan`. Fixed: renamed field to `m_panOffset` for consistency with the scroll variable name.
+
+Rebuild: 1493/1493 PASS, zero warnings.
+
+### Build
+
+1493/1493 PASS — Clang-18, zero warnings. FAST build (single compiler, as specified).
+
+### game-dev-tester
+
+Skipped. Visual scripting graphs are not yet integrated into any demo game — the system is a new editor workflow, not a Lua-replacement in existing examples. Demo integration deferred to a future session when a graph-authored game entity is showcased in `examples/`.
+
+### Session Close
+
+Session 112 commit pushed to origin/main:
+- `d2d169d` — feat(core): Phase 10 M2 — Visual Scripting node graph system
+
+### Next Session Goal
+
+**Phase 10 M3 — LLM Integration Panel:** Connect an AI assistant inside the editor, with context-aware code generation (using .context.md files as system prompt context), system explanation, and Lua snippet insertion into the active script slot. See ROADMAP.md Phase 10 M3.
+
+---
+
 ## 2026-03-08 — Session 111: Phase 10 M1 Prefab System
 
 ### Goal
