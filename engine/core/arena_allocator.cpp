@@ -34,9 +34,12 @@ ArenaAllocator::ArenaAllocator(const size_t capacityBytes)
     , m_capacity(capacityBytes)
     , m_offset(0)
 {
-    // Align the buffer to a cache line boundary (64 bytes)
+    // Align the buffer to a cache line boundary (64 bytes).
+    // aligned_alloc (POSIX/Linux) requires size to be a multiple of alignment.
+    constexpr size_t CACHE_LINE = 64;
+    const size_t alignedSize = (capacityBytes + CACHE_LINE - 1) & ~(CACHE_LINE - 1);
     m_buffer = static_cast<uint8_t*>(
-        FFE_ALIGNED_ALLOC(64, capacityBytes)
+        FFE_ALIGNED_ALLOC(CACHE_LINE, alignedSize)
     );
 
     if (!m_buffer) {

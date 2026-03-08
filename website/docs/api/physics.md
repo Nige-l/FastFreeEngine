@@ -10,7 +10,7 @@ description: "FastFreeEngine Physics subsystem API reference"
 
 # engine/physics -- Collision Detection & 3D Physics Subsystem
 
-AI-native context file. Written by api-designer.
+AI-native context file.
 
 ---
 

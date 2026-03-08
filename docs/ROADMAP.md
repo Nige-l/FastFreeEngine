@@ -119,7 +119,7 @@ This document defines the phased development plan for FFE. Each phase builds on 
 ### Architecture Constraints
 - Networking must be designed for the ECS — replicate components, not objects
 - Server can run headless (no renderer, no audio)
-- Network code is a primary attack surface — security-auditor reviews all of it
+- Network code is a primary attack surface — Critic reviews all of it
 - Must work on LEGACY tier (low bandwidth, single-threaded network loop is fine)
 
 ---
@@ -269,7 +269,7 @@ This document defines the phased development plan for FFE. Each phase builds on 
 
 **Goal:** Bring the editor to feature parity with commercial engines for common workflows.
 
-### Current Phase Marker: M2 (next after M1 Prefab System)
+### Current Phase Marker: M4 (next after M3 LLM Integration Panel)
 
 ### Milestones
 
@@ -282,12 +282,21 @@ This document defines the phased development plan for FFE. Each phase builds on 
 - [x] engine/core/.context.md: Prefab System section added
 - [x] ADR: docs/architecture/adr-phase10-m1-prefab-system.md
 
-#### M2: Visual Scripting (planned)
-- [ ] Node-based graph editor as alternative to Lua
-- [ ] Visual scripting nodes for common game logic patterns
+#### M2: Visual Scripting — COMPLETE (Session 112)
+- [x] Node-based graph editor (ImGui canvas, pan/zoom, bezier connections, RMB add menu)
+- [x] 11 built-in node types, topological sort execution, function-pointer dispatch
+- [x] 14-step security pipeline (cycle detection, node count limits, input validation)
+- [x] 3 Lua bindings: ffe.loadGraph / ffe.attachGraph / ffe.detachGraph
+- [x] 42 Catch2 tests
+- [x] ADR: docs/architecture/adr-phase10-m2-visual-scripting.md
 
-#### M3: LLM Integration Panel (planned)
-- [ ] LLM integration panel (connect AI assistant, generate code, explain systems)
+#### M3: LLM Integration Panel — COMPLETE (Session 113)
+- [x] Async HTTP to LLM API (OpenAI-compatible, cpp-httplib vendored)
+- [x] Context-aware queries using .context.md files as system prompt
+- [x] Lua snippet extraction and insertion callback
+- [x] 2 Lua bindings (#ifdef FFE_EDITOR guarded): ffe.llmQuery / ffe.isLLMConfigured
+- [x] 15 Catch2 tests
+- [x] ADR: docs/architecture/adr-phase10-m3-llm-panel.md
 
 #### M4: Editor Preferences and Project Wizard (planned)
 - [ ] Editor preferences and project wizard
@@ -358,10 +367,10 @@ These apply throughout development and are never "done":
 
 ## How Sessions Map to This Roadmap
 
-1. `project-manager` reads `docs/project-state.md` at session start — it contains the current phase's remaining deliverables
-2. PM only reads this full ROADMAP.md when planning a phase transition or when the user asks about long-term direction
-3. When a deliverable is completed, PM updates `project-state.md` (moves item from Remaining to Delivered)
+1. The main session reads `docs/project-state.md` at session start — it contains the current phase's remaining deliverables
+2. Only read this full ROADMAP.md when planning a phase transition or when the user asks about long-term direction
+3. When a deliverable is completed, update `project-state.md` (move item from Remaining to Delivered)
 4. Phase transitions require a review: all exit criteria met, all tests passing, docs updated
-5. When a phase is completed, PM updates both this file and `project-state.md`
+5. When a phase is completed, update both this file and `project-state.md`
 
 This roadmap is a living document. Update it as priorities shift and new requirements emerge.

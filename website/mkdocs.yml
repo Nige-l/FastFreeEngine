@@ -79,3 +79,8 @@ nav:
   - Community:
     - community.md
     - "Game Showcase": community/showcase.md
+  - Project:
+    - "Subsystem Status": subsystem-status.md
+    - "Dependency Policy": dependency-policy.md
+    - "Current Sprint": current-sprint.md
+    - "ADR: RETRO Tier": adr-retro-tier.md

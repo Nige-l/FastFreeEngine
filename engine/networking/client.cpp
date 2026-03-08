@@ -94,9 +94,8 @@ void NetworkClient::onTransportReceive(const ReceivedPacket& pkt, void* userData
 
                 // Check if this data fits in the entity snapshot buffer
                 if (es.dataSize + 4 + compSize > MAX_ENTITY_COMPONENT_DATA) {
-                    // Skip this component's data
-                    uint8_t discard[MAX_ENTITY_COMPONENT_DATA];
-                    reader.readBytes(discard, compSize);
+                    // Skip this component's data without copying into a stack buffer
+                    reader.skipBytes(compSize);
                     break;
                 }
 

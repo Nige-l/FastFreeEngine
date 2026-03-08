@@ -10,7 +10,7 @@ description: "FastFreeEngine Scripting subsystem API reference"
 
 # engine/scripting -- Lua Scripting Subsystem
 
-AI-native context file. Reviewed and written by api-designer, Session 7. Updated by api-designer, Session 8 (entity lifecycle bindings). Updated by api-designer, Session 12 (fillTransform, sound effect bindings). Updated by api-designer (sprite animation bindings). Updated by api-designer (collision/physics bindings). Updated by api-designer, Session 31 (scene management: destroyAllEntities, cancelAllTimers, loadScene, setScriptRoot). Updated by api-designer (gamepad bindings, save/load bindings, TTF font bindings). Updated by api-designer, Session 42 (3D mesh bindings: set3DCameraFPS, set3DCameraOrbit, setMeshTexture). Updated by api-designer (shadow mapping bindings: enableShadows, disableShadows, setShadowBias, setShadowArea). Updated by api-designer, Session 44 (point lights: addPointLight, removePointLight, setPointLight*; materials: setMeshSpecular, setMeshNormalMap, setMeshSpecularMap). Updated by api-designer, Session 45 (skybox bindings: loadSkybox, unloadSkybox, setSkyboxEnabled). Updated by api-designer, Session 46 (3D skeletal animation bindings: playAnimation3D, stopAnimation3D, setAnimationSpeed3D, getAnimationProgress3D, isAnimation3DPlaying, getAnimationCount3D). Updated by api-designer, Session 49 (3D collision callbacks: onCollision3D, removeCollision3DCallback, dispatchCollision3DEvents; raycasting: castRay, castRayAll). Updated by api-designer, Session 56 (loadSceneJSON binding for editor-exported scenes).
+AI-native context file.
 
 ---
 

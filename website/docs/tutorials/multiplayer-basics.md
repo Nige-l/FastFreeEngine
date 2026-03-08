@@ -418,7 +418,7 @@ To test multiplayer locally:
 
 ```bash
 cd your-ffe-project/
-./build/ffe_runner examples/net_demo/net_arena.lua
+./build/examples/net_demo/ffe_net_demo
 ```
 
 Press ++s++ to host a server.
@@ -427,7 +427,7 @@ Press ++s++ to host a server.
 
 ```bash
 cd your-ffe-project/
-./build/ffe_runner examples/net_demo/net_arena.lua
+./build/examples/net_demo/ffe_net_demo
 ```
 
 Press ++c++ to connect as a client.

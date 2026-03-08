@@ -95,7 +95,7 @@ local function createRect(x, y, w, h, r, g, b, layer)
     local id = ffe.createEntity()
     if not id then return nil end
     ffe.addTransform(id, x, y, 0, 1, 1)
-    ffe.addSprite(id, whiteTex or 1, w, h, r, g, b, 1, layer or 1)
+    ffe.addSprite(id, whiteTex or 0, w, h, r, g, b, 1, layer or 1)
     ffe.addPreviousTransform(id)
     return id
 end

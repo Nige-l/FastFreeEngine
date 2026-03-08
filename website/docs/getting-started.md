@@ -253,7 +253,7 @@ The [Lua Quick-Start Tutorial](tutorials/first-2d-game.md) covers all of these i
 
 Every engine subdirectory contains a `.context.md` file with the complete API documentation for that subsystem:
 
-- `engine/scripting/.context.md` -- full Lua API reference (~198 bindings)
+- `engine/scripting/.context.md` -- full Lua API reference (~225 bindings)
 - `engine/renderer/.context.md` -- rendering system, sprites, 3D meshes, shaders
 - `engine/audio/.context.md` -- sound and music playback
 - `engine/physics/.context.md` -- collision detection and physics

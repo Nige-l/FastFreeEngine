@@ -25,23 +25,25 @@ namespace ffe::renderer {
 inline constexpr u32 MAX_INSTANCES_PER_BATCH = 1024;
 
 // Per-instance data uploaded to the GPU via instance VBO.
-// Currently only the model matrix (mat4, 64 bytes).
-// Per-instance material variation is deferred to a future milestone.
+// Contains the model matrix (mat4, 64 bytes) and a per-instance diffuse color
+// (vec4, 16 bytes) so that instanced batches can have per-entity material colors.
 struct InstanceData {
-    glm::mat4 modelMatrix;  // 64 bytes
+    glm::mat4 modelMatrix;    // 64 bytes (attribute slots 8-11)
+    glm::vec4 instanceColor;  // 16 bytes (attribute slot 12)
 };
-static_assert(sizeof(InstanceData) == 64, "InstanceData must be 64 bytes (one mat4)");
+static_assert(sizeof(InstanceData) == 80, "InstanceData must be 80 bytes (mat4 + vec4)");
 
 // Total instance buffer size in bytes.
 inline constexpr u32 INSTANCE_BUFFER_SIZE = MAX_INSTANCES_PER_BATCH * sizeof(InstanceData);
-static_assert(INSTANCE_BUFFER_SIZE == 65536, "Instance buffer must be 64 KB");
+static_assert(INSTANCE_BUFFER_SIZE == 81920, "Instance buffer must be 80 KB");
 
 // Vertex attribute slots used by instance data.
 // A mat4 requires 4 consecutive vec4 attribute slots.
 // Slots 0-5 are used by mesh vertex data (position, normal, texcoord, tangent, joints, weights).
-// Slots 6-7 are reserved/spare. Slots 8-11 are instance data.
+// Slots 6-7 are reserved/spare. Slots 8-11 are instance model matrix. Slot 12 is instance color.
 inline constexpr u32 INSTANCE_ATTR_SLOT_BASE = 8;
-inline constexpr u32 INSTANCE_ATTR_SLOT_COUNT = 4;  // 4 vec4 columns of mat4
+inline constexpr u32 INSTANCE_MAT4_SLOT_COUNT = 4;  // 4 vec4 columns of mat4 (slots 8-11)
+inline constexpr u32 INSTANCE_COLOR_SLOT = 12;       // per-instance color (slot 12)
 
 // Minimum entity count sharing a MeshHandle before instancing kicks in.
 // With 1 entity, the regular single-draw path is used (no instance buffer overhead).

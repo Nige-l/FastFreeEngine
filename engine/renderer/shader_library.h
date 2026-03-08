@@ -42,8 +42,11 @@ bool initShaderLibrary(ShaderLibrary& library);
 // Destroy all built-in shaders.
 void shutdownShaderLibrary(ShaderLibrary& library);
 
-// Get a shader handle by enum.
+// Get a shader handle by enum. Returns null handle if id is out of range.
 inline rhi::ShaderHandle getShader(const ShaderLibrary& library, const BuiltinShader id) {
+    if (static_cast<u32>(id) >= static_cast<u32>(BuiltinShader::COUNT)) {
+        return rhi::ShaderHandle{};
+    }
     return library.handles[static_cast<u32>(id)];
 }
 

@@ -165,7 +165,7 @@ public:
     // Uses MESH_BLINN_PHONG_INSTANCED shader (enum 13). No-op if treeCount == 0.
     void renderTrees(const glm::mat4& view, const glm::mat4& proj,
                      const glm::vec3& lightDir, const glm::vec3& lightColor,
-                     const glm::vec3& ambientColor);
+                     const glm::vec3& ambientColor, const glm::vec3& cameraPos);
 
 private:
     // --- Patch slot ---
@@ -175,6 +175,10 @@ private:
         TerrainHandle    terrain      = {};
         u32              instanceCount = 0;
         VegetationConfig config       = {};
+        // Terrain half-extents captured at addPatch() time from the terrain asset config.
+        // Used by scatterAndUploadInstances() to scatter within actual terrain bounds.
+        float            halfWidth    = 128.0f; // worldWidth / 2
+        float            halfDepth    = 128.0f; // worldDepth / 2
         // OpenGL object names (0 = unallocated)
         u32              vao          = 0;  // Vertex array object
         u32              quadVbo      = 0;  // Quad vertex positions + UVs

@@ -793,6 +793,8 @@ layout(location = 8)  in vec4 a_instanceModel0;
 layout(location = 9)  in vec4 a_instanceModel1;
 layout(location = 10) in vec4 a_instanceModel2;
 layout(location = 11) in vec4 a_instanceModel3;
+// Per-instance diffuse color (location 12)
+layout(location = 12) in vec4 a_instanceColor;
 
 uniform mat4 u_viewProjection;
 uniform mat4 u_lightSpaceMatrix;
@@ -803,6 +805,7 @@ out vec3 v_normal;
 out vec2 v_texcoord;
 out vec4 v_fragPosLightSpace;
 out vec3 v_tangent;
+flat out vec4 v_instanceColor;
 
 void main() {
     mat4 model = mat4(a_instanceModel0, a_instanceModel1,
@@ -815,8 +818,170 @@ void main() {
     v_tangent           = normalMatrix * a_tangent;
     v_texcoord          = a_texcoord;
     v_fragPosLightSpace = u_lightSpaceMatrix * worldPos;
+    v_instanceColor     = a_instanceColor;
     gl_ClipDistance[0]  = (dot(u_clipPlane, u_clipPlane) < 0.001) ? 1.0 : dot(worldPos, u_clipPlane);
     gl_Position         = u_viewProjection * worldPos;
+}
+)glsl";
+
+// --- Instanced Blinn-Phong fragment shader ---
+// Identical to MESH_BLINN_PHONG_FRAG_SOURCE except it reads the diffuse color
+// from the per-instance varying v_instanceColor instead of the u_diffuseColor
+// uniform. This enables per-entity colors in instanced batches.
+
+static const char* const MESH_BLINN_PHONG_INSTANCED_FRAG_SOURCE = R"glsl(
+#version 330 core
+
+#define MAX_POINT_LIGHTS 8
+
+in vec3 v_fragPos;
+in vec3 v_normal;
+in vec2 v_texcoord;
+in vec4 v_fragPosLightSpace;
+in vec3 v_tangent;
+flat in vec4 v_instanceColor;
+
+uniform sampler2D u_diffuseTexture;
+uniform vec4      u_diffuseColor;      // kept for texture-only batches; overridden by v_instanceColor
+uniform vec3      u_lightDir;
+uniform vec3      u_lightColor;
+uniform vec3      u_ambientColor;
+uniform vec3      u_viewPos;
+
+// Material specular properties
+uniform vec3      u_specularColor;
+uniform float     u_shininess;
+
+// Normal map (texture unit 2, 0 = disabled via u_hasNormalMap)
+uniform sampler2D u_normalMap;
+uniform int       u_hasNormalMap;
+
+// Specular map (texture unit 3, 0 = disabled via u_hasSpecularMap)
+uniform sampler2D u_specularMap;
+uniform int       u_hasSpecularMap;
+
+// Shadow map uniforms — inactive when u_shadowsEnabled == 0
+uniform sampler2D u_shadowMap;
+uniform int       u_shadowsEnabled;
+uniform float     u_shadowBias;
+
+// Point lights — fixed array, only u_pointLightCount are active
+uniform int   u_pointLightCount;
+uniform vec3  u_pointLightPos[MAX_POINT_LIGHTS];
+uniform vec3  u_pointLightColor[MAX_POINT_LIGHTS];
+uniform float u_pointLightRadius[MAX_POINT_LIGHTS];
+
+// Linear fog — inactive when u_fogEnabled == 0
+uniform int   u_fogEnabled;
+uniform vec3  u_fogColor;
+uniform float u_fogNear;
+uniform float u_fogFar;
+
+out vec4 fragColor;
+
+vec3 getNormal() {
+    vec3 N = normalize(v_normal);
+    if (u_hasNormalMap != 0) {
+        float tangentLen = length(v_tangent);
+        if (tangentLen > 0.001) {
+            vec3 T = v_tangent / tangentLen;
+            T = normalize(T - dot(T, N) * N);
+            vec3 B = cross(N, T);
+            mat3 TBN = mat3(T, B, N);
+            vec3 mapNormal = texture(u_normalMap, v_texcoord).rgb * 2.0 - 1.0;
+            N = normalize(TBN * mapNormal);
+        }
+    }
+    return N;
+}
+
+vec3 getSpecularFactor() {
+    if (u_hasSpecularMap != 0) {
+        return texture(u_specularMap, v_texcoord).rgb;
+    }
+    return u_specularColor;
+}
+
+void main() {
+    // Use per-instance color instead of the uniform u_diffuseColor
+    vec4  instanceDiffuse = v_instanceColor;
+
+    vec3  norm      = getNormal();
+    vec3  viewDir   = normalize(u_viewPos - v_fragPos);
+    vec3  specFactor = getSpecularFactor();
+
+    // --- Directional light ---
+    vec3  lightDir  = normalize(-u_lightDir);
+
+    // Diffuse
+    float diff      = max(dot(norm, lightDir), 0.0);
+    vec3  diffuse   = diff * u_lightColor;
+
+    // Specular (Blinn-Phong half-vector)
+    vec3  halfDir   = normalize(lightDir + viewDir);
+    float spec      = pow(max(dot(norm, halfDir), 0.0), u_shininess);
+    vec3  specular  = spec * u_lightColor * specFactor * 0.3;
+
+    // Shadow factor (1.0 = fully lit, 0.0 = fully shadowed)
+    float shadowFactor = 1.0;
+    if (u_shadowsEnabled != 0) {
+        vec3 projCoords = v_fragPosLightSpace.xyz / v_fragPosLightSpace.w;
+        projCoords = projCoords * 0.5 + 0.5;
+        if (projCoords.z <= 1.0) {
+            float shadow = 0.0;
+            vec2 texelSize = 1.0 / vec2(textureSize(u_shadowMap, 0));
+            for (int x = -1; x <= 1; ++x) {
+                for (int y = -1; y <= 1; ++y) {
+                    float pcfDepth = texture(u_shadowMap,
+                                             projCoords.xy + vec2(x, y) * texelSize).r;
+                    shadow += (projCoords.z - u_shadowBias) > pcfDepth ? 1.0 : 0.0;
+                }
+            }
+            shadowFactor = 1.0 - (shadow / 9.0);
+        }
+    }
+
+    // Directional light contribution (shadow-affected)
+    vec3 dirLighting = shadowFactor * (diffuse + specular);
+
+    // --- Point lights (additive, not shadow-mapped) ---
+    vec3 pointLighting = vec3(0.0);
+    for (int i = 0; i < u_pointLightCount; ++i) {
+        vec3  toLight  = u_pointLightPos[i] - v_fragPos;
+        float dist     = length(toLight);
+        float r        = u_pointLightRadius[i];
+
+        // Distance attenuation: 1 / (1 + (d/r)*2 + (d/r)^2)
+        float dr       = dist / max(r, 0.001);
+        float atten    = 1.0 / (1.0 + 2.0 * dr + dr * dr);
+
+        vec3  pLightDir = normalize(toLight);
+
+        // Diffuse
+        float pDiff    = max(dot(norm, pLightDir), 0.0);
+        vec3  pDiffuse = pDiff * u_pointLightColor[i] * atten;
+
+        // Specular (Blinn-Phong)
+        vec3  pHalf    = normalize(pLightDir + viewDir);
+        float pSpec    = pow(max(dot(norm, pHalf), 0.0), u_shininess);
+        vec3  pSpecular = pSpec * u_pointLightColor[i] * specFactor * 0.3 * atten;
+
+        pointLighting += pDiffuse + pSpecular;
+    }
+
+    // Combine: ambient is never shadowed; directional + point lights
+    vec4  texSample = texture(u_diffuseTexture, v_texcoord);
+    vec3  lighting  = u_ambientColor + dirLighting + pointLighting;
+    vec3  finalColor = lighting * texSample.rgb * instanceDiffuse.rgb;
+
+    // Linear fog: blend towards fog color based on distance from camera
+    if (u_fogEnabled != 0) {
+        float dist = length(v_fragPos - u_viewPos);
+        float fogFactor = clamp((u_fogFar - dist) / (u_fogFar - u_fogNear), 0.0, 1.0);
+        finalColor = mix(u_fogColor, finalColor, fogFactor);
+    }
+
+    fragColor = vec4(finalColor, texSample.a * instanceDiffuse.a);
 }
 )glsl";
 
@@ -837,6 +1002,8 @@ layout(location = 8)  in vec4 a_instanceModel0;
 layout(location = 9)  in vec4 a_instanceModel1;
 layout(location = 10) in vec4 a_instanceModel2;
 layout(location = 11) in vec4 a_instanceModel3;
+// Per-instance albedo color (location 12)
+layout(location = 12) in vec4 a_instanceColor;
 
 uniform mat4 u_viewProjection;
 uniform mat4 u_lightSpaceMatrix;
@@ -847,6 +1014,7 @@ out vec3 v_normal;
 out vec2 v_texcoord;
 out vec4 v_fragPosLightSpace;
 out vec3 v_tangent;
+flat out vec4 v_instanceColor;
 
 void main() {
     mat4 model = mat4(a_instanceModel0, a_instanceModel1,
@@ -859,8 +1027,260 @@ void main() {
     v_tangent           = normalMatrix * a_tangent;
     v_texcoord          = a_texcoord;
     v_fragPosLightSpace = u_lightSpaceMatrix * worldPos;
+    v_instanceColor     = a_instanceColor;
     gl_ClipDistance[0]  = (dot(u_clipPlane, u_clipPlane) < 0.001) ? 1.0 : dot(worldPos, u_clipPlane);
     gl_Position         = u_viewProjection * worldPos;
+}
+)glsl";
+
+// --- Instanced PBR fragment shader ---
+// Identical to MESH_PBR_FRAG_SOURCE except it reads the per-instance albedo
+// from the v_instanceColor varying (set by the instanced vertex shader) and
+// multiplies it into the albedo. This enables per-entity colors in instanced
+// PBR batches while preserving all other PBR shading (metallic-roughness,
+// IBL, shadows, fog, etc.).
+
+static const char* const MESH_PBR_INSTANCED_FRAG_SOURCE = R"glsl(
+#version 330 core
+
+#define MAX_POINT_LIGHTS 8
+#define PI 3.14159265359
+
+in vec3 v_fragPos;
+in vec3 v_normal;
+in vec2 v_texcoord;
+in vec4 v_fragPosLightSpace;
+in vec3 v_tangent;
+flat in vec4 v_instanceColor;
+
+// --- Material uniforms ---
+uniform vec4      u_albedo;
+uniform float     u_metallic;
+uniform float     u_roughness;
+uniform float     u_normalScale;
+uniform float     u_ao;
+uniform vec3      u_emissiveFactor;
+
+// --- Material texture maps ---
+uniform sampler2D u_albedoMap;
+uniform int       u_hasAlbedoMap;
+uniform sampler2D u_metallicRoughnessMap;
+uniform int       u_hasMetallicRoughnessMap;
+uniform sampler2D u_normalMap;
+uniform int       u_hasNormalMap;
+uniform sampler2D u_aoMap;
+uniform int       u_hasAoMap;
+uniform sampler2D u_emissiveMap;
+uniform int       u_hasEmissiveMap;
+
+// --- Scene lighting ---
+uniform vec3      u_lightDir;
+uniform vec3      u_lightColor;
+uniform vec3      u_ambientColor;
+uniform vec3      u_viewPos;
+
+// --- Point lights ---
+uniform int   u_pointLightCount;
+uniform vec3  u_pointLightPos[MAX_POINT_LIGHTS];
+uniform vec3  u_pointLightColor[MAX_POINT_LIGHTS];
+uniform float u_pointLightRadius[MAX_POINT_LIGHTS];
+
+// --- Shadow map ---
+uniform sampler2D u_shadowMap;
+uniform int       u_shadowsEnabled;
+uniform float     u_shadowBias;
+uniform mat4      u_lightSpaceMatrix;
+
+// --- Fog ---
+uniform int   u_fogEnabled;
+uniform vec3  u_fogColor;
+uniform float u_fogNear;
+uniform float u_fogFar;
+
+// --- Skybox for IBL approximation ---
+uniform samplerCube u_skybox;
+uniform int         u_hasSkybox;
+
+out vec4 fragColor;
+
+// ----- Cook-Torrance BRDF functions -----
+
+float distributionGGX(vec3 N, vec3 H, float roughness) {
+    float a  = roughness * roughness;
+    float a2 = a * a;
+    float NdotH  = max(dot(N, H), 0.0);
+    float NdotH2 = NdotH * NdotH;
+    float denom  = NdotH2 * (a2 - 1.0) + 1.0;
+    denom = PI * denom * denom;
+    return a2 / max(denom, 0.0000001);
+}
+
+float geometrySchlickGGX(float NdotV, float roughness) {
+    float r = roughness + 1.0;
+    float k = (r * r) / 8.0;
+    return NdotV / (NdotV * (1.0 - k) + k);
+}
+
+float geometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
+    float NdotV = max(dot(N, V), 0.0);
+    float NdotL = max(dot(N, L), 0.0);
+    float ggx1  = geometrySchlickGGX(NdotV, roughness);
+    float ggx2  = geometrySchlickGGX(NdotL, roughness);
+    return ggx1 * ggx2;
+}
+
+vec3 fresnelSchlick(float cosTheta, vec3 F0) {
+    return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
+vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness) {
+    return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
+// ----- Normal mapping -----
+
+vec3 getNormal() {
+    vec3 N = normalize(v_normal);
+    if (u_hasNormalMap != 0) {
+        float tangentLen = length(v_tangent);
+        if (tangentLen > 0.001) {
+            vec3 T = v_tangent / tangentLen;
+            T = normalize(T - dot(T, N) * N);
+            vec3 B = cross(N, T);
+            mat3 TBN = mat3(T, B, N);
+            vec3 mapNormal = texture(u_normalMap, v_texcoord).rgb * 2.0 - 1.0;
+            mapNormal.xy *= u_normalScale;
+            N = normalize(TBN * mapNormal);
+        }
+    }
+    return N;
+}
+
+// ----- Shadow calculation -----
+
+float calcShadow(vec4 fragPosLS) {
+    if (u_shadowsEnabled == 0) return 1.0;
+    vec3 projCoords = fragPosLS.xyz / fragPosLS.w;
+    projCoords = projCoords * 0.5 + 0.5;
+    if (projCoords.z > 1.0) return 1.0;
+    float shadow = 0.0;
+    vec2 texelSize = 1.0 / vec2(textureSize(u_shadowMap, 0));
+    for (int x = -1; x <= 1; ++x) {
+        for (int y = -1; y <= 1; ++y) {
+            float pcfDepth = texture(u_shadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
+            shadow += (projCoords.z - u_shadowBias) > pcfDepth ? 1.0 : 0.0;
+        }
+    }
+    return 1.0 - (shadow / 9.0);
+}
+
+// ----- Cook-Torrance reflectance for a single light -----
+
+vec3 calcReflectance(vec3 N, vec3 V, vec3 L, vec3 radiance,
+                     vec3 albedo, float metallic, float roughness, vec3 F0) {
+    vec3 H = normalize(V + L);
+
+    float NDF = distributionGGX(N, H, roughness);
+    float G   = geometrySmith(N, V, L, roughness);
+    vec3  F   = fresnelSchlick(max(dot(H, V), 0.0), F0);
+
+    float NdotL = max(dot(N, L), 0.0);
+    float NdotV = max(dot(N, V), 0.0);
+    vec3  numerator   = NDF * G * F;
+    float denominator = 4.0 * NdotV * NdotL + 0.0001;
+    vec3  specular    = numerator / denominator;
+
+    vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);
+
+    return (kD * albedo / PI + specular) * radiance * NdotL;
+}
+
+void main() {
+    // --- Sample material properties ---
+    // Use per-instance color to modulate the albedo (enables per-entity colors
+    // in instanced batches while preserving texture and uniform albedo).
+    vec4 albedoSample = u_albedo * v_instanceColor;
+    if (u_hasAlbedoMap != 0) {
+        albedoSample *= texture(u_albedoMap, v_texcoord);
+    }
+    vec3 albedo = albedoSample.rgb;
+    float alpha = albedoSample.a;
+
+    float metallic  = u_metallic;
+    float roughness = u_roughness;
+    if (u_hasMetallicRoughnessMap != 0) {
+        vec4 mrSample = texture(u_metallicRoughnessMap, v_texcoord);
+        roughness *= mrSample.g;
+        metallic  *= mrSample.b;
+    }
+    roughness = clamp(roughness, 0.04, 1.0);
+
+    float aoFactor = u_ao;
+    if (u_hasAoMap != 0) {
+        aoFactor *= texture(u_aoMap, v_texcoord).r;
+    }
+
+    vec3 emissive = u_emissiveFactor;
+    if (u_hasEmissiveMap != 0) {
+        emissive *= texture(u_emissiveMap, v_texcoord).rgb;
+    }
+
+    // --- Geometric terms ---
+    vec3 N = getNormal();
+    vec3 V = normalize(u_viewPos - v_fragPos);
+
+    vec3 F0 = mix(vec3(0.04), albedo, metallic);
+
+    // --- Directional light ---
+    vec3 Lo = vec3(0.0);
+    {
+        vec3 L = normalize(-u_lightDir);
+        float shadowFactor = calcShadow(v_fragPosLightSpace);
+        vec3 radiance = u_lightColor * shadowFactor;
+        Lo += calcReflectance(N, V, L, radiance, albedo, metallic, roughness, F0);
+    }
+
+    // --- Point lights ---
+    for (int i = 0; i < u_pointLightCount; ++i) {
+        vec3  toLight = u_pointLightPos[i] - v_fragPos;
+        float dist    = length(toLight);
+        float r       = u_pointLightRadius[i];
+        float dr      = dist / max(r, 0.001);
+        float atten   = 1.0 / (1.0 + 2.0 * dr + dr * dr);
+
+        vec3 L = normalize(toLight);
+        vec3 radiance = u_pointLightColor[i] * atten;
+        Lo += calcReflectance(N, V, L, radiance, albedo, metallic, roughness, F0);
+    }
+
+    // --- Ambient / IBL approximation ---
+    vec3 ambient;
+    float NdotV = max(dot(N, V), 0.0);
+    vec3 F = fresnelSchlickRoughness(NdotV, F0, roughness);
+    vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);
+
+    if (u_hasSkybox != 0) {
+        vec3 R = reflect(-V, N);
+        float specularMip = roughness * 4.0;
+        vec3 prefilteredColor = textureLod(u_skybox, R, specularMip).rgb;
+        vec3 irradiance = textureLod(u_skybox, N, 4.0).rgb;
+        vec3 diffuseIBL  = irradiance * albedo * kD;
+        vec3 specularIBL = prefilteredColor * F;
+        ambient = (diffuseIBL + specularIBL) * aoFactor;
+    } else {
+        ambient = u_ambientColor * albedo * kD * aoFactor;
+    }
+
+    vec3 color = ambient + Lo + emissive;
+
+    // --- Fog ---
+    if (u_fogEnabled != 0) {
+        float dist = length(v_fragPos - u_viewPos);
+        float fogFactor = clamp((u_fogFar - dist) / (u_fogFar - u_fogNear), 0.0, 1.0);
+        color = mix(u_fogColor, color, fogFactor);
+    }
+
+    fragColor = vec4(color, alpha);
 }
 )glsl";
 
@@ -1743,8 +2163,8 @@ static const ShaderPair PAIRS[] = {
     { FULLSCREEN_VERT_SOURCE,          POST_THRESHOLD_FRAG_SOURCE,      "post_threshold"        },
     { FULLSCREEN_VERT_SOURCE,          POST_BLUR_FRAG_SOURCE,           "post_blur"             },
     { FULLSCREEN_VERT_SOURCE,          POST_FINAL_FRAG_SOURCE,          "post_final"            },
-    { MESH_BLINN_PHONG_INSTANCED_VERT_SOURCE, MESH_BLINN_PHONG_FRAG_SOURCE, "mesh_blinn_phong_instanced" },
-    { MESH_PBR_INSTANCED_VERT_SOURCE,  MESH_PBR_FRAG_SOURCE,            "mesh_pbr_instanced"    },
+    { MESH_BLINN_PHONG_INSTANCED_VERT_SOURCE, MESH_BLINN_PHONG_INSTANCED_FRAG_SOURCE, "mesh_blinn_phong_instanced" },
+    { MESH_PBR_INSTANCED_VERT_SOURCE,  MESH_PBR_INSTANCED_FRAG_SOURCE,  "mesh_pbr_instanced"    },
     { SHADOW_DEPTH_INSTANCED_VERT_SOURCE, SHADOW_DEPTH_FRAG_SOURCE,     "shadow_depth_instanced"},
     { FULLSCREEN_VERT_SOURCE,          POST_FXAA_FRAG_SOURCE,           "post_fxaa"             },
     { FULLSCREEN_VERT_SOURCE,          SSAO_PASS_FRAG_SOURCE,           "ssao_pass"             },

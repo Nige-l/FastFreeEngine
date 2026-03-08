@@ -125,6 +125,15 @@ bool PacketReader::readString(char* out, const uint16_t maxLen) {
     return true;
 }
 
+bool PacketReader::skipBytes(const uint16_t count) {
+    if (m_error || m_pos + count > m_size) {
+        m_error = true;
+        return false;
+    }
+    m_pos += count;
+    return true;
+}
+
 uint16_t PacketReader::remaining() const {
     return (m_pos <= m_size) ? static_cast<uint16_t>(m_size - m_pos) : 0;
 }

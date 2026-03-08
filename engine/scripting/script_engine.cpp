@@ -102,6 +102,11 @@ static int s_netOnLobbyUpdateKey         = 0;
 static int s_netOnGameStartKey           = 0;
 static int s_netOnHitConfirmKey          = 0;
 
+// Registry key for the budget-exceeded flag pointer.
+// instructionHook sets *ptr = true when the budget fires, allowing doString
+// to detect when pcall inside Lua absorbed the hook error and re-raise.
+static int s_budgetExceededKey           = 0;
+
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
@@ -152,7 +157,36 @@ bool isPathSafe(const char* path) {
 
 // Instruction count hook — kills scripts that exceed the budget.
 // This is registered via lua_sethook and runs in C, so it can call luaL_error.
+//
+// Problem: luaL_error raises a Lua-catchable error. A malicious script can use
+// pcall() to swallow the budget error and keep running indefinitely. To detect
+// this, the hook also sets a C-side flag (stored via the registry under
+// s_budgetExceededKey) before raising. doString checks this flag after
+// lua_pcall returns — even if pcall ate the error and returned LUA_OK, the flag
+// reveals that the budget fired, and doString returns false.
 void instructionHook(lua_State* L, lua_Debug* /*ar*/) {
+    // Look up the budget-exceeded flag registered by doString.
+    lua_pushlightuserdata(L, &s_budgetExceededKey);
+    lua_rawget(L, LUA_REGISTRYINDEX);
+    bool* flag = nullptr;
+    if (lua_type(L, -1) == LUA_TLIGHTUSERDATA) {
+        flag = static_cast<bool*>(lua_touserdata(L, -1));
+    }
+    lua_pop(L, 1);
+
+    if (flag != nullptr && *flag) {
+        // Budget already fired once. A pcall() inside Lua swallowed the first
+        // error and resumed execution. Switch to single-instruction firing so
+        // every subsequent Lua instruction re-raises immediately. This drains
+        // any nested pcall stack frame by frame until the outer lua_pcall (C)
+        // catches the error and doString returns false.
+        lua_sethook(L, instructionHook, LUA_MASKCOUNT, 1);
+    } else {
+        // First firing: record that the budget was exceeded.
+        if (flag != nullptr) {
+            *flag = true;
+        }
+    }
     luaL_error(L, "script exceeded instruction budget (possible infinite loop)");
 }
 
@@ -411,6 +445,13 @@ bool ScriptEngine::init() {
     lua_pushliteral(L, LUA_STRLIBNAME);
     lua_call(L, 1, 0);
 
+    // Remove string.dump — it can serialise function bytecode, which is a
+    // sandbox escape vector (bytecode can carry arbitrary upvalues).
+    lua_getglobal(L, "string");
+    lua_pushnil(L);
+    lua_setfield(L, -2, "dump");
+    lua_pop(L, 1);
+
     lua_pushcfunction(L, luaopen_table);
     lua_pushliteral(L, LUA_TABLIBNAME);
     lua_call(L, 1, 0);
@@ -621,11 +662,39 @@ bool ScriptEngine::doString(const char* script) {
         return false;
     }
 
+    // Apply instruction budget before executing untrusted code.
+    lua_sethook(L, instructionHook, LUA_MASKCOUNT, 1'000'000);
+
+    // Register a C-side flag in the registry so instructionHook can signal
+    // that the budget fired even if Lua's pcall() absorbed the error.
+    // Without this, a malicious script can wrap an infinite loop in pcall(),
+    // catch the budget error, and keep running forever.
+    bool budgetExceeded = false;
+    lua_pushlightuserdata(L, &s_budgetExceededKey);
+    lua_pushlightuserdata(L, &budgetExceeded);
+    lua_rawset(L, LUA_REGISTRYINDEX);
+
     const int callResult = lua_pcall(L, 0, 0, 0);
+
+    // Unregister the flag — it is stack-allocated and must not outlive this call.
+    lua_pushlightuserdata(L, &s_budgetExceededKey);
+    lua_pushnil(L);
+    lua_rawset(L, LUA_REGISTRYINDEX);
+
+    // Restore instruction budget (in case a future caller changes the hook).
+    lua_sethook(L, instructionHook, LUA_MASKCOUNT, 1'000'000);
+
     if (callResult != LUA_OK) {
         const char* err = lua_tostring(L, -1);
         FFE_LOG_ERROR("ScriptEngine", "Lua runtime error: %s", err != nullptr ? err : "(no message)");
         lua_pop(L, 1);
+        return false;
+    }
+
+    // If the budget fired but pcall() inside Lua caught and swallowed the error,
+    // lua_pcall returns LUA_OK — but budgetExceeded is true. Treat this as failure.
+    if (budgetExceeded) {
+        FFE_LOG_ERROR("ScriptEngine", "Lua runtime error: script exceeded instruction budget (possible infinite loop)");
         return false;
     }
 
@@ -710,16 +779,44 @@ bool ScriptEngine::doFile(const char* path, const char* assetRoot) {
         return false;
     }
 
-    // Reset instruction budget so each doFile gets a fresh 1M instructions.
-    // Without this, chained loadScene calls could share/exhaust a single budget.
-    lua_sethook(L, instructionHook, LUA_MASKCOUNT, 1'000'000);
+    // Reset instruction budget so each doFile gets a fresh budget.
+    // Level setup scripts load meshes, create entities, and configure terrain, which
+    // can easily exceed 1M instructions. 10M gives ample headroom for complex levels
+    // while still catching infinite loops within a reasonable time.
+    lua_sethook(L, instructionHook, LUA_MASKCOUNT, 10'000'000);
+
+    // Register a C-side flag so instructionHook can signal that the budget fired
+    // even if a pcall() inside the level script absorbed the error. Without this,
+    // a level script can wrap an infinite loop in pcall(), catch the budget error,
+    // and keep running forever — identical to the gap fixed in doString.
+    bool budgetExceeded = false;
+    lua_pushlightuserdata(L, &s_budgetExceededKey);
+    lua_pushlightuserdata(L, &budgetExceeded);
+    lua_rawset(L, LUA_REGISTRYINDEX);
 
     const int callResult = lua_pcall(L, 0, 0, 0);
+
+    // Unregister the flag — it is stack-allocated and must not outlive this call.
+    lua_pushlightuserdata(L, &s_budgetExceededKey);
+    lua_pushnil(L);
+    lua_rawset(L, LUA_REGISTRYINDEX);
+
+    // Restore the per-frame instruction budget after doFile completes.
+    // Without this, all subsequent per-frame calls inherit the 10M budget.
+    lua_sethook(L, instructionHook, LUA_MASKCOUNT, 1'000'000);
+
     if (callResult != LUA_OK) {
         const char* err = lua_tostring(L, -1);
         FFE_LOG_ERROR("ScriptEngine", "Lua runtime error (%s): %s",
                       path, err != nullptr ? err : "(no message)");
         lua_pop(L, 1);
+        return false;
+    }
+
+    // If the budget fired but pcall() inside Lua caught and swallowed the error,
+    // lua_pcall returns LUA_OK — but budgetExceeded is true. Treat this as failure.
+    if (budgetExceeded) {
+        FFE_LOG_ERROR("ScriptEngine", "Lua runtime error (%s): script exceeded instruction budget (possible infinite loop)", path);
         return false;
     }
 
@@ -740,13 +837,36 @@ bool ScriptEngine::callFunction(const char* funcName, ffe::i64 entityId, double 
     lua_pushinteger(L, static_cast<lua_Integer>(entityId));
     lua_pushnumber(L, static_cast<lua_Number>(dt));
 
-    if (lua_pcall(L, 2, 0, 0) != 0) {
+    // Register the budget-exceeded flag so instructionHook can signal a budget
+    // overrun even if a pcall() inside the per-frame callback swallowed the error.
+    // Without this, a misbehaving per-frame script can absorb the hook error via
+    // pcall() and run indefinitely every frame — identical to the gap in doString.
+    bool budgetExceeded = false;
+    lua_pushlightuserdata(L, &s_budgetExceededKey);
+    lua_pushlightuserdata(L, &budgetExceeded);
+    lua_rawset(L, LUA_REGISTRYINDEX);
+
+    const int callResult = lua_pcall(L, 2, 0, 0);
+
+    // Unregister the flag — stack-allocated, must not outlive this call.
+    lua_pushlightuserdata(L, &s_budgetExceededKey);
+    lua_pushnil(L);
+    lua_rawset(L, LUA_REGISTRYINDEX);
+
+    if (callResult != LUA_OK) {
         const char* err = lua_tostring(L, -1);
         FFE_LOG_ERROR("ScriptEngine", "callFunction(%s) error: %s",
                       funcName, err != nullptr ? err : "unknown error");
         lua_pop(L, 1);
         return false;
     }
+
+    // Budget fired but was swallowed by pcall() inside Lua — treat as failure.
+    if (budgetExceeded) {
+        FFE_LOG_ERROR("ScriptEngine", "callFunction(%s): script exceeded instruction budget (possible infinite loop)", funcName);
+        return false;
+    }
+
     return true;
 }
 
@@ -7217,7 +7337,7 @@ void ScriptEngine::registerEcsBindings() {
         lua_newtable(state);
         int idx = 1;
         for (uint32_t i = 0; i < ffe::networking::MAX_LOBBY_PLAYERS; ++i) {
-            if (ls.players[i].connectionId == 0) { continue; }
+            if (ls.players[i].connectionId == 0xFFFFFFFF) { continue; }
             lua_newtable(state);
             lua_pushinteger(state, static_cast<lua_Integer>(ls.players[i].connectionId));
             lua_setfield(state, -2, "id");
@@ -7915,11 +8035,11 @@ void ScriptEngine::registerEcsBindings() {
         const ffe::f32 b = static_cast<ffe::f32>(lua_tonumber(state, 4));
 
         ffe::renderer::WaterHandle h{static_cast<ffe::u32>(rawId > 0 ? rawId : 0)};
-        // WaterManager::setWaterConfig requires fetching the current config first.
-        // We store a temporary with the updated color and forward it.
-        // (WaterManager is not a singleton — retrieve via engine member.)
-        // There is no getWaterConfig() on WaterManager; construct defaults and update color only.
-        ffe::renderer::WaterSurfaceConfig cfg{};
+        if (!h.isValid()) {
+            FFE_LOG_WARN("ScriptEngine", "[Water] setWaterSurfaceColor: invalid handle");
+            return 0;
+        }
+        auto cfg = engine->m_waterManager.getWaterConfig(h);
         cfg.waterColor = glm::vec3(r, g, b);
         engine->m_waterManager.setWaterConfig(h, cfg);
         return 0;
@@ -7949,7 +8069,11 @@ void ScriptEngine::registerEcsBindings() {
             rawAmplitude < 0.0 ? 0.0 : (rawAmplitude > 10.0 ? 10.0 : rawAmplitude));
 
         ffe::renderer::WaterHandle h{static_cast<ffe::u32>(rawId > 0 ? rawId : 0)};
-        ffe::renderer::WaterSurfaceConfig cfg{};
+        if (!h.isValid()) {
+            FFE_LOG_WARN("ScriptEngine", "[Water] setWaterSurfaceWave: invalid handle");
+            return 0;
+        }
+        auto cfg = engine->m_waterManager.getWaterConfig(h);
         cfg.waveSpeed     = speed;
         cfg.waveScale     = scale;
         cfg.waveAmplitude = amplitude;
@@ -7985,18 +8109,23 @@ void ScriptEngine::registerEcsBindings() {
             rawReflStrength < 0.0 ? 0.0 : (rawReflStrength > 1.0 ? 1.0 : rawReflStrength));
 
         ffe::renderer::WaterHandle h{static_cast<ffe::u32>(rawId > 0 ? rawId : 0)};
-        ffe::renderer::WaterSurfaceConfig cfg{};
-        cfg.fresnelPower        = power;
-        cfg.reflectionStrength  = reflStrength;
+        if (!h.isValid()) {
+            FFE_LOG_WARN("ScriptEngine", "[Water] setWaterSurfaceFresnel: invalid handle");
+            return 0;
+        }
+        auto cfg = engine->m_waterManager.getWaterConfig(h);
+        cfg.fresnelPower       = power;
+        cfg.reflectionStrength = reflStrength;
         engine->m_waterManager.setWaterConfig(h, cfg);
         return 0;
     });
     lua_setfield(L, -2, "setWaterSurfaceFresnel");
 
     // ffe.setWaterSurfaceReflection(handle, enabled: boolean) -> nil
-    // Enable or disable planar reflection for a water surface.
-    // On LEGACY tier the reflection FBO is never allocated — this controls
-    // whether createWater() will attempt to allocate it on STANDARD+.
+    // Toggle the runtime flag that controls whether the reflection texture is
+    // blended into the water surface during rendering. This does not affect FBO
+    // allocation, which happens at surface creation time. On LEGACY tier the
+    // reflection FBO may not be allocated regardless of this flag.
     lua_pushcfunction(L, [](lua_State* state) -> int {
         lua_pushlightuserdata(state, &s_engineRegistryKey);
         lua_gettable(state, LUA_REGISTRYINDEX);
@@ -8008,7 +8137,11 @@ void ScriptEngine::registerEcsBindings() {
         const bool enabled       = lua_toboolean(state, 2) != 0;
 
         ffe::renderer::WaterHandle h{static_cast<ffe::u32>(rawId > 0 ? rawId : 0)};
-        ffe::renderer::WaterSurfaceConfig cfg{};
+        if (!h.isValid()) {
+            FFE_LOG_WARN("ScriptEngine", "[Water] setWaterSurfaceReflection: invalid handle");
+            return 0;
+        }
+        auto cfg = engine->m_waterManager.getWaterConfig(h);
         cfg.reflectionEnabled = enabled;
         engine->m_waterManager.setWaterConfig(h, cfg);
         return 0;

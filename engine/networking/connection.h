@@ -34,18 +34,20 @@ inline bool isValid(const ConnectionId c) { return c.id != 0xFFFFFFFF; }
 struct ConnectionRateLimit {
     uint32_t m_packetsThisSecond = 0;
     uint32_t m_bytesThisSecond   = 0;
-    float    m_windowStart       = 0.0f;
+    uint64_t m_windowStartMs     = 0; // milliseconds — avoids float precision loss after ~2.3 h
 
     static constexpr uint32_t MAX_PACKETS_PER_SECOND = 100;
     static constexpr uint32_t MAX_BYTES_PER_SECOND   = 65536; // 64 KB/s
 
     /// Return true if the packet should be allowed through.
     bool allowPacket(uint32_t packetSize, float currentTime) {
-        // Roll over window every second
-        if (currentTime - m_windowStart >= 1.0f) {
+        // Convert to milliseconds to preserve precision over long uptimes
+        const uint64_t nowMs = static_cast<uint64_t>(currentTime * 1000.0);
+        // Roll over window every second (1000 ms)
+        if (nowMs - m_windowStartMs >= 1000u) {
             m_packetsThisSecond = 0;
             m_bytesThisSecond   = 0;
-            m_windowStart       = currentTime;
+            m_windowStartMs     = nowMs;
         }
         if (m_packetsThisSecond >= MAX_PACKETS_PER_SECOND) { return false; }
         if (m_bytesThisSecond + packetSize > MAX_BYTES_PER_SECOND) { return false; }

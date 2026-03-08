@@ -263,6 +263,9 @@ void animationUpdateSystem3D(World& world, const float dt) {
             continue;
         }
 
+        // Guard against negative time (e.g. speed < 0 combined with external set)
+        if (animState.time < 0.0f) animState.time = 0.0f;
+
         // Advance time for the target clip
         animState.time += dt * animState.speed;
 

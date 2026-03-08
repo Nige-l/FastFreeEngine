@@ -299,6 +299,15 @@ bool initPhysics3D(const Physics3DConfig& config) {
         return true;
     }
 
+    // Clamp maxBodies to our fixed mapping array size
+    Physics3DConfig safeConfig = config;
+    if (safeConfig.maxBodies > MAX_BODIES) {
+        FFE_LOG_WARN("Physics3D",
+                     "Requested maxBodies=%u exceeds MAX_BODIES=%u — clamping to %u",
+                     safeConfig.maxBodies, MAX_BODIES, MAX_BODIES);
+        safeConfig.maxBodies = MAX_BODIES;
+    }
+
     // Initialize entity-body mapping
     initBodyEntityMapping();
 
@@ -344,10 +353,10 @@ bool initPhysics3D(const Physics3DConfig& config) {
     // Physics system
     s_state.physicsSystem = new JPH::PhysicsSystem(); // cold path
     s_state.physicsSystem->Init(
-        config.maxBodies,
+        safeConfig.maxBodies,
         0, // auto-detect mutex count
-        config.maxBodyPairs,
-        config.maxContactConstraints,
+        safeConfig.maxBodyPairs,
+        safeConfig.maxContactConstraints,
         *s_state.bpLayerInterface,
         *s_state.objVsBpFilter,
         *s_state.objPairFilter);
@@ -356,12 +365,12 @@ bool initPhysics3D(const Physics3DConfig& config) {
     s_state.physicsSystem->SetContactListener(&s_contactListener);
 
     // Set gravity
-    const glm::vec3 g = sanitizeVec3(config.gravity);
+    const glm::vec3 g = sanitizeVec3(safeConfig.gravity);
     s_state.physicsSystem->SetGravity(toJolt(g));
 
     s_state.initialized = true;
     FFE_LOG_INFO("Physics3D", "Jolt Physics initialized (maxBodies=%u, gravity=%.2f,%.2f,%.2f)",
-                 config.maxBodies, g.x, g.y, g.z);
+                 safeConfig.maxBodies, g.x, g.y, g.z);
 
     return true;
 }

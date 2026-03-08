@@ -509,6 +509,22 @@ MeshHandle loadMesh(const char* const path) {
             }
         }
 
+        // Validate parent-before-child ordering: every parent index must be less
+        // than the child's own index. If not, the skin is non-standard and we
+        // would read an uninitialised matrix during pose evaluation — clamp by
+        // clearing the parent link and treating the joint as a root instead.
+        for (u32 bi = 0; bi < parsedSkeleton.boneCount; ++bi) {
+            const i32 parentIdx = parsedSkeleton.bones[bi].parentIndex;
+            if (parentIdx >= 0 && static_cast<u32>(parentIdx) >= bi) {
+                FFE_LOG_WARN("MeshLoader",
+                             "loadMesh: joint %u has parent index %d which is >= joint index "
+                             "(non-standard ordering) in \"%s\"; treating joint as root to "
+                             "avoid uninitialised matrix read",
+                             bi, parentIdx, canonPath);
+                parsedSkeleton.bones[bi].parentIndex = -1;
+            }
+        }
+
         // --- Parse animations ---
         const u32 animCount = static_cast<u32>(
             data->animations_count < MAX_ANIMATIONS_PER_MESH
@@ -562,7 +578,7 @@ MeshHandle loadMesh(const char* const path) {
                     sampler->input->count < MAX_KEYFRAMES_PER_CHANNEL
                         ? sampler->input->count : MAX_KEYFRAMES_PER_CHANNEL);
 
-                if (keyframeCount > sampler->input->count) continue;
+                if (keyframeCount == 0) continue;
 
                 switch (channel.target_path) {
                     case cgltf_animation_path_type_translation: {

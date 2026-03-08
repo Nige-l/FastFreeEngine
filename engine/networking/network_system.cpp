@@ -53,7 +53,7 @@ static void broadcastLobbyStateViaServer() {
 
     for (uint32_t i = 0; i < MAX_LOBBY_PLAYERS; ++i) {
         const LobbyPlayerInfo& info = ls.players[i];
-        if (info.connectionId == 0) { continue; }
+        if (info.connectionId == 0xFFFFFFFF) { continue; }
         writer.writeU32(info.connectionId);
         writer.writeU8(info.ready ? 1 : 0);
         writer.writeString(info.name);

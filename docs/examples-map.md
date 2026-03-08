@@ -1,7 +1,6 @@
 # FFE Examples Map
 
-Quick reference for `project-manager` when planning demo work. Replaces reading source files.
-Owner: `game-dev-tester` owns all files under `examples/`. `engine-dev` may touch `main.cpp` files for binding renames only.
+Quick reference for demo/example games. All files under `examples/` are owned by the Implementer agent.
 
 ---
 

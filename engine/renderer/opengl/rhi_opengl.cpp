@@ -381,6 +381,10 @@ void shutdown() {
 
 BufferHandle createBuffer(const BufferDesc& desc) {
     if (s_headless) {
+        if (s_headlessBufferNext >= MAX_BUFFERS) {
+            FFE_LOG_ERROR("Renderer", "Headless buffer pool exhausted (max %u)", MAX_BUFFERS);
+            return BufferHandle{0};
+        }
         return BufferHandle{s_headlessBufferNext++};
     }
 
@@ -458,6 +462,10 @@ TextureHandle createTexture(const TextureDesc& desc) {
     if (s_headless) {
         // In headless mode, still populate s_textures for dimension queries
         // (used by the texture atlas for packing math). Skip all GL calls.
+        if (s_headlessTextureNext >= MAX_TEXTURES) {
+            FFE_LOG_ERROR("Renderer", "Headless texture pool exhausted (max %u)", MAX_TEXTURES);
+            return TextureHandle{0};
+        }
         const u32 slot = s_headlessTextureNext++;
         if (slot < MAX_TEXTURES) {
             GlTexture& tex = s_textures[slot];
@@ -662,6 +670,10 @@ ShaderHandle createShader(const ShaderDesc& desc) {
     }
 
     if (s_headless) {
+        if (s_headlessShaderNext >= MAX_SHADERS) {
+            FFE_LOG_ERROR("Renderer", "Headless shader pool exhausted (max %u)", MAX_SHADERS);
+            return ShaderHandle{0};
+        }
         return ShaderHandle{s_headlessShaderNext++};
     }
 

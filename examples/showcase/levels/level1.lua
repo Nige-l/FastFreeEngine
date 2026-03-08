@@ -110,7 +110,12 @@ end
 --------------------------------------------------------------------
 -- Terrain: gently rolling courtyard heightmap
 --------------------------------------------------------------------
-local terrainHandle = ffe.loadTerrain("terrain/courtyard_height.png", 60, 60, 8)
+-- heightScale reduced from 8 to 3: the terrain grid starts at world-space z=0,
+-- but the player spawns at z=-12 (south of the grid). With heightScale=8 the
+-- terrain south edge was ~5 m tall, filling the camera view with a green wall.
+-- At heightScale=3 the hills peak at ~2 m -- visible as distant background
+-- scenery without blocking the spawn camera.
+local terrainHandle = ffe.loadTerrain("terrain/courtyard_height.png", 60, 60, 3)
 -- Enable terrain-aware camera clamping so the orbit arc never dips
 -- below the courtyard surface on hilly terrain (Bug 1 fix).
 if Camera then Camera.setTerrainAware(true) end
@@ -130,12 +135,12 @@ end
 -- half-height 0.3). Water sits at y=0.65, inside the 2.2x2.2 inner
 -- rim (rim top at y=0.8), sized 2.0x2.0 to clear the rim walls.
 --------------------------------------------------------------------
-local wh = ffe.createWater(0, 0.65, 0, 2.0, 2.0)
+local wh = ffe.createWaterSurface(0, 0.65, 0, 2.0, 2.0)
 if wh and wh ~= 0 then
-    ffe.setWaterColor(wh, 0.1, 0.4, 0.6)
-    ffe.setWaterWave(wh, 0.3, 2.0, 0.05)
-    ffe.setWaterFresnel(wh, 3.0, 0.6)
-    ffe.setWaterReflection(wh, true)
+    ffe.setWaterSurfaceReflection(wh, true)
+    ffe.setWaterSurfaceFresnel(wh, 3.0, 0.6)
+    ffe.setWaterSurfaceWave(wh, 0.3, 2.0, 0.05)
+    ffe.setWaterSurfaceColor(wh, 0.1, 0.4, 0.6)
     setWaterHandle(wh)
     ffe.log("[Level1] Fountain water surface created")
 end
@@ -664,9 +669,9 @@ end)
 -- Override the AI damage function temporarily to also handle
 -- the destructible wall via combat raycast
 --------------------------------------------------------------------
-local origCombatAttack = Combat.attack
-
-Combat.attack = function(playerPos, playerForward)
+if not origCombatAttack then
+    origCombatAttack = Combat.attack
+    Combat.attack = function(playerPos, playerForward)
     -- Run normal combat logic
     local hitEntity = origCombatAttack(playerPos, playerForward)
 
@@ -697,6 +702,7 @@ Combat.attack = function(playerPos, playerForward)
     end
 
     return hitEntity
+    end
 end
 
 --------------------------------------------------------------------
@@ -704,12 +710,11 @@ end
 -- Query terrain height at spawn XZ so the player lands on the
 -- surface even when the heightmap raises the ground above Y=0.
 --------------------------------------------------------------------
-local terrainSurfaceY = ffe.getTerrainHeight(0, -12) or 0
-ffe.log("[Level1] Terrain surface at spawn XZ(0,-12): " .. tostring(terrainSurfaceY))
-local SPAWN_Y = math.max(terrainSurfaceY + 2.5, 2.5)
+local SPAWN_Y = 2.5  -- hardcoded: (0,-12) is outside terrain grid [0,60]x[0,60]
+ffe.log("[Level1] Using fixed spawn Y: " .. tostring(SPAWN_Y))
 Player.create(0, SPAWN_Y, -12, cesiumMesh)
 Camera.setPosition(0, SPAWN_Y + 2, -12)
-Camera.setYawPitch(180, -20)  -- Camera behind (south), looking north into courtyard; negative pitch = looking up toward horizon
+Camera.setYawPitch(180, 15)  -- Camera behind (south), looking slightly down into the courtyard
 
 if HUD then
     HUD.showPrompt("The Courtyard -- Find the Ancient Artifact", 4.0)

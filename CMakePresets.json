@@ -1,0 +1,163 @@
+{
+    "version": 6,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 25,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "base",
+            "hidden": true,
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "FFE_TIER": "LEGACY",
+                "FFE_BACKEND": "OPENGL"
+            },
+            "environment": {
+                "VCPKG_ROOT": "/home/nigel/vcpkg"
+            },
+            "toolchainFile": "/home/nigel/vcpkg/scripts/buildsystems/vcpkg.cmake"
+        },
+        {
+            "name": "base-clang",
+            "hidden": true,
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "clang-18",
+                "CMAKE_CXX_COMPILER": "clang++-18"
+            }
+        },
+        {
+            "name": "base-gcc",
+            "hidden": true,
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "gcc-13",
+                "CMAKE_CXX_COMPILER": "g++-13"
+            }
+        },
+        {
+            "name": "legacy-debug",
+            "displayName": "Legacy Debug (Clang-18)",
+            "description": "Clang-18, Debug, LEGACY tier, OpenGL 3.3",
+            "inherits": "base-clang",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "legacy-release",
+            "displayName": "Legacy Release (Clang-18)",
+            "description": "Clang-18, Release, LEGACY tier, OpenGL 3.3",
+            "inherits": "base-clang",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "gcc-debug",
+            "displayName": "GCC-13 Debug",
+            "description": "GCC-13, Debug, LEGACY tier — dual-compiler verification",
+            "inherits": "base-gcc",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "gcc-release",
+            "displayName": "GCC-13 Release",
+            "description": "GCC-13, Release, LEGACY tier — dual-compiler verification",
+            "inherits": "base-gcc",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "sanitizer",
+            "displayName": "Sanitizer (Clang-18 ASan+UBSan)",
+            "description": "Clang-18, Debug, AddressSanitizer + UndefinedBehaviorSanitizer",
+            "inherits": "base-clang",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_C_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer",
+                "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer",
+                "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined",
+                "CMAKE_SHARED_LINKER_FLAGS": "-fsanitize=address,undefined"
+            }
+        },
+        {
+            "name": "mingw-release",
+            "displayName": "MinGW Cross-Compilation (Release)",
+            "description": "MinGW-w64 x86_64 cross-compilation for Windows",
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/mingw-w64-x86_64.cmake",
+                "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/mingw-w64-x86_64.cmake",
+                "VCPKG_TARGET_TRIPLET": "x64-mingw-dynamic"
+            },
+            "toolchainFile": "/home/nigel/vcpkg/scripts/buildsystems/vcpkg.cmake"
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "legacy-debug",
+            "configurePreset": "legacy-debug",
+            "jobs": 0
+        },
+        {
+            "name": "legacy-release",
+            "configurePreset": "legacy-release",
+            "jobs": 0
+        },
+        {
+            "name": "gcc-debug",
+            "configurePreset": "gcc-debug",
+            "jobs": 0
+        },
+        {
+            "name": "gcc-release",
+            "configurePreset": "gcc-release",
+            "jobs": 0
+        },
+        {
+            "name": "sanitizer",
+            "configurePreset": "sanitizer",
+            "jobs": 0
+        },
+        {
+            "name": "mingw-release",
+            "configurePreset": "mingw-release",
+            "jobs": 0
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "test-fast",
+            "displayName": "Fast Test (Clang-18 Debug)",
+            "description": "Run all tests in parallel using the Clang-18 debug build",
+            "configurePreset": "legacy-debug",
+            "output": {
+                "outputOnFailure": true
+            },
+            "execution": {
+                "jobs": 0
+            }
+        },
+        {
+            "name": "test-full",
+            "displayName": "Full Test (GCC-13 Debug)",
+            "description": "Run all tests in parallel using the GCC-13 debug build",
+            "configurePreset": "gcc-debug",
+            "output": {
+                "outputOnFailure": true
+            },
+            "execution": {
+                "jobs": 0
+            }
+        }
+    ]
+}

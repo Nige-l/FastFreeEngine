@@ -61,8 +61,8 @@ function Player.create(x, y, z, cubeMeshHandle)
     -- CesiumMan is ~1.7m at scale 1.0; scale to 1.8 for a visible player character
     ffe.setTransform3D(playerEntity, x, y, z, X_ROT_CORRECTION, 0, 0, 1.8, 1.8, 1.8)
 
-    -- Distinct player color: bright cyan
-    ffe.setMeshColor(playerEntity, 0.1, 0.8, 0.9, 1.0)
+    -- Warm skin-like tone (placeholder until glTF texture extraction)
+    ffe.setMeshColor(playerEntity, 0.85, 0.65, 0.5, 1.0)
     ffe.setMeshSpecular(playerEntity, 0.5, 0.8, 1.0, 64)
 
     -- Physics body: dynamic box
@@ -280,7 +280,7 @@ function Player.takeDamage(amount)
         ffe.setMeshColor(playerEntity, 1, 0.2, 0.2, 1.0)
         ffe.after(0.15, function()
             if playerEntity ~= 0 then
-                ffe.setMeshColor(playerEntity, 0.1, 0.8, 0.9, 1.0)
+                ffe.setMeshColor(playerEntity, 0.85, 0.65, 0.5, 1.0)
             end
         end)
     end

@@ -315,8 +315,8 @@ end
 -- Scene init
 -- ---------------------------------------------------------------------------
 whiteTex    = ffe.loadTexture("textures/white.png")
-sfxBrick    = ffe.loadSound("audio/sfx_pong_paddle.wav")
-sfxPaddle   = ffe.loadSound("audio/sfx_pong_wall.wav")
+sfxBrick    = ffe.loadSound("audio/sfx_pong_wall.wav")
+sfxPaddle   = ffe.loadSound("audio/sfx_pong_paddle.wav")
 sfxWall     = ffe.loadSound("audio/sfx_pong_wall.wav")
 sfxLose     = ffe.loadSound("audio/sfx_pong_score.wav")
 musicHandle = ffe.loadMusic("audio/music_pixelcrown.ogg")
@@ -422,7 +422,10 @@ function update(entityId, dt)
     -- Ball pulsing before launch
     if not ballLaunched and not gameOver and ball then
         local pulse = 0.9 + 0.1 * math.sin(gameTime * 6)
-        ffe.setTransform(ball, transformBuf.x or 0,
+        local ballBuf = {}
+        local ballX = 0
+        if ffe.fillTransform(ball, ballBuf) then ballX = ballBuf.x or 0 end
+        ffe.setTransform(ball, ballX,
                          PADDLE_Y + PADDLE_H / 2 + BALL_SIZE / 2 + 2,
                          0, pulse, pulse)
     end

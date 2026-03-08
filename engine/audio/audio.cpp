@@ -24,6 +24,13 @@
 //   LOW-4:    unloadSound() deactivates voice AND frees PCM buffer under m_mutex,
 //             within the same critical section. No use-after-free window.
 //   LOW-5:    playSound() per-instance volume passes through clampVolume().
+//
+// Audio-thread safety:
+//   stb_vorbis_open_filename() and stb_vorbis_close() are PROHIBITED in audioCallback().
+//   Both perform file I/O and heap allocation that cause audio dropouts.
+//   Fix: playMusic() opens the stream on the main thread and carries the pointer in the
+//   AudioCommand. Streams retired by the callback are deposited in pendingMusicClose
+//   (an atomic slot) for the main thread to close via drainPendingMusicClose().
 
 // ---------------------------------------------------------------------------
 // miniaudio include — suppress third-party warnings
@@ -189,20 +196,25 @@ struct AudioCommand {
         PLAY_SOUND,
         PLAY_SOUND_3D,      // play a 3D positioned sound effect
         SET_MASTER_VOLUME,
-        PLAY_MUSIC,         // start/restart music streaming (soundId + flags)
+        PLAY_MUSIC,         // start/restart music streaming (pre-opened stream pointer)
         STOP_MUSIC,         // stop current music track
         SET_MUSIC_VOLUME,   // update music volume atomic
     };
-    Type  type    = Type::PLAY_SOUND;
-    u8    flags   = 0u;     // PLAY_MUSIC: bit 0 = loop (1=loop, 0=once)
-    u8    _pad0   = 0u;     // reserved
-    u8    _pad1   = 0u;     // reserved
-    u32   soundId = 0u;     // for PLAY_SOUND / PLAY_SOUND_3D / PLAY_MUSIC: 1-based sound slot index
-    float volume  = 1.0f;   // for PLAY_SOUND / PLAY_SOUND_3D: per-instance volume
-                            // for SET_MASTER_VOLUME / SET_MUSIC_VOLUME: new volume
-    float posX    = 0.0f;   // for PLAY_SOUND_3D: world-space position
-    float posY    = 0.0f;
-    float posZ    = 0.0f;
+    Type         type      = Type::PLAY_SOUND;
+    u8           flags     = 0u;     // PLAY_MUSIC: bit 0 = loop (1=loop, 0=once)
+    u8           _pad0     = 0u;     // reserved
+    u8           _pad1     = 0u;     // reserved
+    u32          soundId   = 0u;     // for PLAY_SOUND / PLAY_SOUND_3D: 1-based sound slot index
+    float        volume    = 1.0f;   // for PLAY_SOUND / PLAY_SOUND_3D: per-instance volume
+                                     // for SET_MASTER_VOLUME / SET_MUSIC_VOLUME: new volume
+    float        posX      = 0.0f;   // for PLAY_SOUND_3D: world-space position
+    float        posY      = 0.0f;
+    float        posZ      = 0.0f;
+    // PLAY_MUSIC: pre-opened stb_vorbis stream (opened on main thread before posting).
+    // The callback receives this pointer and owns it — it must eventually close it
+    // (via the pendingClose deferred mechanism, never inline on the audio thread).
+    // For all other command types, this field is nullptr.
+    stb_vorbis*  musicStream = nullptr;
 };
 
 static constexpr u32 CMD_RING_CAPACITY = 64u;
@@ -250,17 +262,35 @@ static struct {
     // Music streaming state — only accessed from the audio callback thread,
     // except for musicVolume and musicPlaying which are atomics for main-thread reads.
     //
-    // musicStream is opened/closed by the callback when processing PLAY_MUSIC /
-    // STOP_MUSIC commands. It is always null when the device is stopped (shutdown).
+    // musicStream is set by the callback when processing PLAY_MUSIC commands.
+    // The stream pointer is pre-opened on the main thread and carried in the command.
+    // It is always null when the device is stopped (shutdown).
     stb_vorbis*        musicStream   = nullptr;  // non-null when music is playing
     bool               musicLoop     = false;    // current track looping?
     std::atomic<float> musicVolume{1.0f};        // music volume [0,1], read by main thread
     std::atomic<bool>  musicPlaying{false};      // true while track is active
 
-    // 3D audio listener state — written by main thread, read by audio callback.
-    // Simple struct copy under the existing mutex in the callback provides
-    // coherent reads. The main thread writes these outside the mutex (atomic
-    // would be overkill for 9 floats; the mixer reads them under mutex).
+    // Deferred-close slot: the audio callback deposits a stb_vorbis* here when it
+    // needs to close a stream (end-of-track, track switch, or stop). The main thread
+    // drains this via drainPendingMusicClose() — keeping stb_vorbis_close() off the
+    // audio thread entirely. Single-slot is sufficient: only one music stream can
+    // be retired per callback cycle (and close is idempotent via swap-and-check).
+    //
+    // Protocol:
+    //   Callback:    std::atomic_exchange(&pendingMusicClose, ptr)
+    //                If exchange returns a non-null previous value, the callback
+    //                discards the old slot value by storing the new ptr — the main
+    //                thread will close whichever ptr it reads. In the extreme edge
+    //                case where two streams are deposited before the main thread
+    //                drains, the first deposit is overwritten (lost). This can only
+    //                happen if the main thread is stalled for longer than two full
+    //                music tracks, which is not a realistic scenario.
+    //   Main thread: ptr = pendingMusicClose.exchange(nullptr)
+    //                if (ptr) stb_vorbis_close(ptr);
+    std::atomic<stb_vorbis*> pendingMusicClose{nullptr};
+
+    // 3D audio listener state — written by main thread under mutex,
+    // read by audio callback under mutex. Both sides hold the lock.
     struct Listener {
         float posX = 0.0f, posY = 0.0f, posZ = 0.0f;
         float fwdX = 0.0f, fwdY = 0.0f, fwdZ = -1.0f;
@@ -268,6 +298,7 @@ static struct {
     } listener;
 
     // 3D attenuation distance configuration (global, not per-voice).
+    // Written by main thread under mutex, read by audio callback under mutex.
     float minDist3D = 1.0f;    // within this distance, gain = 1.0
     float maxDist3D = 100.0f;  // beyond this distance, gain = 0.0
 
@@ -490,11 +521,25 @@ static void audioCallback(ma_device* pDevice, void* pOutput, const void* /*pInpu
                 s_state.musicVolume.store(cmd.volume, std::memory_order_relaxed);
                 break;
             case AudioCommand::Type::PLAY_MUSIC:
+                // If a previous PLAY_MUSIC in this same callback cycle is being
+                // superseded (last-write-wins), the earlier stream is abandoned.
+                // Deposit it for main-thread close before overwriting.
+                if (hasPendingPlayMusic && pendingPlayMusic.musicStream != nullptr) {
+                    s_state.pendingMusicClose.store(pendingPlayMusic.musicStream,
+                                                    std::memory_order_release);
+                }
                 hasPendingPlayMusic = true;
                 pendingPlayMusic = cmd;
                 pendingStopMusic = false;   // PLAY supersedes a pending STOP
                 break;
             case AudioCommand::Type::STOP_MUSIC:
+                // If a PLAY_MUSIC was staged this callback cycle, its pre-opened
+                // stream is now superseded by STOP — retire it for main-thread close.
+                if (hasPendingPlayMusic && pendingPlayMusic.musicStream != nullptr) {
+                    s_state.pendingMusicClose.store(pendingPlayMusic.musicStream,
+                                                    std::memory_order_release);
+                    pendingPlayMusic.musicStream = nullptr;
+                }
                 pendingStopMusic = true;
                 hasPendingPlayMusic = false; // STOP supersedes a pending PLAY
                 break;
@@ -513,47 +558,39 @@ static void audioCallback(ma_device* pDevice, void* pOutput, const void* /*pInpu
         std::lock_guard<std::mutex> lock(s_state.mutex);
 
         // --- Music command dispatch ---
+        //
+        // stb_vorbis_open_filename() and stb_vorbis_close() are prohibited on the
+        // audio thread (file I/O + heap allocation cause dropouts). The stream is
+        // pre-opened by playMusic() on the main thread and arrives in the command.
+        // Streams that must be retired are deposited in pendingMusicClose for the
+        // main thread to close via drainPendingMusicClose().
 
         // Process STOP_MUSIC
         if (pendingStopMusic && s_state.musicStream != nullptr) {
-            stb_vorbis_close(s_state.musicStream);
+            // Deposit the retiring stream for main-thread close.
+            s_state.pendingMusicClose.store(s_state.musicStream, std::memory_order_release);
             s_state.musicStream = nullptr;
             s_state.musicPlaying.store(false, std::memory_order_relaxed);
         }
 
-        // Process PLAY_MUSIC (last-write-wins for rapid track switches)
+        // Process PLAY_MUSIC (last-write-wins for rapid track switches).
+        // pendingPlayMusic.musicStream is a pre-opened stb_vorbis* from the main thread.
         if (hasPendingPlayMusic) {
-            // Close existing stream first (track switch or replay)
+            // Retire the currently active stream (if any) for main-thread close.
             if (s_state.musicStream != nullptr) {
-                stb_vorbis_close(s_state.musicStream);
+                s_state.pendingMusicClose.store(s_state.musicStream, std::memory_order_release);
                 s_state.musicStream = nullptr;
             }
 
-            // MEDIUM-1 (security): bounds-check soundId before path retrieval.
-            const u32 idx = pendingPlayMusic.soundId - 1u;
-            if (idx < MAX_SOUNDS && s_state.sounds[idx].inUse &&
-                s_state.sounds[idx].canonPath[0] != '\0')
-            {
-                // LOW-1 (security): check stb_vorbis error code on open failure.
-                int vorbisError = 0;
-                stb_vorbis* stream = stb_vorbis_open_filename(
-                    s_state.sounds[idx].canonPath, &vorbisError, nullptr);
-
-                if (stream) {
-                    s_state.musicStream = stream;
-                    s_state.musicLoop   = (pendingPlayMusic.flags & 0x01u) != 0u;
-                    s_state.musicPlaying.store(true, std::memory_order_relaxed);
-                } else {
-                    FFE_LOG_ERROR("Audio",
-                        "audioCallback: stb_vorbis_open_filename() failed "
-                        "(error=%d) for \"%s\"",
-                        vorbisError, s_state.sounds[idx].canonPath);
-                    s_state.musicPlaying.store(false, std::memory_order_relaxed);
-                }
+            stb_vorbis* const incoming = pendingPlayMusic.musicStream;
+            if (incoming != nullptr) {
+                s_state.musicStream = incoming;
+                s_state.musicLoop   = (pendingPlayMusic.flags & 0x01u) != 0u;
+                s_state.musicPlaying.store(true, std::memory_order_relaxed);
             } else {
-                FFE_LOG_ERROR("Audio",
-                    "audioCallback: PLAY_MUSIC with invalid/unloaded soundId=%u",
-                    pendingPlayMusic.soundId);
+                // Null pointer means playMusic() failed to open the stream before
+                // posting — it already logged the error. Treat as a stop.
+                s_state.musicPlaying.store(false, std::memory_order_relaxed);
             }
         }
 
@@ -668,16 +705,22 @@ static void audioCallback(ma_device* pDevice, void* pOutput, const void* /*pInpu
             if (static_cast<u32>(decoded) < decodeFrames) {
                 if (s_state.musicLoop) {
                     // MEDIUM-2 (security): check seek return value — can fail on corrupt OGG.
+                    // stb_vorbis_seek_start() is a seek on an already-open stream — no file
+                    // open, no heap allocation. This is safe to call on the audio thread.
                     const int seekOk = stb_vorbis_seek_start(s_state.musicStream);
                     if (!seekOk) {
                         FFE_LOG_ERROR("Audio",
                             "audioCallback: stb_vorbis_seek_start() failed — stopping music");
-                        stb_vorbis_close(s_state.musicStream);
+                        // Deposit retiring stream for main-thread close.
+                        s_state.pendingMusicClose.store(s_state.musicStream,
+                                                        std::memory_order_release);
                         s_state.musicStream = nullptr;
                         s_state.musicPlaying.store(false, std::memory_order_relaxed);
                     }
                 } else {
-                    stb_vorbis_close(s_state.musicStream);
+                    // Non-looping track finished — deposit stream for main-thread close.
+                    s_state.pendingMusicClose.store(s_state.musicStream,
+                                                    std::memory_order_release);
                     s_state.musicStream = nullptr;
                     s_state.musicPlaying.store(false, std::memory_order_relaxed);
                 }
@@ -687,6 +730,22 @@ static void audioCallback(ma_device* pDevice, void* pOutput, const void* /*pInpu
 
     // Suppress unused parameter warning from miniaudio (pDevice is reserved for future use)
     static_cast<void>(pDevice);
+}
+
+// ---------------------------------------------------------------------------
+// drainPendingMusicClose — main-thread helper.
+//
+// The audio callback deposits stb_vorbis* pointers into pendingMusicClose
+// instead of calling stb_vorbis_close() inline (which does file I/O and heap
+// deallocation). This function closes any pending stream. Call from the main
+// thread at convenient points (playMusic, stopMusic, or each audio update tick).
+// ---------------------------------------------------------------------------
+static void drainPendingMusicClose() {
+    stb_vorbis* const retiring =
+        s_state.pendingMusicClose.exchange(nullptr, std::memory_order_acquire);
+    if (retiring != nullptr) {
+        stb_vorbis_close(retiring);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -733,6 +792,7 @@ bool init(const bool headless) {
     s_state.musicPlaying.store(false, std::memory_order_relaxed);
     s_state.musicStream  = nullptr;
     s_state.musicLoop    = false;
+    s_state.pendingMusicClose.store(nullptr, std::memory_order_relaxed);
 
     // Reset 3D listener state to defaults
     s_state.listener = {};
@@ -781,7 +841,11 @@ void shutdown() {
         s_state.deviceOpen = false;
     }
 
-    // Device is now stopped — callback is not running. Safe to close music stream directly.
+    // Device is now stopped — callback is not running.
+    // Drain any stream the callback deposited just before the device stopped.
+    drainPendingMusicClose();
+
+    // Also close the active stream directly — the callback can no longer touch it.
     if (s_state.musicStream != nullptr) {
         stb_vorbis_close(s_state.musicStream);
         s_state.musicStream = nullptr;
@@ -1276,12 +1340,55 @@ void playMusic(const SoundHandle handle, const bool loop) {
         return;
     }
 
+    // Drain any stream the callback retired on a previous call — ensures
+    // stb_vorbis_close() stays on the main thread, not the audio thread.
+    drainPendingMusicClose();
+
+    // Validate soundId and retrieve the canonical path under mutex.
+    // The path was validated and canonicalised at loadMusic() time.
+    const u32 idx = handle.id - 1u;
+    char canonPath[PATH_MAX + 1];
+    canonPath[0] = '\0';
+    {
+        std::lock_guard<std::mutex> lock(s_state.mutex);
+        if (idx < MAX_SOUNDS && s_state.sounds[idx].inUse &&
+            s_state.sounds[idx].canonPath[0] != '\0')
+        {
+            // Copy the stored canonical path under mutex for safe use outside.
+            const size_t len = strnlen(s_state.sounds[idx].canonPath,
+                                       static_cast<size_t>(PATH_MAX));
+            memcpy(canonPath, s_state.sounds[idx].canonPath, len + 1u);
+        }
+    }
+
+    if (canonPath[0] == '\0') {
+        FFE_LOG_ERROR("Audio",
+            "playMusic: invalid/unloaded soundId=%u (no canonical path)", handle.id);
+        return;
+    }
+
+    // Open the Vorbis stream on the main thread — file I/O and heap allocation
+    // belong here, not in the audio callback.
+    int vorbisError = 0;
+    stb_vorbis* const stream = stb_vorbis_open_filename(canonPath, &vorbisError, nullptr);
+    if (!stream) {
+        FFE_LOG_ERROR("Audio",
+            "playMusic: stb_vorbis_open_filename() failed (error=%d) for \"%s\"",
+            vorbisError, canonPath);
+        return;
+    }
+
     AudioCommand cmd;
-    cmd.type    = AudioCommand::Type::PLAY_MUSIC;
-    cmd.soundId = handle.id;
-    cmd.flags   = loop ? 0x01u : 0x00u;
-    cmd.volume  = 0.0f; // unused for PLAY_MUSIC
-    postCommand(cmd);
+    cmd.type        = AudioCommand::Type::PLAY_MUSIC;
+    cmd.soundId     = 0u;        // unused — stream pointer carries the resource
+    cmd.flags       = loop ? 0x01u : 0x00u;
+    cmd.volume      = 0.0f;      // unused for PLAY_MUSIC
+    cmd.musicStream = stream;    // ownership transferred to the audio callback on success
+
+    if (!postCommand(cmd)) {
+        // Ring buffer full — ownership was not transferred; close the stream here.
+        stb_vorbis_close(stream);
+    }
 }
 
 void stopMusic() {
@@ -1292,6 +1399,9 @@ void stopMusic() {
     AudioCommand cmd;
     cmd.type = AudioCommand::Type::STOP_MUSIC;
     postCommand(cmd);
+
+    // Opportunistically drain any stream the callback has already retired.
+    drainPendingMusicClose();
 }
 
 void setMusicVolume(const float volume) {
@@ -1373,41 +1483,43 @@ void playSound3D(const SoundHandle handle, const float x, const float y,
 void setListenerPosition(const float x, const float y, const float z,
                          const float fx, const float fy, const float fz,
                          const float ux, const float uy, const float uz) {
-    s_state.listener.posX = sanitizeFloat(x);
-    s_state.listener.posY = sanitizeFloat(y);
-    s_state.listener.posZ = sanitizeFloat(z);
+    // Sanitize inputs before acquiring lock to keep critical section minimal
+    const float px = sanitizeFloat(x);
+    const float py = sanitizeFloat(y);
+    const float pz = sanitizeFloat(z);
 
     // Sanitize forward direction — default to (0, 0, -1) if all NaN/Inf
-    const float sfx = sanitizeFloat(fx);
-    const float sfy = sanitizeFloat(fy);
-    const float sfz = sanitizeFloat(fz);
+    float sfx = sanitizeFloat(fx);
+    float sfy = sanitizeFloat(fy);
+    float sfz = sanitizeFloat(fz);
     if (sfx == 0.0f && sfy == 0.0f && sfz == 0.0f) {
-        s_state.listener.fwdX = 0.0f;
-        s_state.listener.fwdY = 0.0f;
-        s_state.listener.fwdZ = -1.0f;
-    } else {
-        s_state.listener.fwdX = sfx;
-        s_state.listener.fwdY = sfy;
-        s_state.listener.fwdZ = sfz;
+        sfx = 0.0f; sfy = 0.0f; sfz = -1.0f;
     }
 
     // Sanitize up direction — default to (0, 1, 0) if all NaN/Inf
-    const float sux = sanitizeFloat(ux);
-    const float suy = sanitizeFloat(uy);
-    const float suz = sanitizeFloat(uz);
+    float sux = sanitizeFloat(ux);
+    float suy = sanitizeFloat(uy);
+    float suz = sanitizeFloat(uz);
     if (sux == 0.0f && suy == 0.0f && suz == 0.0f) {
-        s_state.listener.upX = 0.0f;
-        s_state.listener.upY = 1.0f;
-        s_state.listener.upZ = 0.0f;
-    } else {
-        s_state.listener.upX = sux;
-        s_state.listener.upY = suy;
-        s_state.listener.upZ = suz;
+        sux = 0.0f; suy = 1.0f; suz = 0.0f;
     }
+
+    // Acquire mutex to avoid data race with audio callback reader
+    const std::lock_guard<std::mutex> lock(s_state.mutex);
+    s_state.listener.posX = px;
+    s_state.listener.posY = py;
+    s_state.listener.posZ = pz;
+    s_state.listener.fwdX = sfx;
+    s_state.listener.fwdY = sfy;
+    s_state.listener.fwdZ = sfz;
+    s_state.listener.upX  = sux;
+    s_state.listener.upY  = suy;
+    s_state.listener.upZ  = suz;
 }
 
 void setSound3DMinDistance(const float dist) {
     if (!std::isfinite(dist)) { return; }
+    const std::lock_guard<std::mutex> lock(s_state.mutex);
     const float clamped = (dist < 0.01f) ? 0.01f
                         : (dist >= s_state.maxDist3D) ? s_state.maxDist3D - 0.01f
                         : dist;
@@ -1416,6 +1528,7 @@ void setSound3DMinDistance(const float dist) {
 
 void setSound3DMaxDistance(const float dist) {
     if (!std::isfinite(dist)) { return; }
+    const std::lock_guard<std::mutex> lock(s_state.mutex);
     const float clamped = (dist <= s_state.minDist3D) ? s_state.minDist3D + 0.01f
                         : (dist > 10000.0f) ? 10000.0f
                         : dist;

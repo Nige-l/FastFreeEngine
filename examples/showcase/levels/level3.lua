@@ -48,13 +48,12 @@ local sfxHit     = ffe.loadSound("audio/sfx_hit.wav")
 local sfxGate    = ffe.loadSound("audio/sfx_gate.wav")
 
 -- Music: epic battle theme for the summit climax
-local musicHandle = ffe.loadMusic("audio/BattleMusic.mp3")
-if musicHandle and musicHandle ~= 0 then
-    ffe.playMusic(musicHandle, true)
-    ffe.setMusicVolume(0.4)
-    ffe.log("[Level3] Music playing: BattleMusic.mp3")
+local musicHandle = ffe.loadMusic("audio/BattleMusic.ogg")
+if musicHandle then
+    ffe.playMusic(musicHandle, true)  -- loop
+    ffe.log("[Level3] Battle music started (BattleMusic.ogg)")
 else
-    ffe.log("[Level3] No music loaded (file missing or audio unavailable)")
+    ffe.log("[Level3] WARNING: BattleMusic.ogg failed to load")
 end
 
 --------------------------------------------------------------------
@@ -109,7 +108,13 @@ end
 --------------------------------------------------------------------
 -- Terrain: dramatic summit heightmap with mountain ring
 --------------------------------------------------------------------
-local terrainHandle = ffe.loadTerrain("terrain/summit_height.png", 60, 60, 12)
+-- heightScale reduced from 12 to 5: the summit heightmap has solid-white (255)
+-- edges, which at heightScale=12 produced 12 m cliffs that appeared on top of
+-- every floating platform (the highest platform is at y=6). At heightScale=5
+-- the cliff ring peaks at ~6 m and sits outside the central play area
+-- (world x/z range [0,60] vs play area centred at origin), eliminating the
+-- Z-fighting / geometry-on-terrain overlap.
+local terrainHandle = ffe.loadTerrain("terrain/summit_height.png", 60, 60, 5)
 -- Enable terrain-aware camera clamping so the orbit arc never dips
 -- into the summit terrain ring visible in the background (Bug 2 fix).
 if Camera then Camera.setTerrainAware(true) end

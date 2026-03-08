@@ -2,6 +2,8 @@
 
 #include "core/types.h"
 
+#include <cassert>
+#include <climits>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -53,8 +55,15 @@ private:
 // --- Inline implementations ---
 
 inline void* ArenaAllocator::allocate(const size_t size, const size_t alignment) {
+    // Alignment must be a power of two
+    assert(alignment > 0 && (alignment & (alignment - 1)) == 0);
+
+    // Guard against overflow in alignment padding
+    if (alignment > 1 && m_offset > SIZE_MAX - (alignment - 1)) return nullptr;
     // Align the current offset upward
     const size_t alignedOffset = (m_offset + alignment - 1) & ~(alignment - 1);
+    // Guard against overflow adding size
+    if (size > SIZE_MAX - alignedOffset) return nullptr;
     const size_t newOffset = alignedOffset + size;
 
     if (newOffset > m_capacity) {
@@ -74,6 +83,7 @@ T* ArenaAllocator::create(Args&&... args) {
 
 template<typename T>
 T* ArenaAllocator::allocateArray(const size_t count) {
+    if (count > 0 && sizeof(T) > SIZE_MAX / count) return nullptr;
     void* const mem = allocate(sizeof(T) * count, alignof(T));
     if (!mem) return nullptr;
     T* const arr = static_cast<T*>(mem);

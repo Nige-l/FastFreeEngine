@@ -10,7 +10,7 @@ description: "FastFreeEngine Audio subsystem API reference"
 
 # engine/audio -- Audio Subsystem
 
-AI-native context file. Written by api-designer after implementation review.
+AI-native context file.
 
 ---
 

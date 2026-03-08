@@ -216,3 +216,38 @@ TEST_CASE("terrain centering: getTerrainHeight returns 0 for out-of-bounds centr
     CHECK(ffe::renderer::getTerrainHeight(ffe::renderer::TerrainHandle{0}, 999.0f, 999.0f) == 0.0f);
     CHECK(ffe::renderer::getTerrainHeight(ffe::renderer::TerrainHandle{0}, -999.0f, -999.0f) == 0.0f);
 }
+
+// -----------------------------------------------------------------------
+// getTerrainConfig — CPU-only, no terrain loaded
+// -----------------------------------------------------------------------
+
+TEST_CASE("getTerrainConfig returns default config for invalid handle", "[terrain]") {
+    // An invalid handle (id=0) has no loaded terrain — must return default.
+    const ffe::renderer::TerrainConfig cfg =
+        ffe::renderer::getTerrainConfig(ffe::renderer::TerrainHandle{0});
+    const ffe::renderer::TerrainConfig defaultCfg;
+    CHECK(cfg.worldWidth      == defaultCfg.worldWidth);
+    CHECK(cfg.worldDepth      == defaultCfg.worldDepth);
+    CHECK(cfg.heightScale     == defaultCfg.heightScale);
+    CHECK(cfg.chunkResolution == defaultCfg.chunkResolution);
+}
+
+TEST_CASE("getTerrainConfig returns default config for out-of-range handle", "[terrain]") {
+    // A handle id > MAX_TERRAIN_ASSETS is rejected the same as invalid.
+    const ffe::renderer::TerrainConfig cfg =
+        ffe::renderer::getTerrainConfig(ffe::renderer::TerrainHandle{99});
+    const ffe::renderer::TerrainConfig defaultCfg;
+    CHECK(cfg.worldWidth  == defaultCfg.worldWidth);
+    CHECK(cfg.heightScale == defaultCfg.heightScale);
+}
+
+TEST_CASE("getTerrainConfig result is default-constructed when no terrain is loaded", "[terrain]") {
+    // Verify the returned config's field values match the documented defaults
+    // (256 x 256, heightScale 50, chunkResolution 64).
+    const ffe::renderer::TerrainConfig cfg =
+        ffe::renderer::getTerrainConfig(ffe::renderer::TerrainHandle{1});
+    CHECK(cfg.worldWidth      == 256.0f);
+    CHECK(cfg.worldDepth      == 256.0f);
+    CHECK(cfg.heightScale     == 50.0f);
+    CHECK(cfg.chunkResolution == 64);
+}

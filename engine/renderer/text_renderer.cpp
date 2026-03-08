@@ -220,6 +220,15 @@ void drawText(TextRenderer& tr, const char* text,
     const f32 uvW    = 1.0f / static_cast<f32>(FONT_ATLAS_COLS);
     const f32 uvH    = 1.0f / static_cast<f32>(FONT_ATLAS_ROWS);
 
+    // Half-texel inset in UV space: prevents the NEAREST sampler from landing
+    // exactly on an atlas cell boundary and non-deterministically sampling the
+    // adjacent cell. Without this inset, the sampler can flip between the last
+    // texel of this glyph and the first texel of the neighbouring glyph each
+    // frame, producing flickering borders at glyph edges.
+    // Atlas is ATLAS_W x ATLAS_H texels; half a texel in UV = 0.5 / atlasSize.
+    const f32 halfTexelU = 0.5f / static_cast<f32>(ATLAS_W);
+    const f32 halfTexelV = 0.5f / static_cast<f32>(ATLAS_H);
+
     while (*text != '\0' && tr.glyphCount < MAX_TEXT_GLYPHS) {
         const char ch = *text++;
 
@@ -242,10 +251,10 @@ void drawText(TextRenderer& tr, const char* text,
         gq.y      = y;
         gq.width  = glyphW;
         gq.height = glyphH;
-        gq.uvMinX = static_cast<f32>(col) * uvW;
-        gq.uvMinY = static_cast<f32>(row) * uvH;
-        gq.uvMaxX = gq.uvMinX + uvW;
-        gq.uvMaxY = gq.uvMinY + uvH;
+        gq.uvMinX = static_cast<f32>(col) * uvW + halfTexelU;
+        gq.uvMinY = static_cast<f32>(row) * uvH + halfTexelV;
+        gq.uvMaxX = gq.uvMinX + uvW - 2.0f * halfTexelU;
+        gq.uvMaxY = gq.uvMinY + uvH - 2.0f * halfTexelV;
         gq.r = r;
         gq.g = g;
         gq.b = b;
@@ -261,21 +270,25 @@ void drawRect(TextRenderer& tr,
               const f32 r, const f32 g, const f32 b, const f32 a) {
     if (tr.glyphCount >= MAX_TEXT_GLYPHS) return;
 
-    // Cell 95 is the solid white block
+    // Cell 95 is the solid white block.
+    // Use the centre of the cell (half-texel inset on each side) so NEAREST
+    // sampling never crosses the cell boundary into adjacent atlas cells.
     const f32 uvW = 1.0f / static_cast<f32>(FONT_ATLAS_COLS);
     const f32 uvH = 1.0f / static_cast<f32>(FONT_ATLAS_ROWS);
     const u32 col = 95 % FONT_ATLAS_COLS;
     const u32 row = 95 / FONT_ATLAS_COLS;
+    const f32 halfTexelU = 0.5f / static_cast<f32>(ATLAS_W);
+    const f32 halfTexelV = 0.5f / static_cast<f32>(ATLAS_H);
 
     GlyphQuad& gq = tr.glyphs[tr.glyphCount++];
     gq.x      = x;
     gq.y      = y;
     gq.width  = width;
     gq.height = height;
-    gq.uvMinX = static_cast<f32>(col) * uvW;
-    gq.uvMinY = static_cast<f32>(row) * uvH;
-    gq.uvMaxX = gq.uvMinX + uvW;
-    gq.uvMaxY = gq.uvMinY + uvH;
+    gq.uvMinX = static_cast<f32>(col) * uvW + halfTexelU;
+    gq.uvMinY = static_cast<f32>(row) * uvH + halfTexelV;
+    gq.uvMaxX = gq.uvMinX + uvW - 2.0f * halfTexelU;
+    gq.uvMaxY = gq.uvMinY + uvH - 2.0f * halfTexelV;
     gq.r = r;
     gq.g = g;
     gq.b = b;

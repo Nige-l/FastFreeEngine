@@ -25,30 +25,32 @@ using namespace ffe::renderer;
 // InstanceData struct layout
 // ===========================================================================
 
-TEST_CASE("InstanceData: size is exactly 64 bytes", "[renderer][instancing]") {
-    CHECK(sizeof(InstanceData) == 64);
+TEST_CASE("InstanceData: size is exactly 80 bytes (mat4 + vec4)", "[renderer][instancing]") {
+    CHECK(sizeof(InstanceData) == 80);
 }
 
-TEST_CASE("InstanceData: contains a single mat4", "[renderer][instancing]") {
-    // InstanceData must be layout-compatible with glm::mat4 for direct GPU upload.
-    CHECK(sizeof(InstanceData) == sizeof(glm::mat4));
-}
-
-TEST_CASE("InstanceData: modelMatrix field is accessible and assignable", "[renderer][instancing]") {
+TEST_CASE("InstanceData: modelMatrix and instanceColor fields are accessible", "[renderer][instancing]") {
     InstanceData data{};
     data.modelMatrix = glm::mat4(1.0f);
+    data.instanceColor = glm::vec4(1.0f, 0.5f, 0.25f, 1.0f);
     CHECK(data.modelMatrix[0][0] == 1.0f);
     CHECK(data.modelMatrix[1][1] == 1.0f);
     CHECK(data.modelMatrix[2][2] == 1.0f);
     CHECK(data.modelMatrix[3][3] == 1.0f);
     CHECK(data.modelMatrix[0][1] == 0.0f);
+    CHECK(data.instanceColor.r == 1.0f);
+    CHECK(data.instanceColor.g == 0.5f);
+    CHECK(data.instanceColor.b == 0.25f);
+    CHECK(data.instanceColor.a == 1.0f);
 }
 
-TEST_CASE("InstanceData: model matrix can be set and read back", "[renderer][instancing]") {
+TEST_CASE("InstanceData: model matrix and instance color can be set and read back", "[renderer][instancing]") {
     InstanceData data{};
     const glm::mat4 translated = glm::translate(glm::mat4(1.0f), glm::vec3(5.0f, 10.0f, -3.0f));
     data.modelMatrix = translated;
+    data.instanceColor = glm::vec4(0.8f, 0.2f, 0.4f, 1.0f);
     CHECK(data.modelMatrix == translated);
+    CHECK(data.instanceColor == glm::vec4(0.8f, 0.2f, 0.4f, 1.0f));
 }
 
 // ===========================================================================
@@ -59,8 +61,8 @@ TEST_CASE("MAX_INSTANCES_PER_BATCH is 1024", "[renderer][instancing]") {
     CHECK(MAX_INSTANCES_PER_BATCH == 1024u);
 }
 
-TEST_CASE("INSTANCE_BUFFER_SIZE is 64 KB (65536 bytes)", "[renderer][instancing]") {
-    CHECK(INSTANCE_BUFFER_SIZE == 65536u);
+TEST_CASE("INSTANCE_BUFFER_SIZE is 80 KB (81920 bytes)", "[renderer][instancing]") {
+    CHECK(INSTANCE_BUFFER_SIZE == 81920u);
 }
 
 TEST_CASE("Instance buffer size equals MAX_INSTANCES * sizeof(InstanceData)", "[renderer][instancing]") {
@@ -71,8 +73,12 @@ TEST_CASE("INSTANCE_ATTR_SLOT_BASE is 8", "[renderer][instancing]") {
     CHECK(INSTANCE_ATTR_SLOT_BASE == 8u);
 }
 
-TEST_CASE("INSTANCE_ATTR_SLOT_COUNT is 4 (mat4 = 4 vec4 columns)", "[renderer][instancing]") {
-    CHECK(INSTANCE_ATTR_SLOT_COUNT == 4u);
+TEST_CASE("INSTANCE_MAT4_SLOT_COUNT is 4 (mat4 = 4 vec4 columns)", "[renderer][instancing]") {
+    CHECK(INSTANCE_MAT4_SLOT_COUNT == 4u);
+}
+
+TEST_CASE("INSTANCE_COLOR_SLOT is 12", "[renderer][instancing]") {
+    CHECK(INSTANCE_COLOR_SLOT == 12u);
 }
 
 TEST_CASE("INSTANCING_THRESHOLD is 2", "[renderer][instancing]") {
@@ -109,15 +115,15 @@ TEST_CASE("Instance buffer: filling MAX_INSTANCES_PER_BATCH entries uses exactly
     CHECK(filledBytes == INSTANCE_BUFFER_SIZE);
 }
 
-TEST_CASE("Instance buffer: partial fill of N entries uses N*64 bytes", "[renderer][instancing]") {
+TEST_CASE("Instance buffer: partial fill of N entries uses N*80 bytes", "[renderer][instancing]") {
     constexpr u32 N = 42;
-    constexpr u32 expected = N * 64;
+    constexpr u32 expected = N * 80;
     CHECK(N * static_cast<u32>(sizeof(InstanceData)) == expected);
 }
 
 TEST_CASE("Instance buffer: mat4 column stride is 16 bytes (sizeof(vec4))", "[renderer][instancing]") {
     // Each attribute slot consumes one vec4 (16 bytes).
-    // The stride between columns within an InstanceData is sizeof(InstanceData) = 64 bytes
+    // The stride between instances in the instance VBO is sizeof(InstanceData) = 80 bytes
     // (because we set the stride to sizeof(InstanceData) in the glVertexAttribPointer call).
     // But the offset between column 0 and column 1 within a single instance is sizeof(vec4).
     CHECK(sizeof(glm::vec4) == 16);

@@ -110,7 +110,7 @@ local function loadLevel(levelNum)
             treesActive = false
         end
         if waterHandle then
-            ffe.destroyWater(waterHandle)
+            ffe.destroyWaterSurface(waterHandle)
             waterHandle = nil
         end
         -- Unload terrain and disable post-processing BEFORE destroying entities
@@ -198,7 +198,7 @@ local function cleanupToMenu()
             treesActive = false
         end
         if waterHandle then
-            ffe.destroyWater(waterHandle)
+            ffe.destroyWaterSurface(waterHandle)
             waterHandle = nil
         end
         -- Unload terrain and disable post-processing BEFORE destroying entities
@@ -674,7 +674,7 @@ function shutdown()
         treesActive = false
     end
     if waterHandle then
-        ffe.destroyWater(waterHandle)
+        ffe.destroyWaterSurface(waterHandle)
         waterHandle = nil
     end
     ffe.unloadTerrain()

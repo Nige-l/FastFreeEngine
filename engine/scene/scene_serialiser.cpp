@@ -153,6 +153,13 @@ static json serialiseWorld(const ffe::World& world) {
         entityToIndex[static_cast<uint32_t>(entities[i])] = i;
     }
 
+    if (entities.size() > MAX_SERIALISED_ENTITIES) {
+        FFE_LOG_WARN("Scene",
+                     "serialiseWorld: entity count %zu exceeds MAX_SERIALISED_ENTITIES (%u), truncating",
+                     entities.size(), MAX_SERIALISED_ENTITIES);
+        entities.resize(MAX_SERIALISED_ENTITIES);
+    }
+
     for (const auto entity : entities) {
         json entityJson;
         json components;

@@ -226,6 +226,11 @@ public:
     // No-op if the handle is invalid.
     void setWaterConfig(WaterHandle handle, const WaterSurfaceConfig& cfg);
 
+    // Read the current per-surface configuration.
+    // Returns the config stored for the given handle, or a default-constructed
+    // WaterSurfaceConfig{} if the handle is invalid.
+    WaterSurfaceConfig getWaterConfig(WaterHandle handle) const;
+
     // --- Per-frame update ---
 
     // Accumulate elapsed time for UV scroll animation.

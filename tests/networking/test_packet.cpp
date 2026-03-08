@@ -345,3 +345,42 @@ TEST_CASE("PacketWriter/Reader zero-length bytes is no-op", "[networking][packet
     PacketReader r(buf.data(), 0);
     CHECK(r.readBytes(nullptr, 0));
 }
+
+// ===========================================================================
+// skipBytes
+// ===========================================================================
+
+TEST_CASE("PacketReader::skipBytes skips the requested number of bytes", "[networking][packet]") {
+    // Write 3 bytes: 0xAA, 0xBB, 0xCC
+    const uint8_t data[] = {0xAA, 0xBB, 0xCC};
+    PacketReader r(data, 3);
+
+    REQUIRE(r.skipBytes(2));         // skip 0xAA and 0xBB
+    CHECK(r.remaining() == 1);
+
+    uint8_t v = 0;
+    REQUIRE(r.readU8(v));
+    CHECK(v == 0xCC);
+}
+
+TEST_CASE("PacketReader::skipBytes returns false when count exceeds remaining bytes",
+          "[networking][packet]") {
+    const uint8_t data[] = {0x01, 0x02};
+    PacketReader r(data, 2);
+
+    CHECK_FALSE(r.skipBytes(3));     // only 2 bytes available, skip 3 asked
+    CHECK(r.hasError());
+
+    // Further reads must fail once error is set
+    uint8_t v = 0;
+    CHECK_FALSE(r.readU8(v));
+}
+
+TEST_CASE("PacketReader::skipBytes zero count is a no-op", "[networking][packet]") {
+    const uint8_t data[] = {0x55};
+    PacketReader r(data, 1);
+
+    REQUIRE(r.skipBytes(0));
+    CHECK(r.remaining() == 1);
+    CHECK_FALSE(r.hasError());
+}

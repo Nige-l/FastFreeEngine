@@ -20,6 +20,7 @@
 #include <cstring>     // strncpy, strncmp, memcpy
 #include <cstdio>      // snprintf
 #include <fstream>     // std::ifstream
+#include <memory>      // std::unique_ptr, std::make_unique
 #include <string>      // std::string
 #include <vector>      // std::vector (depth-check stack, cold path only)
 #include <sys/stat.h>  // stat()
@@ -344,7 +345,8 @@ PrefabHandle PrefabSystem::loadPrefab(std::string_view path) {
     }
 
     // --- Step 8: allocate PrefabData and parse components ---
-    PrefabData* data = new PrefabData();
+    std::unique_ptr<PrefabData> dataOwner = std::make_unique<PrefabData>();
+    PrefabData* data = dataOwner.get();
 
     // Optional "name" field.
     if (doc.contains("name") && doc["name"].is_string()) {
@@ -413,8 +415,8 @@ PrefabHandle PrefabSystem::loadPrefab(std::string_view path) {
         }
     }
 
-    // --- Step 9: store in pool ---
-    m_pool[slot]     = data;
+    // --- Step 9: store in pool (transfer ownership from unique_ptr to raw pool) ---
+    m_pool[slot]     = dataOwner.release();
     m_occupied[slot] = true;
     ++m_count;
 

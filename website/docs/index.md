@@ -70,7 +70,7 @@ FFE exists to unlock creativity and get young people into engineering. The mains
 - **Performance is accessibility.** Running well on old hardware means more people can build and play games.
 - **Designed to be learned from.** The engine is not just a tool -- it is a teaching platform. Every subsystem is documented for both humans and AI assistants.
 - **No hidden costs.** MIT licensed. No per-seat fees, no revenue share, no surprise license changes.
-- **Ship real games.** FFE is not a toy engine. It supports 2D and 3D rendering, multiplayer networking, a standalone editor with a build pipeline, terrain, post-processing, PBR materials, and skeletal animation. 1336 tests verify it all works. The goal is everything needed to build and ship a complete game.
+- **Ship real games.** FFE is not a toy engine. It supports 2D and 3D rendering, multiplayer networking, a standalone editor with a build pipeline, terrain, post-processing, PBR materials, and skeletal animation. 1511 tests verify it all works. The goal is everything needed to build and ship a complete game.
 
 ---
 

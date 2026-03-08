@@ -51,7 +51,7 @@ struct MouseState {
 struct InputBinding {
     enum class Type : u8 { NONE = 0, KEY, MOUSE_BUTTON };
     Type type = Type::NONE;
-    i16  code = 0;
+    i32  code = 0;
 };
 
 struct Action {
@@ -275,9 +275,9 @@ void updateInput() {
     g_pendingKeyCount = 0;
 
     // 3. Mouse buttons: copy current -> previous, clear latched flags
-    std::memcpy(g_mouse.previousButtons, g_mouse.currentButtons, MAX_MOUSE_BUTTONS);
-    std::memset(g_mouse.pressedThisTick, 0, MAX_MOUSE_BUTTONS);
-    std::memset(g_mouse.releasedThisTick, 0, MAX_MOUSE_BUTTONS);
+    std::memcpy(g_mouse.previousButtons, g_mouse.currentButtons, sizeof(g_mouse.currentButtons));
+    std::memset(g_mouse.pressedThisTick,  0, sizeof(g_mouse.pressedThisTick));
+    std::memset(g_mouse.releasedThisTick, 0, sizeof(g_mouse.releasedThisTick));
 
     // 4. Process pending mouse button events.
     // Latch press/release flags so that a quick click-release within a single
@@ -326,6 +326,7 @@ void updateInput() {
         std::memcpy(gp.previousButtons, gp.currentButtons, sizeof(gp.currentButtons));
 
         if (g_window != nullptr) {
+            const bool wasConnected = gp.connected;
             // GLFW joystick IDs map directly to our gamepad IDs (0..3)
             if (glfwJoystickIsGamepad(i)) {
                 GLFWgamepadstate state;
@@ -365,10 +366,12 @@ void updateInput() {
                         gp.axes[a] = val;
                     }
 
-                    // Store name (once, or whenever re-checked)
-                    const char* gpName = glfwGetGamepadName(i);
-                    if (gpName != nullptr) {
-                        std::snprintf(gp.name, sizeof(gp.name), "%s", gpName);
+                    // Store name only on connection transition to avoid snprintf every tick.
+                    if (!wasConnected) {
+                        const char* gpName = glfwGetGamepadName(i);
+                        if (gpName != nullptr) {
+                            std::snprintf(gp.name, sizeof(gp.name), "%s", gpName);
+                        }
                     }
                 } else {
                     gp.connected = false;
@@ -579,7 +582,7 @@ bool bindActionKey(const i32 actionIndex, const Key key) {
     if (action.bindingCount >= MAX_BINDINGS_PER_ACTION) return false;
     auto& b = action.bindings[action.bindingCount++];
     b.type = InputBinding::Type::KEY;
-    b.code = static_cast<i16>(static_cast<i32>(key));
+    b.code = static_cast<i32>(key);
     return true;
 }
 
@@ -589,7 +592,7 @@ bool bindActionMouseButton(const i32 actionIndex, const MouseButton btn) {
     if (action.bindingCount >= MAX_BINDINGS_PER_ACTION) return false;
     auto& b = action.bindings[action.bindingCount++];
     b.type = InputBinding::Type::MOUSE_BUTTON;
-    b.code = static_cast<i16>(static_cast<i32>(btn));
+    b.code = static_cast<i32>(btn);
     return true;
 }
 

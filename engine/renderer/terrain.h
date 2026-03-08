@@ -168,4 +168,8 @@ void setTerrainStreamingRadius(TerrainHandle handle, int radiusInChunks);
 // Used for debug/UI display and unit tests. O(chunkCount).
 int getTerrainLoadedChunkCount(TerrainHandle handle);
 
+// Return the TerrainConfig used to create this terrain asset.
+// Returns a default-constructed TerrainConfig if handle is invalid.
+TerrainConfig getTerrainConfig(TerrainHandle handle);
+
 } // namespace ffe::renderer

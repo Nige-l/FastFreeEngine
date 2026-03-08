@@ -129,7 +129,7 @@ bool LobbyServer::allReady() const {
 
     uint32_t readyCount = 0;
     for (uint32_t i = 0; i < MAX_LOBBY_PLAYERS; ++i) {
-        if (m_state.players[i].connectionId != 0) {
+        if (m_state.players[i].connectionId != 0xFFFFFFFF) {
             if (!m_state.players[i].ready) {
                 return false;
             }
@@ -171,7 +171,7 @@ void LobbyServer::broadcastState(ServerTransport& transport) {
     // Each active player
     for (uint32_t i = 0; i < MAX_LOBBY_PLAYERS; ++i) {
         const LobbyPlayerInfo& info = m_state.players[i];
-        if (info.connectionId == 0) { continue; }
+        if (info.connectionId == 0xFFFFFFFF) { continue; }
 
         writer.writeU32(info.connectionId);
         writer.writeU8(info.ready ? 1 : 0);
@@ -210,7 +210,7 @@ int32_t LobbyServer::findPlayer(const uint32_t connectionId) const {
 
 int32_t LobbyServer::findFreeSlot() const {
     for (uint32_t i = 0; i < m_state.maxPlayers; ++i) {
-        if (m_state.players[i].connectionId == 0) {
+        if (m_state.players[i].connectionId == 0xFFFFFFFF) {
             return static_cast<int32_t>(i);
         }
     }

@@ -49,7 +49,7 @@ local softwareRenderer = ffe.isSoftwareRenderer()
 
 if not softwareRenderer then
     ffe.enablePostProcessing()
-    ffe.enableBloom(1.0, 0.2)        -- subtle bloom, lava glow
+    ffe.enableBloom(0.7, 0.3)        -- lower threshold + stronger bloom for lava glow
     ffe.setToneMapping(2)             -- ACES filmic
     ffe.enableSSAO()                  -- adds depth to dark underground
     ffe.setAntiAliasing(2)            -- FXAA
@@ -60,12 +60,13 @@ end
 --------------------------------------------------------------------
 ffe.setLightDirection(0, -1, 0.2)       -- overhead light
 if softwareRenderer then
-    -- Cranked lighting so underground geometry is clearly visible on llvmpipe
-    ffe.setLightColor(1.0, 0.95, 0.75)
-    ffe.setAmbientColor(0.50, 0.42, 0.35)
+    -- Moderate lighting for software renderer: visible but not washed out.
+    -- Low ambient so shadows remain visible and geometry has contrast.
+    ffe.setLightColor(1.0, 0.85, 0.6)
+    ffe.setAmbientColor(0.20, 0.14, 0.10)
 else
     ffe.setLightColor(0.8, 0.6, 0.4)       -- warm/orange (torch-lit feel)
-    ffe.setAmbientColor(0.08, 0.05, 0.03)  -- very dark ambient
+    ffe.setAmbientColor(0.18, 0.12, 0.08)  -- dark but visible ambient
 end
 
 -- Enable shadows (skip on software renderer — depth FBOs may fail)
@@ -83,7 +84,7 @@ if softwareRenderer then
     ffe.setFog(0.12, 0.08, 0.06, 25.0, 120.0)
     ffe.setBackgroundColor(0.06, 0.03, 0.04)
 else
-    ffe.setFog(0.15, 0.08, 0.05, 5.0, 35.0)
+    ffe.setFog(0.15, 0.08, 0.05, 12.0, 50.0)
     ffe.setBackgroundColor(0.02, 0.01, 0.03)
 end
 
@@ -377,7 +378,7 @@ for i, cd in ipairs(crystalData) do
 
     -- Point light at crystal position (colored glow -- brighter initial state)
     -- Point light slots 0-3 correspond to crystals 1-4
-    ffe.addPointLight(i - 1, cd.px, 1.5, cd.pz, cd.lr * 0.6, cd.lg * 0.6, cd.lb * 0.6, cd.radius * 0.7)
+    ffe.addPointLight(i - 1, cd.px, 1.5, cd.pz, cd.lr * 0.8, cd.lg * 0.8, cd.lb * 0.8, cd.radius * 1.0)
 end
 
 --------------------------------------------------------------------

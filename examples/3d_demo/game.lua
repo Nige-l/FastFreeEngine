@@ -508,11 +508,11 @@ function update(entityId, dt)
 
     -- Status: mesh load result
     if meshLoaded then
-        local skyStr = skyboxLoaded and "Skybox: ON" or "Skybox: OFF"
-        local shadowStr = softwareRenderer and "Shadows: OFF" or "Shadows: ON"
-        local physStr = "Physics: " .. tostring(PHYSICS_CUBE_COUNT) .. " cubes"
-        local entStr = "Mesh: cube.glb  |  " .. shadowStr .. "  |  " .. skyStr .. "  |  Lights: 2  |  " .. physStr
-        ffe.drawText(entStr, sw / 2 - (#entStr * 8), 8, 2, 0.6, 0.8, 1.0, 0.85)
+        local skyStr = skyboxLoaded and "Sky:ON" or "Sky:OFF"
+        local shadowStr = softwareRenderer and "Shad:OFF" or "Shad:ON"
+        local physStr = "Phys:" .. tostring(PHYSICS_CUBE_COUNT)
+        local entStr = "cube.glb | " .. shadowStr .. " | " .. skyStr .. " | Lights:2 | " .. physStr
+        ffe.drawText(entStr, sw / 2 - (#entStr * 4), 12, 1, 0.6, 0.8, 1.0, 0.85)
     else
         ffe.drawText("cube.glb NOT FOUND -- HUD only mode", 12, 44, 2, 1, 0.4, 0.2, 1)
     end
@@ -522,22 +522,6 @@ function update(entityId, dt)
     ffe.drawText(
         "WASD: orbit/zoom  |  UP/DOWN: elevation  |  R: reset  |  F: raycast  |  ESC: quit",
         12, 685, 2, 0.45, 0.55, 0.65, 0.9)
-
-    -- Color key for the three cubes and point lights
-    if meshLoaded then
-        ffe.drawText("RED: stationary (shininess=128)", 12, 44, 2, 0.9, 0.3, 0.2, 1)
-        ffe.drawText("GREEN: inner orbit (shininess=64)", 12, 68, 2, 0.2, 0.85, 0.35, 1)
-        ffe.drawText("BLUE: outer orbit (shininess=32)", 12, 92, 2, 0.3, 0.55, 1.0, 1)
-        ffe.drawText("POINT LIGHT 0: warm orange (orbiting)", 12, 116, 2, 1.0, 0.6, 0.2, 1)
-        ffe.drawText("POINT LIGHT 1: cool blue (orbiting)", 12, 140, 2, 0.2, 0.5, 1.0, 1)
-
-        -- Physics info
-        ffe.drawText("PHYSICS: " .. tostring(PHYSICS_CUBE_COUNT) .. " falling cubes  |  Collisions: " .. tostring(collisionCount),
-            12, 172, 2, 0.9, 0.75, 0.3, 1)
-        if lastRayHitMsg ~= "" then
-            ffe.drawText("RAYCAST: " .. lastRayHitMsg, 12, 196, 2, 0.5, 1.0, 0.5, 1)
-        end
-    end
 
     -- ------------------------------------------------------------------
     -- ESC to quit

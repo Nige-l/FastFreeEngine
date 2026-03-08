@@ -5,8 +5,8 @@
 // Y-queried via getTerrainHeight(). One glDrawArraysInstanced call per active patch.
 //
 // Trees: Two instanced draw calls per frame (trunk + crown) using the
-// MESH_BLINN_PHONG_INSTANCED shader (enum 13). Model matrices uploaded as InstanceData
-// (glm::mat4) to two separate VBOs sized for MAX_TREES entries.
+// MESH_BLINN_PHONG_INSTANCED shader (enum 13). Instance data (mat4 + vec4 color) uploaded
+// as InstanceData to two separate VBOs sized for MAX_TREES entries.
 //
 // No heap allocation per frame. All GPU buffers allocated at init() time.
 // No virtual functions. No RTTI. No exceptions. No std::function.
@@ -175,7 +175,7 @@ void VegetationSystem::init() {
         m_cubeIndexCount = 36;
     }
 
-    // --- Trunk instance VBO (MAX_TREES x 64 bytes, GL_DYNAMIC_DRAW) ---
+    // --- Trunk instance VBO (MAX_TREES x 80 bytes, GL_DYNAMIC_DRAW) ---
     {
         GLuint vbo = 0;
         glGenBuffers(1, &vbo);
@@ -187,7 +187,7 @@ void VegetationSystem::init() {
         m_trunkInstanceVbo = vbo;
     }
 
-    // --- Crown instance VBO (MAX_TREES x 64 bytes, GL_DYNAMIC_DRAW) ---
+    // --- Crown instance VBO (MAX_TREES x 80 bytes, GL_DYNAMIC_DRAW) ---
     {
         GLuint vbo = 0;
         glGenBuffers(1, &vbo);
@@ -222,7 +222,7 @@ void VegetationSystem::init() {
 
         // Per-instance model matrix (mat4, 4 x vec4, slots 8-11, divisor=1)
         glBindBuffer(GL_ARRAY_BUFFER, m_trunkInstanceVbo);
-        for (u32 col = 0; col < INSTANCE_ATTR_SLOT_COUNT; ++col) {
+        for (u32 col = 0; col < INSTANCE_MAT4_SLOT_COUNT; ++col) {
             const u32 slot = INSTANCE_ATTR_SLOT_BASE + col;
             glEnableVertexAttribArray(slot);
             glVertexAttribPointer(slot, 4, GL_FLOAT, GL_FALSE,
@@ -231,6 +231,14 @@ void VegetationSystem::init() {
                                       static_cast<uintptr_t>(col * sizeof(glm::vec4))));
             glVertexAttribDivisor(slot, 1);
         }
+
+        // Per-instance color (vec4, slot 12, divisor=1)
+        glEnableVertexAttribArray(INSTANCE_COLOR_SLOT);
+        glVertexAttribPointer(INSTANCE_COLOR_SLOT, 4, GL_FLOAT, GL_FALSE,
+                              static_cast<GLsizei>(sizeof(InstanceData)),
+                              reinterpret_cast<const void*>(
+                                  static_cast<uintptr_t>(offsetof(InstanceData, instanceColor))));
+        glVertexAttribDivisor(INSTANCE_COLOR_SLOT, 1);
 
         glBindVertexArray(0);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -256,7 +264,7 @@ void VegetationSystem::init() {
                                   static_cast<uintptr_t>(offsetof(CubeVertex, nx))));
 
         glBindBuffer(GL_ARRAY_BUFFER, m_crownInstanceVbo);
-        for (u32 col = 0; col < INSTANCE_ATTR_SLOT_COUNT; ++col) {
+        for (u32 col = 0; col < INSTANCE_MAT4_SLOT_COUNT; ++col) {
             const u32 slot = INSTANCE_ATTR_SLOT_BASE + col;
             glEnableVertexAttribArray(slot);
             glVertexAttribPointer(slot, 4, GL_FLOAT, GL_FALSE,
@@ -265,6 +273,14 @@ void VegetationSystem::init() {
                                       static_cast<uintptr_t>(col * sizeof(glm::vec4))));
             glVertexAttribDivisor(slot, 1);
         }
+
+        // Per-instance color (vec4, slot 12, divisor=1)
+        glEnableVertexAttribArray(INSTANCE_COLOR_SLOT);
+        glVertexAttribPointer(INSTANCE_COLOR_SLOT, 4, GL_FLOAT, GL_FALSE,
+                              static_cast<GLsizei>(sizeof(InstanceData)),
+                              reinterpret_cast<const void*>(
+                                  static_cast<uintptr_t>(offsetof(InstanceData, instanceColor))));
+        glVertexAttribDivisor(INSTANCE_COLOR_SLOT, 1);
 
         glBindVertexArray(0);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -362,12 +378,11 @@ void VegetationSystem::scatterAndUploadInstances(PatchSlot& slot) {
 
     const u32 count = slot.instanceCount;
 
-    // Scatter positions deterministically within the default terrain bounds.
-    // Default TerrainConfig: worldWidth=256, worldDepth=256, origin at (0,0,0).
-    // Scatter within [-128, +128] on X and Z.
+    // Scatter positions within the terrain's actual bounds (captured at addPatch() time).
+    // Scatter within [-halfWidth, +halfWidth] on X and [-halfDepth, +halfDepth] on Z.
     // getTerrainHeight returns 0.0 outside terrain bounds — acceptable for edge grass.
-    static constexpr float HALF_WIDTH = 128.0f;
-    static constexpr float HALF_DEPTH = 128.0f;
+    const float halfWidth = slot.halfWidth;
+    const float halfDepth = slot.halfDepth;
 
     // Stack-allocate: MAX_GRASS_INSTANCES * sizeof(GrassInstance) = 256 * 24 = 6 KB.
     GrassInstance instances[MAX_GRASS_INSTANCES];
@@ -380,8 +395,8 @@ void VegetationSystem::scatterAndUploadInstances(PatchSlot& slot) {
                             : 0.5f;
 
     for (u32 i = 0; i < count; ++i) {
-        const float fx  = (lcgFloat(rng) * 2.0f - 1.0f) * HALF_WIDTH;
-        const float fz  = (lcgFloat(rng) * 2.0f - 1.0f) * HALF_DEPTH;
+        const float fx  = (lcgFloat(rng) * 2.0f - 1.0f) * halfWidth;
+        const float fz  = (lcgFloat(rng) * 2.0f - 1.0f) * halfDepth;
         const float fy  = getTerrainHeight(slot.terrain, fx, fz);
         const float rot = lcgFloat(rng) * 6.2831853f; // [0, 2pi)
 
@@ -437,6 +452,31 @@ VegetationHandle VegetationSystem::addPatch(const TerrainHandle terrain,
                       : (cfg.density > MAX_GRASS_INSTANCES) ? MAX_GRASS_INSTANCES
                       : cfg.density;
 
+    // Capture terrain half-extents now so scatterAndUploadInstances uses actual bounds.
+    // getTerrainConfig returns a default-constructed TerrainConfig{} (worldWidth=256,
+    // worldDepth=256) for inactive or unloaded terrain handles. Since the default values
+    // are non-zero they are indistinguishable from a legitimately 256-unit terrain, so we
+    // cannot silently correct the situation — warn instead so callers see the problem.
+    const TerrainConfig terrainCfg = getTerrainConfig(terrain);
+    if (terrainCfg.worldWidth <= 0.0f || terrainCfg.worldDepth <= 0.0f) {
+        // This can only happen if the terrain slot was somehow loaded with invalid
+        // dimensions (validateConfig would normally reject this). Warn and fall back.
+        FFE_LOG_WARN("Vegetation",
+                     "addPatch: terrain handle %u returned non-positive world dimensions "
+                     "(%.1f x %.1f); defaulting to 256x256. The terrain may not be active.",
+                     terrain.id, static_cast<double>(terrainCfg.worldWidth),
+                     static_cast<double>(terrainCfg.worldDepth));
+    } else if (terrainCfg.chunkCountX == 0 || terrainCfg.chunkCountZ == 0) {
+        // getTerrainConfig returns TerrainConfig{} with chunkCountX/Z = 16 for inactive
+        // slots, so this branch only fires for genuinely malformed configs. Log it.
+        FFE_LOG_WARN("Vegetation",
+                     "addPatch: terrain handle %u has zero chunk count; "
+                     "grass scatter bounds may be incorrect.",
+                     terrain.id);
+    }
+    const float halfWidth = terrainCfg.worldWidth * 0.5f;
+    const float halfDepth = terrainCfg.worldDepth * 0.5f;
+
     PatchSlot& slot       = m_patches[slotIdx];
     slot.active           = true;
     slot.handle           = VegetationHandle{m_nextHandleId++};
@@ -444,6 +484,8 @@ VegetationHandle VegetationSystem::addPatch(const TerrainHandle terrain,
     slot.instanceCount    = density;
     slot.config           = cfg;
     slot.config.density   = density;
+    slot.halfWidth        = halfWidth;
+    slot.halfDepth        = halfDepth;
     slot.vao              = 0;
     slot.quadVbo          = 0;
     slot.instanceVbo      = 0;
@@ -620,8 +662,8 @@ void VegetationSystem::rebuildTreeBuffers() {
     if (m_trunkInstanceVbo == 0 || m_crownInstanceVbo == 0) { return; }
     if (m_treeCount == 0) { return; }
 
-    // Stack-allocate trunk and crown matrices.
-    // MAX_TREES=512 -> 512*64=32 KB each -> 64 KB total. Cold path only.
+    // Stack-allocate trunk and crown instance data.
+    // MAX_TREES=512 -> 512*80=40 KB each -> 80 KB total. Cold path only.
     InstanceData trunkData[MAX_TREES];
     InstanceData crownData[MAX_TREES];
 
@@ -633,11 +675,13 @@ void VegetationSystem::rebuildTreeBuffers() {
         trunkData[i].modelMatrix =
             glm::translate(glm::mat4(1.0f), glm::vec3(t.x, t.y, t.z)) *
             glm::scale(glm::mat4(1.0f), glm::vec3(0.15f * s, 1.0f * s, 0.15f * s));
+        trunkData[i].instanceColor = glm::vec4(1.0f); // white — shader uses u_diffuseColor
 
         // Crown: translate(x, y + 1.0s, z) * scale(0.7s, 0.7s, 0.7s)
         crownData[i].modelMatrix =
             glm::translate(glm::mat4(1.0f), glm::vec3(t.x, t.y + 1.0f * s, t.z)) *
             glm::scale(glm::mat4(1.0f), glm::vec3(0.7f * s, 0.7f * s, 0.7f * s));
+        crownData[i].instanceColor = glm::vec4(1.0f); // white — shader uses u_diffuseColor
     }
 
     glBindBuffer(GL_ARRAY_BUFFER, m_trunkInstanceVbo);
@@ -656,7 +700,8 @@ void VegetationSystem::rebuildTreeBuffers() {
 void VegetationSystem::renderTrees(const glm::mat4& view, const glm::mat4& proj,
                                    const glm::vec3& lightDir,
                                    const glm::vec3& lightColor,
-                                   const glm::vec3& ambientColor) {
+                                   const glm::vec3& ambientColor,
+                                   const glm::vec3& cameraPos) {
     if (!m_initialised) { return; }
     if (glad_glGenVertexArrays == nullptr) { return; } // Headless guard.
     if (m_treeCount == 0) { return; }
@@ -682,7 +727,7 @@ void VegetationSystem::renderTrees(const glm::mat4& view, const glm::mat4& proj,
     rhi::setUniformVec3(m_meshInstancedShader, "u_lightDir",          lightDir);
     rhi::setUniformVec3(m_meshInstancedShader, "u_lightColor",        lightColor);
     rhi::setUniformVec3(m_meshInstancedShader, "u_ambientColor",      ambientColor);
-    rhi::setUniformVec3(m_meshInstancedShader, "u_viewPos",           glm::vec3(0.0f));
+    rhi::setUniformVec3(m_meshInstancedShader, "u_viewPos",           cameraPos);
     rhi::setUniformVec3(m_meshInstancedShader, "u_specularColor",     glm::vec3(0.0f));
     rhi::setUniformFloat(m_meshInstancedShader, "u_shininess",         1.0f);
 

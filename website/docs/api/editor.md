@@ -10,7 +10,6 @@ description: "FastFreeEngine Editor subsystem API reference"
 
 # editor/ -- System Context
 
-Updated by api-designer, Session 56 (build pipeline: BuildConfig, Exporter, BuildPanel).
 
 ## System Purpose
 

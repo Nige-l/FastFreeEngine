@@ -1,27 +1,27 @@
 # Architecture Map
 
-> Quick-reference for planning agents. WHAT exists and WHERE — not HOW it works.
-> Under 200 lines. No prose. Updated by `director` when subsystems are added.
+> Quick-reference for the main session and agents. WHAT exists and WHERE — not HOW it works.
+> Under 200 lines. No prose. Updated by Architect when subsystems are added.
 
 ## 1. Directory Structure
 
 ```
 engine/
-  core/             — App loop, ECS (EnTT), input, timers, platform, logging, arena allocator  [engine-dev]
-  renderer/         — 2D sprite batching (+atlas), 3D mesh/PBR, post-process, GPU instancing, SSAO, MSAA/FXAA, shadows, text, textures, camera  [renderer-specialist]
-  renderer/opengl/  — OpenGL 3.3 RHI backend, GL debug utilities                               [renderer-specialist]
-  audio/            — miniaudio backend, WAV/OGG, sound/music playback, headless mode           [engine-dev]
-  physics/          — 2D collision: spatial hash, AABB/Circle, layer/mask, callbacks            [engine-dev]
-  scripting/        — LuaJIT sandbox, ffe.* Lua API (~189 bindings), timer system               [engine-dev + api-designer]
-  networking/       — ENet transport, replication, server/client, prediction, lobby, lag compensation, network system  [engine-dev]
-  editor/           — Standalone editor (ImGui dockspace, hierarchy, inspector, viewport, gizmos, build pipeline)  [engine-dev]
+  core/             — App loop, ECS (EnTT), input, timers, platform, logging, arena allocator  [Implementer]
+  renderer/         — 2D sprite batching (+atlas), 3D mesh/PBR, post-process, GPU instancing, SSAO, MSAA/FXAA, shadows, text, textures, camera  [Implementer]
+  renderer/opengl/  — OpenGL 3.3 RHI backend, GL debug utilities                               [Implementer]
+  audio/            — miniaudio backend, WAV/OGG, sound/music playback, headless mode           [Implementer]
+  physics/          — 2D collision: spatial hash, AABB/Circle, layer/mask, callbacks            [Implementer]
+  scripting/        — LuaJIT sandbox, ffe.* Lua API (~225 bindings), timer system               [Implementer]
+  networking/       — ENet transport, replication, server/client, prediction, lobby, lag compensation, network system  [Implementer]
+  editor/           — Standalone editor (ImGui dockspace, hierarchy, inspector, viewport, gizmos, build pipeline)  [Implementer]
 tests/
-  core/             — ECS, input, timer, platform tests                                        [engine-dev]
-  renderer/         — Sprite batch, render queue, text, mesh, shadow tests                     [engine-dev]
-  audio/            — Audio playback tests (headless)                                          [engine-dev]
-  physics/          — Collision system, spatial hash tests                                     [engine-dev]
-  scripting/        — Lua binding tests, sandbox security tests                                [engine-dev]
-  networking/       — Replication, server/client tests                                         [engine-dev]
+  core/             — ECS, input, timer, platform tests                                        [Tester]
+  renderer/         — Sprite batch, render queue, text, mesh, shadow tests                     [Tester]
+  audio/            — Audio playback tests (headless)                                          [Tester]
+  physics/          — Collision system, spatial hash tests                                     [Tester]
+  scripting/        — Lua binding tests, sandbox security tests                                [Tester]
+  networking/       — Replication, server/client tests                                         [Tester]
 examples/
   showcase/         — "Echoes of the Ancients" (3-level 3D action-exploration)
   lua_demo/         — Collect Stars (2D top-down)
@@ -34,11 +34,10 @@ examples/
   interactive_demo/ — C++ interactive test
 website/            — MkDocs documentation site (tutorials, deep dives, learning track)
 docs/
-  architecture/     — ADRs (architect-owned)
-  agents/           — Agent role descriptions (director-owned)
+  architecture/     — ADRs (Architect-owned)
 cmake/
   toolchains/       — MinGW cross-compile toolchain
-.claude/agents/     — Agent prompt files (director-owned)
+.claude/agents/     — Agent prompt files
 .github/workflows/  — CI: Linux Clang-18, Linux GCC-13, macOS arm64
 third_party/        — Vendored: cgltf.h (mesh loading)
 shaders/legacy/     — External GLSL files (if any; most shaders are inline in shader_library.cpp)
@@ -83,7 +82,7 @@ Cross-cutting: `core/platform.h` (path canonicalization) used by scripting + ren
 | Skeletal Anim | `engine/renderer/skeleton.h`, `engine/renderer/animation_system.h`, `engine/renderer/animation_system.cpp` |
 | PBR Materials | `engine/renderer/pbr_material.h` |
 | Post-Process | `engine/renderer/post_process.h`, `engine/renderer/post_process.cpp` |
-| GPU Instancing | `engine/renderer/gpu_instancing.h` |
+| GPU Instancing | `engine/renderer/gpu_instancing.h` (InstanceData: 80B = mat4 transform + vec4 instanceColor) |
 | SSAO | `engine/renderer/ssao.h`, `engine/renderer/ssao.cpp` |
 | Texture Atlas | `engine/renderer/texture_atlas.h`, `engine/renderer/texture_atlas.cpp` |
 | Terrain | `engine/renderer/terrain.h`, `engine/renderer/terrain.cpp`, `engine/renderer/terrain_internal.h`, `engine/renderer/terrain_renderer.h`, `engine/renderer/terrain_renderer.cpp` |
@@ -117,17 +116,17 @@ Cross-cutting: `core/platform.h` (path canonicalization) used by scripting + ren
 
 **Textures** (2): `loadTexture`, `unloadTexture`
 
-**Audio** (8): `playSound`, `loadSound`, `unloadSound`, `playMusic`, `stopMusic`, `setMusicVolume`, `getMusicVolume`, `isMusicPlaying`, `loadMusic`, `setMasterVolume`
+**Audio** (10): `playSound`, `loadSound`, `unloadSound`, `playMusic`, `stopMusic`, `setMusicVolume`, `getMusicVolume`, `isMusicPlaying`, `loadMusic`, `setMasterVolume`
 
-**Input** (3 functions + constants): `isKeyHeld`, `isKeyPressed`, `isKeyReleased`, `getMouseX`, `getMouseY`, `isMousePressed`, `isMouseHeld`, `isMouseReleased` + KEY_* + MOUSE_*
+**Input** (8 functions + constants): `isKeyHeld`, `isKeyPressed`, `isKeyReleased`, `getMouseX`, `getMouseY`, `isMousePressed`, `isMouseHeld`, `isMouseReleased` + KEY_* + MOUSE_*
 
-**Gamepad** (7 + constants): `isGamepadConnected`, `isGamepadButtonPressed`, `isGamepadButtonHeld`, `isGamepadButtonReleased`, `getGamepadAxis`, `getGamepadName`, `setGamepadDeadzone`, `getGamepadDeadzone` + GAMEPAD_*
+**Gamepad** (8 + constants): `isGamepadConnected`, `isGamepadButtonPressed`, `isGamepadButtonHeld`, `isGamepadButtonReleased`, `getGamepadAxis`, `getGamepadName`, `setGamepadDeadzone`, `getGamepadDeadzone` + GAMEPAD_*
 
-**Scene** (2): `loadScene`, `cancelAllTimers`, `cancelTimer`
+**Scene** (3): `loadScene`, `cancelAllTimers`, `cancelTimer`
 
 **Save/Load** (2): `saveData`, `loadData`
 
-**TTF Text** (3): `loadFont`, `unloadFont`, `drawFontText`, `measureText`
+**TTF Text** (4): `loadFont`, `unloadFont`, `drawFontText`, `measureText`
 
 **Drawing** (2): `drawText`, `drawRect`
 

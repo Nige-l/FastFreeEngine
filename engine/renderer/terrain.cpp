@@ -104,6 +104,8 @@ static bool validateConfig(const TerrainConfig& cfg) {
     if (!isFinite(cfg.heightScale)) { return false; }
     if (cfg.chunkResolution < 2 || cfg.chunkResolution > MAX_CHUNK_RESOLUTION) { return false; }
     if (cfg.chunkCountX == 0 || cfg.chunkCountZ == 0) { return false; }
+    // Guard against u32 overflow before multiplying.
+    if (cfg.chunkCountX > MAX_CHUNKS_TOTAL || cfg.chunkCountZ > MAX_CHUNKS_TOTAL) { return false; }
     const u32 totalChunks = cfg.chunkCountX * cfg.chunkCountZ;
     if (totalChunks > MAX_CHUNKS_TOTAL) { return false; }
     return true;
@@ -1165,6 +1167,14 @@ int getTerrainLoadedChunkCount(const TerrainHandle handle) {
         }
     }
     return count;
+}
+
+TerrainConfig getTerrainConfig(const TerrainHandle handle) {
+    if (!isValid(handle)) { return TerrainConfig{}; }
+    if (handle.id > MAX_TERRAIN_ASSETS) { return TerrainConfig{}; }
+    const TerrainAsset& asset = s_terrains[handle.id - 1];
+    if (!asset.active) { return TerrainConfig{}; }
+    return asset.config;
 }
 
 // ---------------------------------------------------------------------------

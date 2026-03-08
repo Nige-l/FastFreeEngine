@@ -37,8 +37,6 @@
 #define GL_TEXTURE_CUBE_MAP 0x8513
 #endif
 
-#include <cstdio>
-
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -76,12 +74,13 @@ void shutdownInstancing() {
 }
 
 // Bind the instance VBO to a mesh VAO and configure attribute divisors for
-// slots 8-11 (mat4 model matrix, one vec4 per column).
+// slots 8-11 (mat4 model matrix, one vec4 per column) and slot 12 (instance color).
 // Must be called with the target VAO already bound.
 static void setupInstanceAttribs() {
     glBindBuffer(GL_ARRAY_BUFFER, s_instanceVbo);
 
-    for (u32 col = 0; col < INSTANCE_ATTR_SLOT_COUNT; ++col) {
+    // Model matrix: 4 vec4 columns at slots 8-11
+    for (u32 col = 0; col < INSTANCE_MAT4_SLOT_COUNT; ++col) {
         const u32 slot = INSTANCE_ATTR_SLOT_BASE + col;
         glEnableVertexAttribArray(slot);
         glVertexAttribPointer(
@@ -89,22 +88,37 @@ static void setupInstanceAttribs() {
             4,                                          // vec4 per column
             GL_FLOAT,
             GL_FALSE,
-            sizeof(InstanceData),                       // stride = 64 bytes
+            sizeof(InstanceData),                       // stride = 80 bytes
             reinterpret_cast<const void*>(              // offset into InstanceData
                 static_cast<uintptr_t>(col * sizeof(glm::vec4)))
         );
         glVertexAttribDivisor(slot, 1);                 // advance per instance
     }
+
+    // Instance color: vec4 at slot 12, offset = sizeof(mat4) = 64 bytes
+    glEnableVertexAttribArray(INSTANCE_COLOR_SLOT);
+    glVertexAttribPointer(
+        INSTANCE_COLOR_SLOT,
+        4,                                              // vec4
+        GL_FLOAT,
+        GL_FALSE,
+        sizeof(InstanceData),                           // stride = 80 bytes
+        reinterpret_cast<const void*>(
+            static_cast<uintptr_t>(sizeof(glm::mat4)))  // offset past model matrix
+    );
+    glVertexAttribDivisor(INSTANCE_COLOR_SLOT, 1);
 }
 
 // Disable instance attribute slots on a VAO to restore single-draw state.
 // Must be called with the target VAO already bound.
 static void teardownInstanceAttribs() {
-    for (u32 col = 0; col < INSTANCE_ATTR_SLOT_COUNT; ++col) {
+    for (u32 col = 0; col < INSTANCE_MAT4_SLOT_COUNT; ++col) {
         const u32 slot = INSTANCE_ATTR_SLOT_BASE + col;
         glDisableVertexAttribArray(slot);
         glVertexAttribDivisor(slot, 0);
     }
+    glDisableVertexAttribArray(INSTANCE_COLOR_SLOT);
+    glVertexAttribDivisor(INSTANCE_COLOR_SLOT, 0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
@@ -510,20 +524,21 @@ void meshRenderSystem(World& world, const Camera& camera3d,
                     // Fill instance buffer in batches of MAX_INSTANCES_PER_BATCH
                     u32 remaining = nonSkinnedCount;
                     u32 batchIdx = batchStart;
-                    InstanceData instances[MAX_INSTANCES_PER_BATCH];
+                    static InstanceData s_shadowInstanceScratch[MAX_INSTANCES_PER_BATCH];
                     while (remaining > 0) {
                         const u32 batchSize = (remaining > MAX_INSTANCES_PER_BATCH)
                                               ? MAX_INSTANCES_PER_BATCH : remaining;
                         for (u32 i = 0; i < batchSize; ++i) {
                             const auto ent = renderEntities[batchIdx + i].entity;
                             const auto& t3d = world.registry().get<const Transform3D>(ent);
-                            instances[i].modelMatrix = buildModelMatrix(t3d);
+                            s_shadowInstanceScratch[i].modelMatrix = buildModelMatrix(t3d);
+                            s_shadowInstanceScratch[i].instanceColor = glm::vec4(1.0f); // shadows don't use color
                         }
                         // Upload instance data
                         glBindBuffer(GL_ARRAY_BUFFER, s_instanceVbo);
                         glBufferSubData(GL_ARRAY_BUFFER, 0,
                                         static_cast<GLsizeiptr>(batchSize * sizeof(InstanceData)),
-                                        instances);
+                                        s_shadowInstanceScratch);
 
                         glBindVertexArray(rec->vaoId);
                         setupInstanceAttribs();
@@ -537,15 +552,16 @@ void meshRenderSystem(World& world, const Camera& camera3d,
                         batchIdx += batchSize;
                         remaining -= batchSize;
                     }
-                } else {
+                } else if (nonSkinnedCount > 0) {
                     // Single-draw fallback for non-skinned (1 entity or no instance VBO)
+                    // Bind shader and set light-space matrix once before the loop.
+                    rhi::bindShader(shadowShader);
+                    rhi::setUniformMat4(shadowShader, "u_lightSpaceMatrix", lightSpaceMat);
+                    glBindVertexArray(rec->vaoId);
                     for (u32 i = batchStart; i < batchStart + nonSkinnedCount; ++i) {
                         const auto ent = renderEntities[i].entity;
                         const auto& t3d = world.registry().get<const Transform3D>(ent);
-                        rhi::bindShader(shadowShader);
-                        rhi::setUniformMat4(shadowShader, "u_lightSpaceMatrix", lightSpaceMat);
                         rhi::setUniformMat4(shadowShader, "u_model", buildModelMatrix(t3d));
-                        glBindVertexArray(rec->vaoId);
                         glDrawElements(GL_TRIANGLES,
                                        static_cast<GLsizei>(rec->indexCount),
                                        GL_UNSIGNED_INT, nullptr);
@@ -642,20 +658,35 @@ void meshRenderSystem(World& world, const Camera& camera3d,
             }
         }
 
+        // Pre-computed uniform name tables — avoids per-frame snprintf.
+        static const char* const s_pointLightPosNames[MAX_POINT_LIGHTS] = {
+            "u_pointLightPos[0]", "u_pointLightPos[1]",
+            "u_pointLightPos[2]", "u_pointLightPos[3]",
+            "u_pointLightPos[4]", "u_pointLightPos[5]",
+            "u_pointLightPos[6]", "u_pointLightPos[7]"
+        };
+        static const char* const s_pointLightColorNames[MAX_POINT_LIGHTS] = {
+            "u_pointLightColor[0]", "u_pointLightColor[1]",
+            "u_pointLightColor[2]", "u_pointLightColor[3]",
+            "u_pointLightColor[4]", "u_pointLightColor[5]",
+            "u_pointLightColor[6]", "u_pointLightColor[7]"
+        };
+        static const char* const s_pointLightRadiusNames[MAX_POINT_LIGHTS] = {
+            "u_pointLightRadius[0]", "u_pointLightRadius[1]",
+            "u_pointLightRadius[2]", "u_pointLightRadius[3]",
+            "u_pointLightRadius[4]", "u_pointLightRadius[5]",
+            "u_pointLightRadius[6]", "u_pointLightRadius[7]"
+        };
+
         for (u32 si = 0; si < allShaderCount; ++si) {
             const rhi::ShaderHandle sh = allShaders[si];
             rhi::bindShader(sh);
             rhi::setUniformInt(sh, "u_pointLightCount", static_cast<i32>(activeCount));
 
-            char uniformName[64];
             for (u32 i = 0; i < activeCount; ++i) {
-                const auto uIdx = static_cast<unsigned int>(i);
-                std::snprintf(uniformName, sizeof(uniformName), "u_pointLightPos[%u]", uIdx);
-                rhi::setUniformVec3(sh, uniformName, positions[i]);
-                std::snprintf(uniformName, sizeof(uniformName), "u_pointLightColor[%u]", uIdx);
-                rhi::setUniformVec3(sh, uniformName, colors[i]);
-                std::snprintf(uniformName, sizeof(uniformName), "u_pointLightRadius[%u]", uIdx);
-                rhi::setUniformFloat(sh, uniformName, radii[i]);
+                rhi::setUniformVec3(sh, s_pointLightPosNames[i], positions[i]);
+                rhi::setUniformVec3(sh, s_pointLightColorNames[i], colors[i]);
+                rhi::setUniformFloat(sh, s_pointLightRadiusNames[i], radii[i]);
             }
         }
     }
@@ -765,7 +796,9 @@ void meshRenderSystem(World& world, const Camera& camera3d,
                     currentShader = batchShader;
                 }
 
-                // Upload material from first entity
+                // Upload shared material properties (textures, specular, etc.)
+                // from the first entity. Per-instance diffuse color is in the
+                // instance buffer — the shader reads it from vertex attribs.
                 if (usePbr) {
                     uploadPbrMaterial(batchShader, *pbrMat, defaultWhite);
                 } else {
@@ -776,21 +809,27 @@ void meshRenderSystem(World& world, const Camera& camera3d,
                 // Fill instance buffer in batches of MAX_INSTANCES_PER_BATCH
                 u32 remaining = nonSkinnedCount;
                 u32 batchIdx = batchStart;
-                InstanceData instances[MAX_INSTANCES_PER_BATCH];
+                static InstanceData s_mainInstanceScratch[MAX_INSTANCES_PER_BATCH];
                 while (remaining > 0) {
                     const u32 batchSize = (remaining > MAX_INSTANCES_PER_BATCH)
                                           ? MAX_INSTANCES_PER_BATCH : remaining;
                     for (u32 i = 0; i < batchSize; ++i) {
                         const auto ent = renderEntities[batchIdx + i].entity;
                         const auto& t3d = world.registry().get<const Transform3D>(ent);
-                        instances[i].modelMatrix = buildModelMatrix(t3d);
+                        s_mainInstanceScratch[i].modelMatrix = buildModelMatrix(t3d);
+
+                        // Per-instance color from Material3D (default white if absent)
+                        const Material3D* entMat = world.registry().try_get<Material3D>(ent);
+                        s_mainInstanceScratch[i].instanceColor = (entMat != nullptr)
+                            ? entMat->diffuseColor
+                            : glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
                     }
 
                     // Upload instance data
                     glBindBuffer(GL_ARRAY_BUFFER, s_instanceVbo);
                     glBufferSubData(GL_ARRAY_BUFFER, 0,
                                     static_cast<GLsizeiptr>(batchSize * sizeof(InstanceData)),
-                                    instances);
+                                    s_mainInstanceScratch);
 
                     glBindVertexArray(rec->vaoId);
                     setupInstanceAttribs();

@@ -52,7 +52,7 @@ constexpr uint32_t MAX_LOBBY_NAME_LENGTH = 32;
 /// Compact player info for lobby state broadcasts.
 /// Fixed-size, no heap allocations — safe for direct serialization.
 struct LobbyPlayerInfo {
-    uint32_t connectionId{0};
+    uint32_t connectionId{0xFFFFFFFF}; // 0xFFFFFFFF = empty slot sentinel (connection 0 is valid)
     bool     ready{false};
     char     name[MAX_LOBBY_NAME_LENGTH]{}; // null-terminated
 };
@@ -87,6 +87,7 @@ public:
     bool readF32(float& out);               // rejects NaN / Inf
     bool readBytes(uint8_t* out, uint16_t count);
     bool readString(char* out, uint16_t maxLen); // length-prefixed (u16)
+    bool skipBytes(uint16_t count);         // advance read position without copying
 
     uint16_t remaining() const;
     bool     hasError() const;

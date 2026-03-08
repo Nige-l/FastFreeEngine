@@ -45,16 +45,22 @@ jobs:
           restore-keys: |
             vcpkg-linux-x64-
 
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: linux-clang-ccache
+
       - name: Configure
         run: |
           cmake -B build -G Ninja \
             -DCMAKE_CXX_COMPILER=clang++-18 \
             -DCMAKE_BUILD_TYPE=Debug \
             -DFFE_TIER=LEGACY \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake
 
       - name: Build
-        run: cmake --build build
+        run: cmake --build build --parallel $(nproc)
 
       - name: Test
         run: ctest --test-dir build --output-on-failure --parallel $(nproc)
@@ -86,18 +92,270 @@ jobs:
           restore-keys: |
             vcpkg-linux-x64-
 
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: linux-gcc-ccache
+
       - name: Configure
         run: |
           cmake -B build-gcc -G Ninja \
             -DCMAKE_CXX_COMPILER=g++-13 \
             -DCMAKE_BUILD_TYPE=Debug \
             -DFFE_TIER=LEGACY \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake
 
       - name: Build
-        run: cmake --build build-gcc
+        run: cmake --build build-gcc --parallel $(nproc)
 
       - name: Test
         run: ctest --test-dir build-gcc --output-on-failure --parallel $(nproc)
 
+  linux-sanitizer:
+    name: Linux (Clang-18 ASan+UBSan)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            ninja-build mold clang-18 \
+            libgl1-mesa-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev \
+            pkg-config cmake
+
+      - name: Set up vcpkg
+        run: echo "VCPKG_ROOT=$VCPKG_INSTALLATION_ROOT" >> $GITHUB_ENV
+
+      - name: Cache vcpkg
+        uses: actions/cache@v4
+        with:
+          path: vcpkg_installed
+          key: vcpkg-sanitizer-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-sanitizer-
+
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: linux-sanitizer-ccache
+
+      - name: Configure
+        run: |
+          cmake -B build-san -G Ninja \
+            -DCMAKE_CXX_COMPILER=clang++-18 \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DFFE_TIER=LEGACY \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined" \
+            -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address,undefined" \
+            -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake
+
+      - name: Build
+        run: cmake --build build-san --parallel $(nproc)
+
+      - name: Test
+        run: ctest --test-dir build-san --output-on-failure --parallel $(nproc)
+
+  linux-clang-tidy:
+    name: Linux (clang-tidy-18)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            ninja-build mold clang-18 clang-tidy-18 \
+            libgl1-mesa-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev \
+            pkg-config cmake
+
+      - name: Set up vcpkg
+        run: echo "VCPKG_ROOT=$VCPKG_INSTALLATION_ROOT" >> $GITHUB_ENV
+
+      - name: Cache vcpkg
+        uses: actions/cache@v4
+        with:
+          path: vcpkg_installed
+          key: vcpkg-linux-x64-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-linux-x64-
+
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: linux-clang-tidy-ccache
+
+      - name: Configure
+        run: |
+          cmake -B build-tidy -G Ninja \
+            -DCMAKE_CXX_COMPILER=clang++-18 \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DFFE_TIER=LEGACY \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake
+
+      - name: Build (generate headers)
+        run: cmake --build build-tidy --parallel $(nproc) --target ffe_engine 2>&1 | head -50
+
+      - name: Run clang-tidy
+        run: |
+          find engine -name '*.cpp' | sort | \
+            xargs clang-tidy-18 -p build-tidy --warnings-as-errors='*'
+
+  linux-coverage:
+    name: Linux (Code Coverage)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            ninja-build mold clang-18 llvm-18 \
+            libgl1-mesa-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev \
+            pkg-config cmake
+
+      - name: Set up vcpkg
+        run: echo "VCPKG_ROOT=$VCPKG_INSTALLATION_ROOT" >> $GITHUB_ENV
+
+      - name: Cache vcpkg
+        uses: actions/cache@v4
+        with:
+          path: vcpkg_installed
+          key: vcpkg-linux-x64-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-linux-x64-
+
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: linux-coverage-ccache
+
+      - name: Configure
+        run: |
+          cmake -B build-cov -G Ninja \
+            -DCMAKE_CXX_COMPILER=clang++-18 \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DFFE_TIER=LEGACY \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_FLAGS="-fprofile-instr-generate -fcoverage-mapping" \
+            -DCMAKE_C_FLAGS="-fprofile-instr-generate -fcoverage-mapping" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fprofile-instr-generate" \
+            -DCMAKE_SHARED_LINKER_FLAGS="-fprofile-instr-generate" \
+            -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake
+
+      - name: Build
+        run: cmake --build build-cov --parallel $(nproc)
+
+      - name: Test
+        env:
+          LLVM_PROFILE_FILE: build-cov/coverage/%p.profraw
+        run: |
+          mkdir -p build-cov/coverage
+          ctest --test-dir build-cov --output-on-failure --parallel $(nproc)
+
+      - name: Generate coverage report
+        run: |
+          # Merge raw profiles
+          llvm-profdata-18 merge -sparse build-cov/coverage/*.profraw -o build-cov/coverage/merged.profdata
+
+          # Find all test executables (instrumented binaries)
+          TEST_BINS=$(find build-cov/tests -type f -executable | sort)
+
+          # Build the -object flags for llvm-cov
+          OBJECT_FLAGS=""
+          for bin in $TEST_BINS; do
+            OBJECT_FLAGS="$OBJECT_FLAGS -object=$bin"
+          done
+
+          # Summary report — coverage per directory
+          echo "=== Coverage Summary ==="
+          llvm-cov-18 report \
+            $(echo $TEST_BINS | head -1 | xargs echo) \
+            $OBJECT_FLAGS \
+            -instr-profile=build-cov/coverage/merged.profdata \
+            -ignore-filename-regex='(third_party|vcpkg_installed|tests|build-cov)' \
+            | tee build-cov/coverage/summary.txt
+
+          echo ""
+          echo "=== Per-Directory Coverage ==="
+          for dir in engine/core engine/renderer engine/physics engine/audio engine/scripting engine/networking engine/scene engine/editor; do
+            if [ -d "$dir" ]; then
+              echo "--- $dir ---"
+              llvm-cov-18 report \
+                $(echo $TEST_BINS | head -1 | xargs echo) \
+                $OBJECT_FLAGS \
+                -instr-profile=build-cov/coverage/merged.profdata \
+                -ignore-filename-regex='(third_party|vcpkg_installed|tests|build-cov)' \
+                "$dir" 2>/dev/null || echo "  (no coverage data)"
+            fi
+          done
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: build-cov/coverage/
+          retention-days: 14
+
   # macOS build disabled — LuaJIT vcpkg port fails on arm64-osx. Tracked for future cross-platform phase.
+
+  windows-mingw:
+    name: Windows (MinGW cross-compile)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            ninja-build cmake \
+            gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64 binutils-mingw-w64-x86-64
+
+      - name: Set up vcpkg
+        run: echo "VCPKG_ROOT=$VCPKG_INSTALLATION_ROOT" >> $GITHUB_ENV
+
+      - name: Cache vcpkg
+        uses: actions/cache@v4
+        with:
+          path: vcpkg_installed
+          key: vcpkg-mingw-x64-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-mingw-x64-
+
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: windows-mingw-ccache
+
+      - name: Configure
+        run: |
+          cmake -B build-win -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DFFE_TIER=LEGACY \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64-x86_64.cmake \
+            -DVCPKG_TARGET_TRIPLET=x64-mingw-dynamic \
+            -DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64-x86_64.cmake \
+            -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake
+
+      - name: Build
+        run: cmake --build build-win --parallel $(nproc) --target ffe_engine

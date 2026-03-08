@@ -4,7 +4,7 @@ Complete API documentation for FastFreeEngine, covering both the Lua scripting A
 
 ## How These Pages Are Generated
 
-Every engine subsystem ships a `.context.md` file in its directory. These files are the **source of truth** for API documentation -- they are written for both humans and AI assistants, and are kept in sync with the engine code by the `api-designer` agent.
+Every engine subsystem ships a `.context.md` file in its directory. These files are the **source of truth** for API documentation -- they are written for both humans and AI assistants, and are kept in sync with the engine code as part of the review process for every change.
 
 The pages in this section are **auto-generated** from those `.context.md` files by the extraction pipeline. Do not edit the subsystem pages by hand -- your changes will be overwritten on the next generation run.
 

@@ -82,6 +82,7 @@ add_executable(ffe_tests_scripting
     scripting/test_ssao_bindings.cpp
     scripting/test_terrain_bindings.cpp
     scripting/test_water_bindings.cpp
+    scripting/test_sandbox_security.cpp
 )
 
 target_link_libraries(ffe_tests_scripting
@@ -248,6 +249,7 @@ add_executable(ffe_tests_networking
     test_main.cpp
     networking/test_lag_compensation.cpp
     networking/test_lobby.cpp
+    networking/test_network_fuzz.cpp
     networking/test_packet.cpp
     networking/test_prediction.cpp
     networking/test_replication.cpp

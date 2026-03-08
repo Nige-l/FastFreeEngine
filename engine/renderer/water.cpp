@@ -89,10 +89,10 @@ static void createReflectionFbo(const i32 w, const i32 h) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glBindTexture(GL_TEXTURE_2D, 0);
 
-    // Depth attachment: GL_DEPTH_COMPONENT renderbuffer
+    // Depth attachment: GL_DEPTH_COMPONENT24 renderbuffer (explicit precision required by OpenGL spec).
     glGenRenderbuffers(1, &s_reflDepthRbo);
     glBindRenderbuffer(GL_RENDERBUFFER, s_reflDepthRbo);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT,
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24,
                           static_cast<GLsizei>(s_reflWidth),
                           static_cast<GLsizei>(s_reflHeight));
     glBindRenderbuffer(GL_RENDERBUFFER, 0);
@@ -622,6 +622,12 @@ void WaterManager::setWaterConfig(const WaterHandle handle,
     m_slots[idx].config = cfg;
 }
 
+WaterSurfaceConfig WaterManager::getWaterConfig(const WaterHandle handle) const {
+    const u32 idx = findSlot(handle);
+    if (idx == MAX_WATER_SURFACES) { return WaterSurfaceConfig{}; }
+    return m_slots[idx].config;
+}
+
 // ---------------------------------------------------------------------------
 // Per-frame update
 // ---------------------------------------------------------------------------
@@ -863,11 +869,11 @@ bool WaterManager::allocReflectionFbo(WaterSlot& slot) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glBindTexture(GL_TEXTURE_2D, 0);
 
-    // Depth attachment: GL_DEPTH_COMPONENT renderbuffer.
+    // Depth attachment: GL_DEPTH_COMPONENT24 renderbuffer (explicit precision required by OpenGL spec).
     GLuint depthRbo = 0;
     glGenRenderbuffers(1, &depthRbo);
     glBindRenderbuffer(GL_RENDERBUFFER, depthRbo);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT,
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24,
                           static_cast<GLsizei>(w),
                           static_cast<GLsizei>(h));
     glBindRenderbuffer(GL_RENDERBUFFER, 0);

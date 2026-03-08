@@ -149,7 +149,7 @@ TEST_CASE("LobbyServer removePlayer removes and updates state", "[networking][lo
     // Remove the player
     server.removePlayer(1);
     CHECK(server.state().playerCount == 0);
-    CHECK(server.state().players[0].connectionId == 0);
+    CHECK(server.state().players[0].connectionId == 0xFFFFFFFF);
 }
 
 // ===========================================================================
