@@ -283,17 +283,57 @@ createVisualBox(-6, 0.8, 0, 0.35, 0.8, 0.35, 0.4, 0.3, 0.24, 1.0)
 createVisualBox( 0, 0.6, 6, 0.3, 0.6, 0.3, 0.4, 0.3, 0.24, 1.0)
 
 --------------------------------------------------------------------
+-- BRAZIER BOWLS: Bright glowing fire pits on key platforms
+-- Purely visual geometry — small bright orange/yellow boxes
+--------------------------------------------------------------------
+-- Central altar brazier (flanking the artifact)
+createVisualBox(-1.2, 1.1, -1.2, 0.25, 0.15, 0.25, 0.5, 0.35, 0.2, 1.0)  -- bowl
+createVisualBox(-1.2, 1.3, -1.2, 0.15, 0.1, 0.15, 1.0, 0.75, 0.2, 1.0)   -- flame
+createVisualBox( 1.2, 1.1,  1.2, 0.25, 0.15, 0.25, 0.5, 0.35, 0.2, 1.0)  -- bowl
+createVisualBox( 1.2, 1.3,  1.2, 0.15, 0.1, 0.15, 1.0, 0.75, 0.2, 1.0)   -- flame
+
+-- NE platform brazier
+createVisualBox(10, 3.5, -8, 0.2, 0.12, 0.2, 0.5, 0.35, 0.2, 1.0)
+createVisualBox(10, 3.65, -8, 0.12, 0.08, 0.12, 1.0, 0.7, 0.15, 1.0)
+
+-- SW platform brazier
+createVisualBox(-11, 5.5, 7, 0.2, 0.12, 0.2, 0.5, 0.35, 0.2, 1.0)
+createVisualBox(-11, 5.65, 7, 0.12, 0.08, 0.12, 1.0, 0.7, 0.15, 1.0)
+
+-- Spawn platform brazier (welcoming glow)
+createVisualBox(1.5, 3.1, -15, 0.2, 0.12, 0.2, 0.5, 0.35, 0.2, 1.0)
+createVisualBox(1.5, 3.25, -15, 0.12, 0.08, 0.12, 1.0, 0.8, 0.2, 1.0)
+
+--------------------------------------------------------------------
 -- POINT LIGHTS: Warm golden brazier glow on key platforms
 -- (max 4 point lights; use 3 to leave headroom)
 --------------------------------------------------------------------
--- Brazier on the central altar (bright warm gold)
-ffe.addPointLight(0, 0, 2.0, 0, 1.0, 0.8, 0.4, 12)
+-- Brazier on the central altar (bright warm gold, larger radius)
+ffe.addPointLight(0, 0, 2.5, 0, 1.0, 0.85, 0.4, 15)
 
 -- Brazier on NE floating platform
-ffe.addPointLight(1, 10, 4.5, -8, 1.0, 0.75, 0.3, 10)
+ffe.addPointLight(1, 10, 4.5, -8, 1.0, 0.75, 0.3, 12)
 
 -- Brazier on SW floating platform
-ffe.addPointLight(2, -11, 6.5, 7, 1.0, 0.7, 0.25, 10)
+ffe.addPointLight(2, -11, 6.5, 7, 1.0, 0.7, 0.25, 12)
+
+--------------------------------------------------------------------
+-- Additional point lights for airy, well-lit summit (slots 3-7)
+--------------------------------------------------------------------
+-- Slot 3: NW floating platform (cool accent for contrast)
+ffe.addPointLight(3, -10, 5.5, -8, 0.6, 0.7, 1.0, 10)
+
+-- Slot 4: Spawn platform warm glow (so player sees where they start)
+ffe.addPointLight(4, 0, 4.0, -15, 1.0, 0.9, 0.6, 10)
+
+-- Slot 5: Far north high platform (rose-colored to match gem)
+ffe.addPointLight(5, 0, 8.0, 14, 1.0, 0.4, 0.6, 10)
+
+-- Slot 6: SE platform (topaz warm glow to match gem)
+ffe.addPointLight(6, 12, 3.5, 6, 0.9, 0.7, 0.2, 8)
+
+-- Slot 7: Moving platform region (subtle sky-blue accent)
+ffe.addPointLight(7, -7, 4.0, 5, 0.5, 0.65, 1.0, 8)
 
 --------------------------------------------------------------------
 -- MAIN ARTIFACT: The FINAL artifact (damaged_helmet) on the central altar
@@ -340,13 +380,24 @@ for i, pos in ipairs(gemPositions) do
             ffe.setTransform3D(gem, pos.x, pos.y, pos.z, 0, 0, 0, 0.008, 0.008, 0.008)
             local c = gemColors[i]
             ffe.setMeshColor(gem, c[1], c[2], c[3], 1.0)
-            ffe.setMeshSpecular(gem, 0.8, 0.8, 0.8, 128)
+            ffe.setMeshSpecular(gem, 1.0, 1.0, 1.0, 256)  -- extra shiny gems
             ffe.createPhysicsBody(gem, {
                 shape       = "box",
                 halfExtents = { 0.35, 0.35, 0.35 },
                 motion      = "kinematic",
             })
             gems[gem] = { index = i, collected = false, pos = pos }
+        end
+    end
+
+    -- Glowing pedestal under each gem
+    if cubeMesh ~= 0 then
+        local pedestal = ffe.createEntity3D(cubeMesh, pos.x, pos.y - 0.35, pos.z)
+        if pedestal ~= 0 then
+            local c = gemColors[i]
+            ffe.setTransform3D(pedestal, pos.x, pos.y - 0.35, pos.z, 0, 0, 0, 0.5, 0.05, 0.5)
+            ffe.setMeshColor(pedestal, c[1] * 0.6, c[2] * 0.6, c[3] * 0.6, 1.0)
+            ffe.setMeshSpecular(pedestal, 0.6, 0.6, 0.6, 64)
         end
     end
 end
@@ -623,7 +674,7 @@ end)
 --------------------------------------------------------------------
 Player.create(0, 2.5, -11, cesiumMesh)
 Camera.setPosition(0, 5.5, -14)
-Camera.setYawPitch(5, 20)  -- High wide view: shows stepping stones descending toward arena
+Camera.setYawPitch(180, 22)  -- Camera behind (south), looking north toward arena and floating platforms
 
 if HUD then
     HUD.showPrompt("The Summit -- Reach the central altar and claim the final artifact!", 5.0)

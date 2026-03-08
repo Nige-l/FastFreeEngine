@@ -256,9 +256,9 @@ createStaticBox(0, 2.5, 0,  1.0, 0.15, 1.0,  0.5, 0.52, 0.58)
 if figureMesh ~= 0 then
     local statue = ffe.createEntity3D(figureMesh, 0, 2.8, 0)
     if statue ~= 0 then
-        ffe.setTransform3D(statue, 0, 2.8, 0, 0, 0, 0, 0.6, 0.6, 0.6)
-        ffe.setMeshColor(statue, 0.55, 0.6, 0.5, 1.0)  -- weathered bronze
-        ffe.setMeshSpecular(statue, 0.5, 0.5, 0.4, 64)
+        ffe.setTransform3D(statue, 0, 2.8, 0, 0, 0, 0, 0.8, 0.8, 0.8)
+        ffe.setMeshColor(statue, 0.65, 0.72, 0.55, 1.0)  -- bright weathered bronze
+        ffe.setMeshSpecular(statue, 0.7, 0.7, 0.5, 96)
         -- Animate the statue if the model has clips (eerie slow movement)
         local statueAnimCount = ffe.getAnimationCount3D(statue)
         if statueAnimCount > 0 then
@@ -312,15 +312,38 @@ for i, tp in ipairs(torchPositions) do
     if cubeMesh ~= 0 then
         local torch = ffe.createEntity3D(cubeMesh, tp.x, tp.y, tp.z)
         if torch ~= 0 then
-            ffe.setTransform3D(torch, tp.x, tp.y, tp.z, 0, 0, 0, 0.15, 0.3, 0.15)
-            ffe.setMeshColor(torch, 0.3, 0.25, 0.15, 1.0)
+            ffe.setTransform3D(torch, tp.x, tp.y, tp.z, 0, 0, 0, 0.15, 0.4, 0.15)
+            ffe.setMeshColor(torch, 0.4, 0.3, 0.15, 1.0)
+            ffe.setMeshSpecular(torch, 0.3, 0.2, 0.1, 32)
+        end
+        -- Bright flame tip (tiny glowing box above the bracket)
+        local flame = ffe.createEntity3D(cubeMesh, tp.x, tp.y + 0.45, tp.z)
+        if flame ~= 0 then
+            ffe.setTransform3D(flame, tp.x, tp.y + 0.45, tp.z, 0, 0, 0, 0.1, 0.12, 0.1)
+            ffe.setMeshColor(flame, 1.0, 0.7, 0.15, 1.0)  -- bright orange-yellow flame
+            ffe.setMeshSpecular(flame, 1.0, 0.8, 0.3, 128)
         end
     end
 
     -- Point light at torch position (warm orange glow)
     -- We have 4 point light slots: indices 0-3
-    ffe.addPointLight(i - 1, tp.x, tp.y + 0.5, tp.z,  1.0, 0.65, 0.25, 10)
+    ffe.addPointLight(i - 1, tp.x, tp.y + 0.5, tp.z,  1.0, 0.65, 0.25, 12)
 end
+
+--------------------------------------------------------------------
+-- Additional point lights for visual richness (slots 4-7)
+--------------------------------------------------------------------
+-- Slot 4: Cool blue-white glow on the central fountain (water shimmer)
+ffe.addPointLight(4, 0, 3.5, 0, 0.5, 0.7, 1.0, 10)
+
+-- Slot 5: Warm golden glow at the entrance archway (welcoming)
+ffe.addPointLight(5, 0, 3.0, -20, 1.0, 0.85, 0.5, 8)
+
+-- Slot 6: Red-orange glow near the destructible wall (hint: something hidden)
+ffe.addPointLight(6, -16, 2.5, 8, 0.9, 0.4, 0.15, 7)
+
+-- Slot 7: Soft green glow near the south-east gem corner (draws attention)
+ffe.addPointLight(7, 12, 1.5, -12, 0.3, 0.9, 0.5, 8)
 
 --------------------------------------------------------------------
 -- Push-block puzzle: 2 blocks, 2 pressure plates
@@ -486,13 +509,24 @@ for i, pos in ipairs(gemPositions) do
             ffe.setTransform3D(gem, pos.x, pos.y, pos.z, 0, 0, 0, 0.008, 0.008, 0.008)
             local c = gemColors[i]
             ffe.setMeshColor(gem, c[1], c[2], c[3], 1.0)
-            ffe.setMeshSpecular(gem, 0.8, 0.8, 0.8, 128)
+            ffe.setMeshSpecular(gem, 1.0, 1.0, 1.0, 256)  -- extra shiny gems
             ffe.createPhysicsBody(gem, {
                 shape       = "box",
                 halfExtents = { 0.35, 0.35, 0.35 },
                 motion      = "kinematic",
             })
             gems[gem] = { index = i, collected = false, pos = pos }
+        end
+    end
+
+    -- Glowing pedestal under each gem (small bright-colored box)
+    if cubeMesh ~= 0 then
+        local pedestal = ffe.createEntity3D(cubeMesh, pos.x, pos.y - 0.35, pos.z)
+        if pedestal ~= 0 then
+            local c = gemColors[i]
+            ffe.setTransform3D(pedestal, pos.x, pos.y - 0.35, pos.z, 0, 0, 0, 0.5, 0.05, 0.5)
+            ffe.setMeshColor(pedestal, c[1] * 0.6, c[2] * 0.6, c[3] * 0.6, 1.0)
+            ffe.setMeshSpecular(pedestal, 0.6, 0.6, 0.6, 64)
         end
     end
 end
@@ -642,7 +676,7 @@ end
 local SPAWN_Y = 1.5
 Player.create(0, SPAWN_Y, -12, cesiumMesh)
 Camera.setPosition(0, SPAWN_Y + 2, -12)
-Camera.setYawPitch(0, 25)  -- Elevated view showing courtyard, fountain, walls
+Camera.setYawPitch(180, 25)  -- Camera behind (south), looking north into courtyard toward fountain
 
 if HUD then
     HUD.showPrompt("The Courtyard -- Find the Ancient Artifact", 4.0)

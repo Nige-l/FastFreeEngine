@@ -61,8 +61,8 @@ end
 ffe.setLightDirection(0, -1, 0.2)       -- overhead light
 if softwareRenderer then
     -- Cranked lighting so underground geometry is clearly visible on llvmpipe
-    ffe.setLightColor(1.0, 0.9, 0.7)
-    ffe.setAmbientColor(0.45, 0.38, 0.3)
+    ffe.setLightColor(1.0, 0.95, 0.75)
+    ffe.setAmbientColor(0.50, 0.42, 0.35)
 else
     ffe.setLightColor(0.8, 0.6, 0.4)       -- warm/orange (torch-lit feel)
     ffe.setAmbientColor(0.08, 0.05, 0.03)  -- very dark ambient
@@ -164,8 +164,16 @@ createVisualBox(-8, 0.02, 0, 0.15, 0.02, 8,  0.4, 0.25, 0.15, 1.0)
 
 --------------------------------------------------------------------
 -- LAVA PIT: Red-orange glowing flat plane below floor level
+-- Multiple layers for visual depth and glow
 --------------------------------------------------------------------
-createVisualBox(0, -2.0, 0, 18, 0.3, 18, 1.0, 0.45, 0.1, 1.0)
+-- Base lava (deep red)
+createVisualBox(0, -2.5, 0, 18, 0.3, 18, 0.6, 0.15, 0.02, 1.0)
+-- Upper lava surface (bright orange-yellow)
+createVisualBox(0, -2.0, 0, 18, 0.2, 18, 1.0, 0.5, 0.1, 1.0)
+-- Lava hot spots (bright yellow patches for visual interest)
+createVisualBox(-5, -1.8, -4, 3, 0.1, 3, 1.0, 0.75, 0.2, 1.0)
+createVisualBox( 6, -1.8,  5, 2, 0.1, 2, 1.0, 0.8, 0.15, 1.0)
+createVisualBox( 0, -1.8,  7, 2.5, 0.1, 2, 1.0, 0.7, 0.25, 1.0)
 
 --------------------------------------------------------------------
 -- NARROW BRIDGES: 4 stone bridges crossing the lava
@@ -260,6 +268,24 @@ createVisualBox(-17, 3,  10, 0.6, 3, 0.6, 0.22, 0.2, 0.19, 1.0)
 createVisualBox( 17, 3,  10, 0.6, 3, 0.6, 0.22, 0.2, 0.19, 1.0)
 
 --------------------------------------------------------------------
+-- WALL TORCH SCONCES: Bright orange-yellow decorative geometry
+-- These are purely visual (no extra light slots needed, the lava
+-- and crystal lights provide plenty of illumination)
+--------------------------------------------------------------------
+local wallTorchPositions = {
+    { x = -17.5, y = 3.5, z = -5 },
+    { x = -17.5, y = 3.5, z =  5 },
+    { x =  17.5, y = 3.5, z = -5 },
+    { x =  17.5, y = 3.5, z =  5 },
+}
+for _, wt in ipairs(wallTorchPositions) do
+    -- Bracket
+    createVisualBox(wt.x, wt.y, wt.z, 0.12, 0.3, 0.12, 0.35, 0.25, 0.15, 1.0)
+    -- Bright flame tip
+    createVisualBox(wt.x, wt.y + 0.35, wt.z, 0.08, 0.1, 0.08, 1.0, 0.7, 0.15, 1.0)
+end
+
+--------------------------------------------------------------------
 -- CEILING: Dark flat plane above to enclose the space
 --------------------------------------------------------------------
 createVisualBox(0, 7, 0, 18, 0.3, 20, 0.18, 0.14, 0.13, 1.0)
@@ -302,9 +328,10 @@ for i, cd in ipairs(crystalData) do
         local cy = 1.0
         local crystal = ffe.createEntity3D(cubeMesh, cd.px, cy, cd.pz)
         if crystal ~= 0 then
-            ffe.setTransform3D(crystal, cd.px, cy, cd.pz, 0, 45, 0, 0.3, 0.5, 0.3)
-            ffe.setMeshColor(crystal, cd.cr, cd.cg, cd.cb, 1.0)
-            ffe.setMeshSpecular(crystal, 1.0, 1.0, 1.0, 128)
+            ffe.setTransform3D(crystal, cd.px, cy, cd.pz, 0, 45, 0, 0.35, 0.6, 0.35)
+            -- Brighter crystal color for visibility in the dark temple
+            ffe.setMeshColor(crystal, math.min(cd.cr * 1.3, 1.0), math.min(cd.cg * 1.3, 1.0), math.min(cd.cb * 1.3, 1.0), 1.0)
+            ffe.setMeshSpecular(crystal, 1.0, 1.0, 1.0, 256)
             local cdata = {
                 entity    = crystal,
                 pos       = { x = cd.px, y = cy, z = cd.pz },
@@ -324,10 +351,25 @@ for i, cd in ipairs(crystalData) do
         end
     end
 
-    -- Point light at crystal position (colored glow -- dim initially)
+    -- Point light at crystal position (colored glow -- brighter initial state)
     -- Point light slots 0-3 correspond to crystals 1-4
-    ffe.addPointLight(i - 1, cd.px, 1.5, cd.pz, cd.lr * 0.4, cd.lg * 0.4, cd.lb * 0.4, cd.radius * 0.5)
+    ffe.addPointLight(i - 1, cd.px, 1.5, cd.pz, cd.lr * 0.6, cd.lg * 0.6, cd.lb * 0.6, cd.radius * 0.7)
 end
+
+--------------------------------------------------------------------
+-- Additional point lights for dramatic temple atmosphere (slots 4-7)
+--------------------------------------------------------------------
+-- Slot 4: Deep red-orange glow from the lava pit below
+ffe.addPointLight(4, 0, -1.0, 0, 1.0, 0.35, 0.05, 18)
+
+-- Slot 5: Warm amber light at the south entrance archway
+ffe.addPointLight(5, 0, 3.0, -19, 0.9, 0.6, 0.2, 10)
+
+-- Slot 6: Dim gold glow on the central altar (artifact highlight)
+ffe.addPointLight(6, 0, 2.5, 0, 1.0, 0.85, 0.3, 8)
+
+-- Slot 7: Purple glow at the north exit portal (dormant but visible)
+ffe.addPointLight(7, 0, 3.0, 19, 0.4, 0.15, 0.6, 8)
 
 --------------------------------------------------------------------
 -- CRYSTAL PUZZLE STATE
@@ -761,7 +803,7 @@ end)
 --------------------------------------------------------------------
 Player.create(0, 1.5, -13, cubeMesh)
 Camera.setPosition(0, 2.5, -13)
-Camera.setYawPitch(0, 22)  -- Elevated view showing altar, crystals, lava pit
+Camera.setYawPitch(180, 28)  -- Camera behind (south), looking north toward altar, lava, crystals
 
 if HUD then
     HUD.showPrompt("The Temple -- Activate the crystals to open the portal", 5.0)
