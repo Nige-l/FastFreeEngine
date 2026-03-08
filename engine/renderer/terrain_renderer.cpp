@@ -40,16 +40,6 @@ static glm::mat4 buildTerrainModelMatrix(const Transform3D& t) {
     return m;
 }
 
-// Helper: select LOD level for a chunk based on camera distance.
-// Returns the LOD index (0 = highest detail, lodCount-1 = lowest).
-static u32 selectLod(const TerrainChunkGpu& chunk, const TerrainLodConfig& lodConfig,
-                     const glm::vec3& cameraPos) {
-    const f32 dist = glm::length(cameraPos - chunk.center);
-    u32 lod = 0;
-    if (dist > lodConfig.lodDistances[0] && chunk.lodCount > 1) { lod = 1; }
-    if (dist > lodConfig.lodDistances[1] && chunk.lodCount > 2) { lod = 2; }
-    return std::min(lod, chunk.lodCount - 1);
-}
 
 void terrainRenderSystem(World& world, const Camera& camera3d,
                          const ShadowConfig& shadowCfg, const ShadowMap& shadowMap,
@@ -233,6 +223,14 @@ void terrainRenderSystem(World& world, const Camera& camera3d,
         const glm::mat4 model = buildTerrainModelMatrix(transform3d);
         const glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(model)));
 
+        // Compute the world-space translation of this terrain entity so that
+        // frustum culling and LOD distance tests use correct world-space AABBs.
+        // Terrain chunk AABBs are stored in local (uncentred) mesh space; applying
+        // the model translation converts them to world space.
+        // For terrain the model matrix is always a pure translation (identity
+        // rotation, unit scale), so extracting the translation column is exact.
+        const glm::vec3 modelTranslation = glm::vec3(model[3]);
+
         // Decide which shader path: TERRAIN (splat map) or MESH_BLINN_PHONG (fallback)
         const bool useSplatMap = rhi::isValid(asset->material.splatTexture) &&
                                  rhi::isValid(terrainShader);
@@ -341,11 +339,18 @@ void terrainRenderSystem(World& world, const Camera& camera3d,
                 const TerrainChunkGpu& chunk = asset->chunks[ci];
                 if (chunk.lodCount == 0) { continue; }
 
-                // Frustum cull
-                if (!isAABBVisible(frustum, chunk.aabbMin, chunk.aabbMax)) { continue; }
+                // Frustum cull using world-space AABB (offset by model translation)
+                const glm::vec3 wsMin = chunk.aabbMin + modelTranslation;
+                const glm::vec3 wsMax = chunk.aabbMax + modelTranslation;
+                if (!isAABBVisible(frustum, wsMin, wsMax)) { continue; }
 
-                // LOD selection based on distance
-                const u32 lodIdx = selectLod(chunk, asset->lodConfig, camera3d.position);
+                // LOD selection: compute distance from camera to world-space chunk centre
+                const glm::vec3 wsCenter = chunk.center + modelTranslation;
+                const f32 lodDist = glm::length(camera3d.position - wsCenter);
+                u32 lodIdx = 0;
+                if (lodDist > asset->lodConfig.lodDistances[0] && chunk.lodCount > 1) { lodIdx = 1; }
+                if (lodDist > asset->lodConfig.lodDistances[1] && chunk.lodCount > 2) { lodIdx = 2; }
+                lodIdx = std::min(lodIdx, chunk.lodCount - 1);
                 const TerrainChunkLod& lod = chunk.lods[lodIdx];
                 if (lod.vaoId == 0 || lod.indexCount == 0) { continue; }
 
@@ -391,11 +396,18 @@ void terrainRenderSystem(World& world, const Camera& camera3d,
                 const TerrainChunkGpu& chunk = asset->chunks[ci];
                 if (chunk.lodCount == 0) { continue; }
 
-                // Frustum cull
-                if (!isAABBVisible(frustum, chunk.aabbMin, chunk.aabbMax)) { continue; }
+                // Frustum cull using world-space AABB (offset by model translation)
+                const glm::vec3 wsMin = chunk.aabbMin + modelTranslation;
+                const glm::vec3 wsMax = chunk.aabbMax + modelTranslation;
+                if (!isAABBVisible(frustum, wsMin, wsMax)) { continue; }
 
-                // LOD selection based on distance
-                const u32 lodIdx = selectLod(chunk, asset->lodConfig, camera3d.position);
+                // LOD selection: compute distance from camera to world-space chunk centre
+                const glm::vec3 wsCenter = chunk.center + modelTranslation;
+                const f32 lodDist = glm::length(camera3d.position - wsCenter);
+                u32 lodIdx = 0;
+                if (lodDist > asset->lodConfig.lodDistances[0] && chunk.lodCount > 1) { lodIdx = 1; }
+                if (lodDist > asset->lodConfig.lodDistances[1] && chunk.lodCount > 2) { lodIdx = 2; }
+                lodIdx = std::min(lodIdx, chunk.lodCount - 1);
                 const TerrainChunkLod& lod = chunk.lods[lodIdx];
                 if (lod.vaoId == 0 || lod.indexCount == 0) { continue; }
 

@@ -226,6 +226,8 @@ namespace test {
     void simulateGamepadButton(i32 id, GamepadButton btn, bool pressed);
     void simulateGamepadAxis(i32 id, GamepadAxis axis, f32 value);
     void simulateGamepadConnect(i32 id, bool connected);
+    // Simulate the window gaining or losing focus (triggers pending-capture retry).
+    void simulateWindowFocus(bool focused);
 } // namespace test
 #endif
 

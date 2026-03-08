@@ -790,11 +790,12 @@ void Application::render(const float alpha) {
 
     if (usePostProcess) {
         // Redirect scene rendering to the HDR FBO.
-        // beginSceneCapture clears the HDR FBO, so we still need beginFrame
-        // to reset pipeline state (depth mask etc.) but NOT clear the default FB
-        // since we will overwrite it entirely during executePostProcessing.
+        // beginSceneCapture clears the HDR FBO using the user-set ClearColor so
+        // the background/sky is visible when no skybox is loaded.
+        // We still call beginFrame to reset pipeline state (depth mask etc.) but
+        // NOT to clear the default FB — that is overwritten by executePostProcessing.
         rhi::beginFrame({cc.r, cc.g, cc.b, 1.0f});
-        renderer::beginSceneCapture();
+        renderer::beginSceneCapture(cc.r, cc.g, cc.b);
     } else {
         rhi::beginFrame({cc.r, cc.g, cc.b, 1.0f});
     }

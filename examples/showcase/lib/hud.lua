@@ -125,24 +125,9 @@ function HUD.draw(playerHealth, maxHealth, artifactCount, totalArtifacts, levelN
         end
     end
 
-    -- Crosshair (center screen) -- shows attack feedback
-    local crosshairSize = 8
-    local cx = math.floor(sw / 2)
-    local cy = math.floor(sh / 2)
-
-    -- Attack flash: crosshair turns red-orange briefly when swinging
-    local chR, chG, chB, chA = 0.8, 0.8, 0.8, 0.5  -- default: subtle grey
-    if Combat and Combat.isSwinging and Combat.isSwinging() then
-        chR, chG, chB, chA = 1.0, 0.5, 0.1, 0.9  -- attack flash: orange
-    end
-
-    -- Draw crosshair: 4 small rects forming a + shape
-    ffe.drawRect(cx - 1, cy - crosshairSize, 2, crosshairSize * 2, chR, chG, chB, chA)
-    ffe.drawRect(cx - crosshairSize, cy - 1, crosshairSize * 2, 2, chR, chG, chB, chA)
-
     -- Controls hint (bottom bar) -- fit text to screen width
     ffe.drawRect(0, sh - 28, sw, 28, 0, 0, 0, 0.4)
-    local controlsText = "WASD:Move  Mouse:Look  LMB:Attack  Space:Jump  E:Interact  Esc:Pause"
+    local controlsText = "WASD:Move  Mouse:Look  LMB/F:Attack  Space:Jump  E:Interact  Esc:Pause"
     if ffe.isGamepadConnected and ffe.isGamepadConnected(0) then
         controlsText = "LStick:Move  RStick:Look  A:Jump  X:Attack  Y:Interact  Start:Pause"
     end

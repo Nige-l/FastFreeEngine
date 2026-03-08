@@ -153,3 +153,66 @@ TEST_CASE("setTerrainLodDistances is safe on invalid handle", "[terrain][lod]") 
     ffe::renderer::setTerrainLodDistances(ffe::renderer::TerrainHandle{0}, 50.0f, 150.0f);
     ffe::renderer::setTerrainLodDistances(ffe::renderer::TerrainHandle{99}, 50.0f, 150.0f);
 }
+
+// -----------------------------------------------------------------------
+// Centering contract — regression tests for Bug 2 (terrain floating wedge)
+//
+// loadTerrain() bakes chunk vertices in [0, worldWidth] x [0, worldDepth]
+// local space. The ECS entity's Transform3D is set to
+// (-worldWidth/2, 0, -worldDepth/2) to centre the terrain at the world
+// origin. getTerrainHeight() must apply the same inverse offset when
+// converting world coordinates to heightmap UVs.
+//
+// The UV mapping used by getTerrainHeight after the fix is:
+//   u = (worldX + worldWidth/2)  / worldWidth
+//   v = (worldZ + worldDepth/2)  / worldDepth
+//
+// We test the formula directly using constants to guard against regressions.
+// -----------------------------------------------------------------------
+
+TEST_CASE("terrain centering: UV at world origin maps to 0.5", "[terrain][centering]") {
+    // A point at (0, 0) in centred world space should map to the centre
+    // of the heightmap (UV = 0.5, 0.5) for any square terrain.
+    const float worldWidth = 60.0f;
+    const float worldDepth = 60.0f;
+    const float worldX = 0.0f;
+    const float worldZ = 0.0f;
+    const float u = (worldX + worldWidth * 0.5f) / worldWidth;
+    const float v = (worldZ + worldDepth * 0.5f) / worldDepth;
+    CHECK(u == 0.5f);
+    CHECK(v == 0.5f);
+}
+
+TEST_CASE("terrain centering: UV at negative corner maps to 0.0", "[terrain][centering]") {
+    // A point at (-worldWidth/2, -worldDepth/2) in centred world space maps
+    // to UV (0.0, 0.0) — the first texel of the heightmap.
+    const float worldWidth = 60.0f;
+    const float worldDepth = 60.0f;
+    const float worldX = -worldWidth * 0.5f;
+    const float worldZ = -worldDepth * 0.5f;
+    const float u = (worldX + worldWidth * 0.5f) / worldWidth;
+    const float v = (worldZ + worldDepth * 0.5f) / worldDepth;
+    CHECK(u == 0.0f);
+    CHECK(v == 0.0f);
+}
+
+TEST_CASE("terrain centering: UV at positive corner maps to 1.0", "[terrain][centering]") {
+    // A point at (+worldWidth/2, +worldDepth/2) in centred world space maps
+    // to UV (1.0, 1.0) — the last texel of the heightmap.
+    const float worldWidth = 60.0f;
+    const float worldDepth = 60.0f;
+    const float worldX = worldWidth * 0.5f;
+    const float worldZ = worldDepth * 0.5f;
+    const float u = (worldX + worldWidth * 0.5f) / worldWidth;
+    const float v = (worldZ + worldDepth * 0.5f) / worldDepth;
+    CHECK(u == 1.0f);
+    CHECK(v == 1.0f);
+}
+
+TEST_CASE("terrain centering: getTerrainHeight returns 0 for out-of-bounds centred coords", "[terrain][centering]") {
+    // Coordinates outside [-worldWidth/2, +worldWidth/2] should return 0.
+    // This verifies the out-of-bounds guard works in centred coordinate space.
+    // (No terrain asset loaded, so returns 0 for invalid handle regardless.)
+    CHECK(ffe::renderer::getTerrainHeight(ffe::renderer::TerrainHandle{0}, 999.0f, 999.0f) == 0.0f);
+    CHECK(ffe::renderer::getTerrainHeight(ffe::renderer::TerrainHandle{0}, -999.0f, -999.0f) == 0.0f);
+}

@@ -329,7 +329,7 @@ void resizePostProcessing(const i32 width, const i32 height) {
     FFE_LOG_INFO("PostProcess", "Post-processing resized to %dx%d", width, height);
 }
 
-void beginSceneCapture() {
+void beginSceneCapture(const f32 clearR, const f32 clearG, const f32 clearB) {
     if (!s_initialised) return;
 
     // If MSAA is active, bind the MSAA FBO; otherwise bind the regular HDR FBO.
@@ -341,8 +341,11 @@ void beginSceneCapture() {
 
     // Clear the HDR FBO (color + depth) so we start fresh each frame.
     // Ensure depth write is enabled before clearing (may be disabled by 2D restore).
+    // Use the caller-supplied background color so the sky/background is visible when
+    // no skybox is loaded. Previously hard-coded to black, which caused black sky on
+    // real hardware with post-processing enabled.
     glDepthMask(GL_TRUE);
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClearColor(clearR, clearG, clearB, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 

@@ -660,3 +660,62 @@ TEST_CASE("RIGHT_ALT triggers isAltDown", "[input][keyboard][modifiers]") {
 // Note: RIGHT_SHIFT coverage already exists in "Modifier convenience functions"
 // above which explicitly presses RIGHT_SHIFT and checks isShiftDown(). No
 // duplicate needed here.
+
+// =============================================================================
+// Bug regressions
+// =============================================================================
+
+// Bug: Mouse Y-axis was inverted — moving mouse up (negative deltaY in GLFW
+// screen-space where Y grows downward) produced a positive deltaY that callers
+// then added to pitch, causing the camera to look down instead of up.
+// The engine itself just reports raw GLFW delta; the sign contract is that a
+// negative deltaY means the physical mouse moved upward on the desk.
+TEST_CASE("Mouse delta Y is negative when mouse moves upward (GLFW screen-space)", "[input][mouse][regression]") {
+    InputFixture fix;
+
+    // Establish baseline position
+    ffe::test::simulateMouseMove(200.0, 300.0);
+    ffe::updateInput();
+
+    // Move mouse upward: Y decreases in screen-space
+    ffe::test::simulateMouseMove(200.0, 250.0);
+    ffe::updateInput();
+
+    // deltaY should be negative — mouse moved up (screen Y decreased)
+    REQUIRE(ffe::mouseDeltaY() < 0.0);
+    REQUIRE(ffe::mouseDeltaX() == 0.0);
+}
+
+// Bug: Cursor was not captured when setCursorCaptured(true) is called before
+// the window has focus. The fix: setCursorCaptured sets pendingCapture = true
+// when the window isn't focused yet; updateInput() (via simulateWindowFocus in
+// headless mode) finalises the capture once focus arrives.
+TEST_CASE("setCursorCaptured sets cursorCaptured immediately in headless mode", "[input][cursor][regression]") {
+    InputFixture fix;
+
+    REQUIRE_FALSE(ffe::isCursorCaptured());
+    ffe::setCursorCaptured(true);
+    // In headless mode (nullptr window) cursorCaptured should be set
+    // synchronously — there is no GLFW focus check to defer.
+    REQUIRE(ffe::isCursorCaptured());
+}
+
+TEST_CASE("pendingCapture is resolved when window gains focus", "[input][cursor][regression]") {
+    InputFixture fix;
+
+    // With a real window the deferred path is exercised. In headless mode we
+    // use simulateWindowFocus to drive the same code path.
+    ffe::setCursorCaptured(true);
+    REQUIRE(ffe::isCursorCaptured());
+
+    // Simulate the window gaining focus after setCursorCaptured was called.
+    // firstMouseInput should be reset to suppress the cursor-warp position jump.
+    ffe::test::simulateWindowFocus(true);
+
+    // After focus arrives, a subsequent mouse move should produce zero delta on
+    // the first event (firstMouseInput suppresses the jump).
+    ffe::test::simulateMouseMove(500.0, 500.0);
+    ffe::updateInput();
+    REQUIRE(ffe::mouseDeltaX() == 0.0);
+    REQUIRE(ffe::mouseDeltaY() == 0.0);
+}

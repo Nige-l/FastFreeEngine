@@ -53,7 +53,7 @@ function Camera.update(dt)
     local dy = ffe.getMouseDeltaY()
 
     yaw   = yaw   + dx * MOUSE_SENSITIVITY
-    pitch = pitch + dy * MOUSE_SENSITIVITY
+    pitch = pitch - dy * MOUSE_SENSITIVITY  -- negate: GLFW Y grows downward, so negative dy = mouse up = look up
 
     -- Gamepad: right stick for camera orbit (with dead-zone)
     if ffe.isGamepadConnected(0) then
@@ -66,7 +66,7 @@ function Camera.update(dt)
         if math.abs(ry) < DEAD_ZONE then ry = 0 end
 
         yaw   = yaw   + rx * GAMEPAD_SENSITIVITY * dt
-        pitch = pitch + ry * GAMEPAD_SENSITIVITY * dt
+        pitch = pitch - ry * GAMEPAD_SENSITIVITY * dt  -- negate: stick up = negative ry = look up
     end
 
     -- Clamp pitch

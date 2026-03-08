@@ -204,8 +204,11 @@ function Player.update(dt)
         ffe.log("[Player] Jump!")
     end
 
-    -- Attack: left mouse button, or Gamepad X button
+    -- Attack: left mouse button, F key (fallback when cursor not captured), or Gamepad X button
+    -- LMB uses the latched isMousePressed API (correct for Session 101 engine fix).
+    -- F key provides a reliable fallback until mouse capture is confirmed working.
     local wantAttack = ffe.isMousePressed(ffe.MOUSE_LEFT)
+                    or ffe.isKeyPressed(ffe.KEY_F)
     if ffe.isGamepadConnected(0) then
         wantAttack = wantAttack or ffe.isGamepadButtonPressed(0, ffe.GAMEPAD_X)
     end

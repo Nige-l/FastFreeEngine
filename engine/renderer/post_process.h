@@ -53,7 +53,10 @@ void resizePostProcessing(i32 width, i32 height);
 
 /// Bind the HDR FBO so the scene renders into it instead of the default framebuffer.
 /// Call at the start of the render pass (before meshRenderSystem / skybox / 2D).
-void beginSceneCapture();
+/// clearR/G/B: background color used to clear the HDR FBO (linear space, [0, 1]).
+/// Matches the user-set ClearColor so the sky/background is visible when no skybox
+/// is loaded. Previously hard-coded to black, which caused black sky on real hardware.
+void beginSceneCapture(f32 clearR, f32 clearG, f32 clearB);
 
 /// Run the post-process chain: bloom extract -> blur -> composite + tone map + gamma.
 /// Outputs to the default framebuffer (FBO 0).

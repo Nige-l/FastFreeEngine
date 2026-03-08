@@ -34,6 +34,11 @@ struct MouseState {
     bool releasedThisTick[MAX_MOUSE_BUTTONS];
     bool cursorCaptured = false;
     bool firstMouseInput = true;
+    // Deferred cursor capture: set to true when setCursorCaptured(true) is called
+    // but the window does not yet have focus (GLFW requires focus before CURSOR_DISABLED
+    // takes effect on some platforms, e.g. X11/Wayland). updateInput() retries the
+    // capture each tick until the window gains focus.
+    bool pendingCapture = false;
 };
 
 struct InputBinding {
@@ -278,6 +283,19 @@ void updateInput() {
     g_mouse.prevX  = g_mouse.x;
     g_mouse.prevY  = g_mouse.y;
 
+    // 5b. Deferred cursor capture retry: if setCursorCaptured(true) was called
+    // before the window had focus (e.g. on X11/Wayland), apply the mode now
+    // that the window may have gained focus.
+    if (g_mouse.pendingCapture && g_window != nullptr
+        && glfwGetWindowAttrib(g_window, GLFW_FOCUSED)) {
+        glfwSetInputMode(g_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        if (glfwRawMouseMotionSupported()) {
+            glfwSetInputMode(g_window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
+        }
+        g_mouse.pendingCapture = false;
+        g_mouse.firstMouseInput = true; // suppress cursor-warp jump
+    }
+
     // 6. Scroll delta
     g_mouse.scrollX = g_pendingScrollX;
     g_mouse.scrollY = g_pendingScrollY;
@@ -443,11 +461,22 @@ void setCursorCaptured(const bool captured) {
     if (g_window == nullptr) return;
 
     if (captured) {
-        glfwSetInputMode(g_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-        if (glfwRawMouseMotionSupported()) {
-            glfwSetInputMode(g_window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
+        // Request focus first. On X11/Wayland the focus grant may be
+        // asynchronous, so we also set pendingCapture so that updateInput()
+        // retries every tick until glfwGetWindowAttrib confirms GLFW_FOCUSED.
+        glfwFocusWindow(g_window);
+        if (glfwGetWindowAttrib(g_window, GLFW_FOCUSED)) {
+            glfwSetInputMode(g_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+            if (glfwRawMouseMotionSupported()) {
+                glfwSetInputMode(g_window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
+            }
+            g_mouse.pendingCapture = false;
+            g_mouse.firstMouseInput = true; // suppress jump after re-capture
+        } else {
+            g_mouse.pendingCapture = true;
         }
     } else {
+        g_mouse.pendingCapture = false;
         glfwSetInputMode(g_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
         glfwSetInputMode(g_window, GLFW_RAW_MOUSE_MOTION, GLFW_FALSE);
     }
@@ -694,6 +723,18 @@ void simulateGamepadConnect(const i32 id, const bool connected) {
         std::memset(g_gamepads[id].currentButtons, 0, sizeof(g_gamepads[id].currentButtons));
         std::memset(g_gamepads[id].axes, 0, sizeof(g_gamepads[id].axes));
         g_gamepads[id].name[0] = '\0';
+    }
+}
+
+void simulateWindowFocus(const bool focused) {
+    if (focused && g_mouse.pendingCapture) {
+        // In headless mode (no GLFW window) we directly apply the pending
+        // capture so tests can exercise the deferred-focus path.
+        g_mouse.pendingCapture = false;
+        g_mouse.firstMouseInput = true;
+        // cursorCaptured was already set true by setCursorCaptured().
+    } else if (!focused) {
+        // Nothing to do: pendingCapture is only cleared when focus arrives.
     }
 }
 

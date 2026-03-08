@@ -396,14 +396,14 @@ end
 -- Reset AI for fresh level load
 AI.reset()
 
--- Guardian 1: patrols east side (fox model -- menacing beast!)
+-- Guardian 1: patrols east side (cube stand-in -- fiery red enemy)
+-- Note: fox.glb renders as an unindexed mesh blob; use cube.glb instead.
 local guardian1 = 0
-if foxMesh ~= 0 then
+if cubeMesh ~= 0 then
     local gx, gy, gz = 10, 0.8, -5
-    guardian1 = ffe.createEntity3D(foxMesh, gx, gy, gz)
+    guardian1 = ffe.createEntity3D(cubeMesh, gx, gy, gz)
     if guardian1 ~= 0 then
-        -- Fox model is small; scale up to make it imposing
-        ffe.setTransform3D(guardian1, gx, gy, gz, 0, 0, 0, 0.03, 0.03, 0.03)
+        ffe.setTransform3D(guardian1, gx, gy, gz, 0, 0, 0, 1.4, 1.3, 1.4)
         ffe.setMeshColor(guardian1, 0.85, 0.25, 0.15, 1.0)  -- fiery red tint
         ffe.setMeshSpecular(guardian1, 0.4, 0.15, 0.15, 32)
         ffe.createPhysicsBody(guardian1, {
@@ -421,22 +421,17 @@ if foxMesh ~= 0 then
             { x = 15, y = 0.8, z =  10 },
         }, 80)
         AI.setEnemyColor(guardian1, 0.85, 0.25, 0.15, 1.0)  -- fiery red
-        -- Start walk animation if fox model has clips
-        local animCount = ffe.getAnimationCount3D(guardian1)
-        if animCount > 0 then
-            ffe.playAnimation3D(guardian1, 0, true)
-            ffe.setAnimationSpeed3D(guardian1, 1.2)
-        end
+        -- Cube has no animation clips; skip animation setup
     end
 end
 
--- Guardian 2: patrols west side (fox model)
+-- Guardian 2: patrols west side (cube stand-in -- fiery red enemy)
 local guardian2 = 0
-if foxMesh ~= 0 then
+if cubeMesh ~= 0 then
     local gx, gy, gz = -10, 0.8, 5
-    guardian2 = ffe.createEntity3D(foxMesh, gx, gy, gz)
+    guardian2 = ffe.createEntity3D(cubeMesh, gx, gy, gz)
     if guardian2 ~= 0 then
-        ffe.setTransform3D(guardian2, gx, gy, gz, 0, 0, 0, 0.03, 0.03, 0.03)
+        ffe.setTransform3D(guardian2, gx, gy, gz, 0, 0, 0, 1.4, 1.3, 1.4)
         ffe.setMeshColor(guardian2, 0.85, 0.25, 0.15, 1.0)  -- fiery red tint
         ffe.setMeshSpecular(guardian2, 0.4, 0.15, 0.15, 32)
         ffe.createPhysicsBody(guardian2, {
@@ -454,12 +449,7 @@ if foxMesh ~= 0 then
             { x = -15, y = 0.8, z = -10 },
         }, 80)
         AI.setEnemyColor(guardian2, 0.85, 0.25, 0.15, 1.0)  -- fiery red
-        -- Start walk animation if fox model has clips
-        local animCount = ffe.getAnimationCount3D(guardian2)
-        if animCount > 0 then
-            ffe.playAnimation3D(guardian2, 0, true)
-            ffe.setAnimationSpeed3D(guardian2, 1.2)
-        end
+        -- Cube has no animation clips; skip animation setup
     end
 end
 

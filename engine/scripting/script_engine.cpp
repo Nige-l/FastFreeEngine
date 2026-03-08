@@ -7297,7 +7297,15 @@ void ScriptEngine::registerEcsBindings() {
             const ffe::EntityId entityId = world->createEntity();
             auto& t3d = world->registry().emplace<ffe::Transform3D>(
                 static_cast<entt::entity>(entityId));
-            t3d.position = glm::vec3(0.0f, 0.0f, 0.0f);
+            // Centre the terrain at the world origin. The heightmap geometry is
+            // baked in [0, worldWidth] x [0, worldDepth] local space (chunks
+            // start at X=0, Z=0). Without this offset the terrain appears as a
+            // green wedge in the sky on real GPUs because the camera looks at
+            // (0,0,0) but the terrain spans only positive X/Z coordinates.
+            t3d.position = glm::vec3(
+                -cfg.worldWidth  * 0.5f,
+                0.0f,
+                -cfg.worldDepth  * 0.5f);
             t3d.scale    = glm::vec3(1.0f, 1.0f, 1.0f);
 
             ffe::Terrain terrainComp;

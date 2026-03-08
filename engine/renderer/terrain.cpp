@@ -613,9 +613,13 @@ f32 getTerrainHeight(const TerrainHandle handle, const f32 worldX, const f32 wor
     if (!asset.active) { return 0.0f; }
     if (asset.heightData == nullptr) { return 0.0f; }
 
-    // Map world coordinates to [0, 1] UV range
-    const f32 u = worldX / asset.config.worldWidth;
-    const f32 v = worldZ / asset.config.worldDepth;
+    // Map world coordinates to [0, 1] UV range.
+    // The terrain geometry is centred at the world origin: loadTerrain() sets the
+    // entity Transform3D to (-worldWidth/2, 0, -worldDepth/2) so the mesh spans
+    // [-worldWidth/2, +worldWidth/2] x [-worldDepth/2, +worldDepth/2] in world
+    // space. Height queries must apply the same inverse offset before sampling.
+    const f32 u = (worldX + asset.config.worldWidth  * 0.5f) / asset.config.worldWidth;
+    const f32 v = (worldZ + asset.config.worldDepth  * 0.5f) / asset.config.worldDepth;
 
     // Out-of-bounds check
     if (u < 0.0f || u > 1.0f || v < 0.0f || v > 1.0f) {

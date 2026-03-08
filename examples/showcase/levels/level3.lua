@@ -488,12 +488,13 @@ totalArtifacts = 1  -- only the main artifact is needed for game.lua tracking
 AI.reset()
 
 -- Guardian 1 (NE platform): regular, 80 HP
+-- Note: fox.glb renders as an unindexed mesh blob; use cube.glb instead.
 local guardian1 = 0
-if foxMesh ~= 0 then
+if cubeMesh ~= 0 then
     local gx, gy, gz = 10, 3.8, -8
-    guardian1 = ffe.createEntity3D(foxMesh, gx, gy, gz)
+    guardian1 = ffe.createEntity3D(cubeMesh, gx, gy, gz)
     if guardian1 ~= 0 then
-        ffe.setTransform3D(guardian1, gx, gy, gz, 0, 0, 0, 0.03, 0.03, 0.03)
+        ffe.setTransform3D(guardian1, gx, gy, gz, 0, 0, 0, 1.4, 1.3, 1.4)
         ffe.setMeshColor(guardian1, 0.9, 0.4, 0.15, 1.0)  -- orange-red sunset tint
         ffe.setMeshSpecular(guardian1, 0.4, 0.2, 0.1, 32)
         ffe.createPhysicsBody(guardian1, {
@@ -511,22 +512,17 @@ if foxMesh ~= 0 then
             { x =  9,  y = 3.8, z = -7 },
         }, 80)
         AI.setEnemyColor(guardian1, 0.9, 0.4, 0.15, 1.0)  -- orange-red sunset tint
-        -- Start walk animation if fox model has clips
-        local animCount = ffe.getAnimationCount3D(guardian1)
-        if animCount > 0 then
-            ffe.playAnimation3D(guardian1, 0, true)
-            ffe.setAnimationSpeed3D(guardian1, 1.2)
-        end
+        -- Cube has no animation clips; skip animation setup
     end
 end
 
 -- Guardian 2 (NW platform): regular, 80 HP
 local guardian2 = 0
-if foxMesh ~= 0 then
+if cubeMesh ~= 0 then
     local gx, gy, gz = -10, 4.8, -8
-    guardian2 = ffe.createEntity3D(foxMesh, gx, gy, gz)
+    guardian2 = ffe.createEntity3D(cubeMesh, gx, gy, gz)
     if guardian2 ~= 0 then
-        ffe.setTransform3D(guardian2, gx, gy, gz, 0, 0, 0, 0.03, 0.03, 0.03)
+        ffe.setTransform3D(guardian2, gx, gy, gz, 0, 0, 0, 1.4, 1.3, 1.4)
         ffe.setMeshColor(guardian2, 0.9, 0.4, 0.15, 1.0)
         ffe.setMeshSpecular(guardian2, 0.4, 0.2, 0.1, 32)
         ffe.createPhysicsBody(guardian2, {
@@ -544,21 +540,17 @@ if foxMesh ~= 0 then
             { x = -11, y = 4.8, z = -7 },
         }, 80)
         AI.setEnemyColor(guardian2, 0.9, 0.4, 0.15, 1.0)  -- orange-red sunset tint
-        local animCount = ffe.getAnimationCount3D(guardian2)
-        if animCount > 0 then
-            ffe.playAnimation3D(guardian2, 0, true)
-            ffe.setAnimationSpeed3D(guardian2, 1.2)
-        end
+        -- Cube has no animation clips; skip animation setup
     end
 end
 
 -- Guardian 3 (SW platform): tough, 120 HP
 local guardian3 = 0
-if foxMesh ~= 0 then
+if cubeMesh ~= 0 then
     local gx, gy, gz = -11, 5.8, 7
-    guardian3 = ffe.createEntity3D(foxMesh, gx, gy, gz)
+    guardian3 = ffe.createEntity3D(cubeMesh, gx, gy, gz)
     if guardian3 ~= 0 then
-        ffe.setTransform3D(guardian3, gx, gy, gz, 0, 0, 0, 0.035, 0.035, 0.035)
+        ffe.setTransform3D(guardian3, gx, gy, gz, 0, 0, 0, 1.6, 1.4, 1.6)
         ffe.setMeshColor(guardian3, 0.8, 0.3, 0.1, 1.0)  -- darker, meaner
         ffe.setMeshSpecular(guardian3, 0.5, 0.25, 0.1, 48)
         ffe.createPhysicsBody(guardian3, {
@@ -576,22 +568,18 @@ if foxMesh ~= 0 then
             { x = -12, y = 5.8, z =  8 },
         }, 120)
         AI.setEnemyColor(guardian3, 0.8, 0.3, 0.1, 1.0)  -- darker orange
-        local animCount = ffe.getAnimationCount3D(guardian3)
-        if animCount > 0 then
-            ffe.playAnimation3D(guardian3, 0, true)
-            ffe.setAnimationSpeed3D(guardian3, 1.0)
-        end
+        -- Cube has no animation clips; skip animation setup
     end
 end
 
 -- Guardian 4 (central arena): BOSS, 200 HP, larger, gold tint
 local bossGuardian = 0
-if foxMesh ~= 0 then
+if cubeMesh ~= 0 then
     local gx, gy, gz = 4, 0.8, 4
-    bossGuardian = ffe.createEntity3D(foxMesh, gx, gy, gz)
+    bossGuardian = ffe.createEntity3D(cubeMesh, gx, gy, gz)
     if bossGuardian ~= 0 then
         -- 1.5x scale compared to regular guardians
-        ffe.setTransform3D(bossGuardian, gx, gy, gz, 0, 0, 0, 0.045, 0.045, 0.045)
+        ffe.setTransform3D(bossGuardian, gx, gy, gz, 0, 0, 0, 2.1, 1.95, 2.1)
         -- Gold tint: the ancient summit guardian
         ffe.setMeshColor(bossGuardian, 1.0, 0.8, 0.2, 1.0)
         ffe.setMeshSpecular(bossGuardian, 0.9, 0.7, 0.3, 64)
@@ -610,11 +598,7 @@ if foxMesh ~= 0 then
             { x =  4, y = 0.8, z = -4 },
         }, 200)
         AI.setEnemyColor(bossGuardian, 1.0, 0.8, 0.2, 1.0)  -- gold boss tint
-        local animCount = ffe.getAnimationCount3D(bossGuardian)
-        if animCount > 0 then
-            ffe.playAnimation3D(bossGuardian, 0, true)
-            ffe.setAnimationSpeed3D(bossGuardian, 0.8)  -- boss is slower, more menacing
-        end
+        -- Cube has no animation clips; skip animation setup
     end
 end
 
