@@ -49,7 +49,7 @@
 
 | Session | Summary |
 |---------|---------|
-| 111 | Phase 10 M1 Prefab System -- PrefabSystem (JSON load, ECS instantiate, override, security hardening), 3 Lua bindings (loadPrefab, instantiatePrefab, unloadPrefab), 21 tests (1451 total, Clang-18 + GCC-13 FULL). Screenshot pipeline fixes (xdotool, real-display, camera angle). Process discipline additions (director). |
+| 111 | Phase 10 M1 Prefab System -- PrefabSystem (JSON load, ECS instantiate, override, security hardening), 3 Lua bindings (loadPrefab, instantiatePrefab, unloadPrefab), 21 tests (1451 total, Clang-18 + GCC-13 FULL). Screenshot pipeline fixes (xdotool, real-display, camera angle, setCommandLineArgs argv). Process discipline additions (director). 2 commits (066f496, f460525). |
 | 110 | Phase 9 M6 Water Rendering -- WaterManager, reflection FBO (half-res), Fresnel blend, animated UV scroll, 4 Lua bindings (createWaterSurface, destroyWaterSurface, setWaterScrollSpeed, setWaterFresnelParams), 21 new tests (1430 total). Level 1 water surface. Phase 9 COMPLETE. Process: multi-instance parallelism, PM pre-plan rule, selective screenshots, examples-map.md, agent-quickref.md. |
 | 109 | Phase 9 M5 Vegetation -- GPU-instanced billboard grass (256/chunk) + tree placement (512 trees), VEGETATION shader (GLSL 330, alpha-test, distance fade), 4 Lua bindings, 27 new tests (1406 total). Showcase Levels 1+3 updated. PM pre-plans-ahead pattern encoded. |
 | 108 | Phase 9 M4 World Streaming -- ChunkState machine, background worker thread, main-thread GL upload, dirty-distance gating, 2 Lua bindings, 20 new tests (1379 total). Showcase camera Y clamp fix. Multi-instance parallelism documented. |

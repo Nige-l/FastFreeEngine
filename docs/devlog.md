@@ -51,9 +51,15 @@ Skipped. No demo code changes required for Prefab M1 — prefabs are not yet use
 
 - **Mesh path-to-handle resolution gap:** `MeshLoader` does not expose a `findHandleByPath` method. Mesh components instantiated from prefabs receive an invalid handle and must be resolved manually by the game script after instantiation. Deferred to backlog — requires `MeshLoader` API extension in a future session.
 
+### Session Close
+
+Both Session 111 commits pushed to origin/main:
+- `066f496` — feat(core): Phase 10 M1 — Prefab System (engine, tests, ADR, docs, README, process)
+- `f460525` — fix(renderer): restore full-size screenshots + script_engine argv + process additions (screenshots 58KB + 189KB confirmed, setCommandLineArgs wired, director round-2 process rules)
+
 ### Next Session Goal
 
-**Phase 10 M2 — Visual Scripting:** Node-based graph editor as alternative to Lua. Visual scripting nodes for common game logic patterns (see ROADMAP.md Phase 10 M2).
+**Phase 10 M2 — Visual Scripting:** Node-based graph editor as alternative to Lua. Visual scripting nodes for common game logic patterns (see ROADMAP.md Phase 10 M2). Session 112 begins immediately.
 
 ---
 
