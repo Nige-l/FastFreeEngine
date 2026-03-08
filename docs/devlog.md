@@ -3,6 +3,56 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-08 — Session 106: Real-Hardware Bug Fixes Round 3
+
+### Summary
+
+Session 106 addressed the remaining real-hardware issues surfaced after Session 105. Four targeted fixes were applied to the showcase demo scripts and the two renderer/scripting context files. No engine C++ was modified — all fixes were in Lua and documentation.
+
+The camera mouse-axis flip (`FLIP_BOTH=true`) negates both dx and dy, resolving inverted look behaviour on Wayland compositors where GLFW reports raw delta signs opposite to X11 conventions. Terrain spawn height is now computed dynamically: `level1.lua` and `level3.lua` call `getTerrainHeight` at the player's spawn XZ coordinates and add 2.5 m, so the player always spawns above the terrain surface regardless of heightmap variation. The player attack now has three input triggers (LMB, `isKeyPressed(KEY_F)`, and `isKeyHeld(KEY_F)`), making the attack reliably accessible whether or not cursor capture is active. Combat debug log lines that fired every attack frame were removed following a performance-critic MINOR finding. Both `.context.md` files were updated: `scripting/.context.md` gained a full Terrain section with coordinate convention documentation, and `renderer/.context.md` clarified the centred-world-coordinate contract for `getTerrainHeight`.
+
+### Delivered
+
+**Demo fixes (Lua):**
+
+- **examples/showcase/lib/camera.lua** — `FLIP_BOTH=true` now negates both dx and dy. Fixes inverted horizontal and vertical look on Wayland.
+- **examples/showcase/levels/level1.lua** + **level3.lua** — Player spawn Y is now `getTerrainHeight(SPAWN_X, SPAWN_Z) + 2.5` instead of a hardcoded constant. Player spawns cleanly above terrain on any heightmap.
+- **examples/showcase/lib/player.lua** — `isKeyHeld(KEY_F)` added as a third attack fallback alongside LMB and `isKeyPressed(KEY_F)`. Ensures attack always works regardless of cursor capture state.
+- **examples/showcase/lib/combat.lua** — Per-frame attack debug log lines removed (perf-critic MINOR fix).
+
+**Documentation:**
+
+- **engine/scripting/.context.md** — New Terrain section added: `loadTerrain`, `getTerrainHeight`, `setTerrainLayer`, `setTerrainSplatMap`, `setTerrainTriplanar`, `setTerrainLodDistances`. Coordinate convention (centred world space, terrain origin at world (0,0,0)) documented.
+- **engine/renderer/.context.md** — `getTerrainHeight` coordinate convention clarified: input XZ must be in centred world coordinates.
+
+### Files Modified
+
+- `examples/showcase/lib/camera.lua`
+- `examples/showcase/levels/level1.lua`
+- `examples/showcase/levels/level3.lua`
+- `examples/showcase/lib/player.lua`
+- `examples/showcase/lib/combat.lua`
+- `engine/scripting/.context.md`
+- `engine/renderer/.context.md`
+
+### Reviews
+
+- No C++ changes — no performance or security review required.
+- Documentation reviewed inline by api-designer.
+
+### Build
+
+- No engine changes — build count unchanged at 1358 tests.
+
+### Known Issues Status
+
+- Mouse axis flip applied — awaiting user confirmation on Wayland.
+- Terrain spawn height now dynamic — player should consistently spawn above terrain.
+- Attack has three input triggers — reliable regardless of cursor capture state.
+- Fox.glb guardians rendering correctly since Session 105.
+
+---
+
 ## 2026-03-08 — Session 105: Keyboard Input Latch + fox.glb Mesh Fix
 
 ### Summary
