@@ -3,6 +3,90 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-08 — Session 99: Demo Visual Enrichment
+
+### Summary
+
+Session 99 enriched the Echoes of the Ancients showcase with additional point lights, decorative props, and improved camera angles across all three levels. Level 1 gained torch flame tips, gem pedestals, a larger fountain statue, and 4 new point lights. Level 2 added a 3-layer lava system, wall torch sconces, brighter crystals, and 4 new lights. Level 3 added brazier geometry on platforms, gem pedestals, and 5 new lights. All levels now clean up all 8 point light slots on transitions. Screenshots retaken with dramatically improved visual quality (10-20x larger file sizes reflecting actual scene content).
+
+### Delivered
+
+- **Level 1 enrichment** -- flame tip geometry on torches, larger fountain statue, gem pedestals, 4 additional point lights (fountain, entrance, wall, gem), camera faces into courtyard
+- **Level 2 enrichment** -- 3-layer lava system (dark/bright/surface), wall torch sconces, brighter crystals, 4 additional lights (lava pit, entrance, altar, exit portal), camera faces altar
+- **Level 3 enrichment** -- brazier geometry on platforms, gem pedestals, 5 additional lights, camera faces central arena
+- **Light cleanup** -- all levels clean up all 8 point light slots on level transitions
+- **Retaken screenshots** -- showcase_level1/2/3.png and showcase_menu.png, now showing full scene geometry and lighting
+
+### Files Modified (12)
+
+- `examples/showcase/game.lua` (point light cleanup on level transitions)
+- `examples/showcase/levels/level1.lua` (flame tips, pedestals, lights, camera)
+- `examples/showcase/levels/level2.lua` (lava layers, sconces, lights, camera)
+- `examples/showcase/levels/level3.lua` (braziers, pedestals, lights, camera)
+- `docs/screenshots/showcase_level1.png` (retaken)
+- `docs/screenshots/showcase_level2.png` (retaken)
+- `docs/screenshots/showcase_level3.png` (retaken)
+- `docs/screenshots/showcase_menu.png` (retaken)
+- `website/docs/assets/screenshots/showcase_level1.png` (synced)
+- `website/docs/assets/screenshots/showcase_level2.png` (synced)
+- `website/docs/assets/screenshots/showcase_level3.png` (synced)
+- `website/docs/assets/screenshots/showcase_menu.png` (synced)
+
+### Reviews
+
+- Skipped (demo visual polish session, Lua-only changes, no engine modifications)
+
+### Build
+
+- No build this session (Lua-only changes)
+
+### game-dev-tester
+
+- Skipped (visual enrichment of existing demo, no new API)
+
+---
+
+## 2026-03-08 — Session 98: Screenshot Visual Quality Tuning
+
+### Summary
+
+Session 98 tuned the software renderer rendering paths for better screenshot quality. Fog distances were pushed out significantly (60-200 units) so level geometry is visible rather than fog-obscured. Material colors, ambient light, and ground planes were brightened for the llvmpipe software renderer. Camera spawn positions were adjusted to face interesting level geometry in each level. All 4 showcase screenshots retaken.
+
+### Delivered
+
+- **Fog distance tuning** -- pushed fog distances out (60-200) across all levels so geometry is visible on software renderer
+- **Material/ambient brightening** -- brighter material colors, ambient light, and ground plane colors for llvmpipe path
+- **Camera angle improvements** -- Level 1 faces courtyard (walls, pillars, fox guardian visible), Level 2 faces altar (pillars, crystal puzzle), Level 3 faces floating platforms and bridge
+- **Retaken screenshots** -- all 4 showcase screenshots with visible level geometry
+
+### Files Modified (11)
+
+- `examples/showcase/levels/level1.lua` (fog, materials, camera)
+- `examples/showcase/levels/level2.lua` (fog, materials, camera)
+- `examples/showcase/levels/level3.lua` (fog, materials, camera)
+- `docs/screenshots/showcase_level1.png` (retaken)
+- `docs/screenshots/showcase_level2.png` (retaken)
+- `docs/screenshots/showcase_level3.png` (retaken)
+- `docs/screenshots/showcase_menu.png` (retaken)
+- `website/docs/assets/screenshots/showcase_level1.png` (synced)
+- `website/docs/assets/screenshots/showcase_level2.png` (synced)
+- `website/docs/assets/screenshots/showcase_level3.png` (synced)
+- `website/docs/assets/screenshots/showcase_menu.png` (synced)
+
+### Reviews
+
+- Skipped (demo visual tuning session, Lua-only changes, no engine modifications)
+
+### Build
+
+- No build this session (Lua-only changes)
+
+### game-dev-tester
+
+- Skipped (screenshot quality tuning, no new API)
+
+---
+
 ## 2026-03-07 — Session 97: Software Renderer Detection + Screenshot Fixes
 
 ### Summary
