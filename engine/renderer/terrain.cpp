@@ -5,8 +5,12 @@
 // MESH_BLINN_PHONG shader for rendering.
 //
 // All GPU resources are allocated at load time (cold path). No per-frame
-// allocations. Height queries are O(1) via bilinear interpolation on retained
-// height data.
+// allocations on the main thread hot path. Height queries are O(1) via bilinear
+// interpolation on retained height data.
+//
+// M4 streaming: when setTerrainStreamingRadius() is called, a background worker
+// thread generates CPU mesh data for chunks entering the camera radius, and
+// terrain_renderer.cpp uploads them on the main thread (all GL calls on main thread).
 //
 // Security:
 //   - PNG path validated via isPathSafe() + realpath (same as texture_loader).
@@ -27,6 +31,12 @@
 #include <cstring>
 #include <climits>
 #include <sys/stat.h>
+
+#include <algorithm>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <atomic>
 
 // stb_image: header-only include. STB_IMAGE_IMPLEMENTATION is in texture_loader.cpp.
 // Suppress warnings for the C library header.
@@ -131,72 +141,59 @@ static f32 sampleHeight(const float* data, const u32 w, const u32 h,
 // Chunk mesh generation
 // ---------------------------------------------------------------------------
 
-// Generate vertices and indices for a single LOD level of a terrain chunk.
-// lodRes is the vertex resolution at this LOD level (e.g., 64 for LOD 0, 32 for LOD 1).
-// Returns false on GPU upload failure.
-// outMinY / outMaxY are updated with the min/max Y values found (for AABB computation).
-static bool generateChunkLod(TerrainChunkLod& lod,
-                              const float* heightData, const u32 dataW, const u32 dataH,
-                              const TerrainConfig& cfg,
-                              const u32 chunkX, const u32 chunkZ,
-                              const u32 lodRes,
-                              f32& outMinY, f32& outMaxY) {
-    const u32 vertexCount = lodRes * lodRes;
-    const u32 quadCount = (lodRes - 1) * (lodRes - 1);
-    const u32 indexCount = quadCount * 6; // 2 triangles per quad, 3 indices each
+// Pure-CPU helper: fill vertex and index arrays for a single LOD of a terrain chunk.
+// No GL calls. Called from both the eager load path (main thread) and the streaming
+// worker thread (background thread). outMinY / outMaxY track Y extents for AABB.
+static void buildChunkLodArrays(
+        std::vector<float>& outVertices, std::vector<uint32_t>& outIndices,
+        const float* heightData, const u32 dataW, const u32 dataH,
+        const TerrainConfig& cfg,
+        const u32 chunkX, const u32 chunkZ,
+        const u32 lodRes,
+        f32& outMinY, f32& outMaxY) {
 
-    // Compute world-space bounds for this chunk
-    const f32 chunkWorldW = cfg.worldWidth / static_cast<f32>(cfg.chunkCountX);
-    const f32 chunkWorldD = cfg.worldDepth / static_cast<f32>(cfg.chunkCountZ);
+    const u32 vertexCount = lodRes * lodRes;
+    const u32 quadCount   = (lodRes - 1) * (lodRes - 1);
+    const u32 indexCount  = quadCount * 6;
+
+    // Each MeshVertex is 8 floats: px, py, pz, nx, ny, nz, u, v
+    outVertices.resize(static_cast<size_t>(vertexCount) * 8);
+    outIndices.resize(static_cast<size_t>(indexCount));
+
+    const f32 chunkWorldW  = cfg.worldWidth  / static_cast<f32>(cfg.chunkCountX);
+    const f32 chunkWorldD  = cfg.worldDepth  / static_cast<f32>(cfg.chunkCountZ);
     const f32 chunkOriginX = static_cast<f32>(chunkX) * chunkWorldW;
     const f32 chunkOriginZ = static_cast<f32>(chunkZ) * chunkWorldD;
 
-    // Allocate temporary vertex and index arrays (cold-path heap allocation)
-    auto vertices = std::make_unique<rhi::MeshVertex[]>(vertexCount);
-    auto indices  = std::make_unique<u32[]>(indexCount);
-
-    // Generate vertices
     for (u32 vz = 0; vz < lodRes; ++vz) {
         for (u32 vx = 0; vx < lodRes; ++vx) {
             const u32 vi = vz * lodRes + vx;
 
-            // World position within chunk
             const f32 localX = (static_cast<f32>(vx) / static_cast<f32>(lodRes - 1)) * chunkWorldW;
             const f32 localZ = (static_cast<f32>(vz) / static_cast<f32>(lodRes - 1)) * chunkWorldD;
             const f32 worldX = chunkOriginX + localX;
             const f32 worldZ = chunkOriginZ + localZ;
 
-            // Normalized UV over the full terrain
             const f32 u = worldX / cfg.worldWidth;
             const f32 v = worldZ / cfg.worldDepth;
 
-            // Sample height
             const f32 heightVal = sampleHeight(heightData, dataW, dataH, u, v);
-            const f32 worldY = heightVal * cfg.heightScale;
-
-            vertices[vi].px = worldX;
-            vertices[vi].py = worldY;
-            vertices[vi].pz = worldZ;
-            vertices[vi].u  = u;
-            vertices[vi].v  = v;
+            const f32 worldY    = heightVal * cfg.heightScale;
 
             if (worldY < outMinY) { outMinY = worldY; }
             if (worldY > outMaxY) { outMaxY = worldY; }
 
-            // Compute normal via finite differences
             const f32 cellSizeX = chunkWorldW / static_cast<f32>(lodRes - 1);
             const f32 cellSizeZ = chunkWorldD / static_cast<f32>(lodRes - 1);
+            const f32 uStep     = cellSizeX / cfg.worldWidth;
+            const f32 vStep     = cellSizeZ / cfg.worldDepth;
 
-            // Sample neighbors for central differences (forward/backward at edges)
             f32 hLeft  = 0.0f;
             f32 hRight = 0.0f;
             f32 hDown  = 0.0f;
             f32 hUp    = 0.0f;
             f32 dxScale = 2.0f;
             f32 dzScale = 2.0f;
-
-            const f32 uStep = cellSizeX / cfg.worldWidth;
-            const f32 vStep = cellSizeZ / cfg.worldDepth;
 
             if (u - uStep >= 0.0f && u + uStep <= 1.0f) {
                 hLeft  = sampleHeight(heightData, dataW, dataH, u - uStep, v);
@@ -225,22 +222,26 @@ static bool generateChunkLod(TerrainChunkLod& lod,
             }
 
             const f32 dx = (hRight - hLeft) * cfg.heightScale;
-            const f32 dz = (hUp - hDown) * cfg.heightScale;
-
+            const f32 dz = (hUp - hDown)    * cfg.heightScale;
             glm::vec3 normal{
                 -dx,
-                dxScale * cellSizeX + dzScale * cellSizeZ,  // Approximation of 2*cellSize
+                dxScale * cellSizeX + dzScale * cellSizeZ,
                 -dz
             };
             normal = glm::normalize(normal);
 
-            vertices[vi].nx = normal.x;
-            vertices[vi].ny = normal.y;
-            vertices[vi].nz = normal.z;
+            const size_t base = static_cast<size_t>(vi) * 8;
+            outVertices[base + 0] = worldX;
+            outVertices[base + 1] = worldY;
+            outVertices[base + 2] = worldZ;
+            outVertices[base + 3] = normal.x;
+            outVertices[base + 4] = normal.y;
+            outVertices[base + 5] = normal.z;
+            outVertices[base + 6] = u;
+            outVertices[base + 7] = v;
         }
     }
 
-    // Generate indices (two triangles per quad)
     u32 idx = 0;
     for (u32 iz = 0; iz < lodRes - 1; ++iz) {
         for (u32 ix = 0; ix < lodRes - 1; ++ix) {
@@ -248,22 +249,41 @@ static bool generateChunkLod(TerrainChunkLod& lod,
             const u32 topRight    = iz * lodRes + ix + 1;
             const u32 bottomLeft  = (iz + 1) * lodRes + ix;
             const u32 bottomRight = (iz + 1) * lodRes + ix + 1;
-
-            // Triangle 1
-            indices[idx++] = topLeft;
-            indices[idx++] = bottomLeft;
-            indices[idx++] = topRight;
-
-            // Triangle 2
-            indices[idx++] = topRight;
-            indices[idx++] = bottomLeft;
-            indices[idx++] = bottomRight;
+            outIndices[idx++] = topLeft;
+            outIndices[idx++] = bottomLeft;
+            outIndices[idx++] = topRight;
+            outIndices[idx++] = topRight;
+            outIndices[idx++] = bottomLeft;
+            outIndices[idx++] = bottomRight;
         }
     }
+}
+
+// Generate vertices and indices for a single LOD level of a terrain chunk.
+// lodRes is the vertex resolution at this LOD level (e.g., 64 for LOD 0, 32 for LOD 1).
+// Returns false on GPU upload failure.
+// outMinY / outMaxY are updated with the min/max Y values found (for AABB computation).
+static bool generateChunkLod(TerrainChunkLod& lod,
+                              const float* heightData, const u32 dataW, const u32 dataH,
+                              const TerrainConfig& cfg,
+                              const u32 chunkX, const u32 chunkZ,
+                              const u32 lodRes,
+                              f32& outMinY, f32& outMaxY) {
+    // Build CPU arrays using the shared pure-CPU helper
+    std::vector<float>    vertices;
+    std::vector<uint32_t> indices;
+    buildChunkLodArrays(vertices, indices,
+                        heightData, dataW, dataH,
+                        cfg, chunkX, chunkZ, lodRes,
+                        outMinY, outMaxY);
+
+    const u32 vertexCount = lodRes * lodRes;
+    const u32 indexCount  = static_cast<u32>(indices.size());
 
     // --- GPU upload ---
+    // Each vertex is 8 floats (MeshVertex layout: px,py,pz,nx,ny,nz,u,v = 32 bytes)
     const u64 vboSize = static_cast<u64>(vertexCount) * sizeof(rhi::MeshVertex);
-    const u64 iboSize = static_cast<u64>(indexCount) * sizeof(u32);
+    const u64 iboSize = static_cast<u64>(indexCount)  * sizeof(u32);
 
     glGenVertexArrays(1, &lod.vaoId);
     glGenBuffers(1, &lod.vboId);
@@ -274,7 +294,7 @@ static bool generateChunkLod(TerrainChunkLod& lod,
     // VBO
     glBindBuffer(GL_ARRAY_BUFFER, lod.vboId);
     glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(vboSize),
-                 vertices.get(), GL_STATIC_DRAW);
+                 vertices.data(), GL_STATIC_DRAW);
 
     // Check for GPU OOM
     {
@@ -311,7 +331,7 @@ static bool generateChunkLod(TerrainChunkLod& lod,
     // IBO
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, lod.iboId);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, static_cast<GLsizeiptr>(iboSize),
-                 indices.get(), GL_STATIC_DRAW);
+                 indices.data(), GL_STATIC_DRAW);
 
     // Check for GPU OOM on IBO
     {
@@ -486,6 +506,12 @@ TerrainHandle loadTerrain(const float* heightData, const u32 dataWidth, const u3
         }
     }
 
+    // M4: initialize all chunk stream states to EAGER (streaming disabled by default)
+    for (u32 ci = 0; ci < totalChunks; ++ci) {
+        asset.chunkStream[ci].state.store(ChunkState::EAGER);
+    }
+    asset.streamConfig = TerrainStreamingConfig{};
+
     asset.active = true;
 
     FFE_LOG_INFO("terrain", "Loaded terrain: %ux%u heightmap, %ux%u chunks, res=%u, handle=%u",
@@ -584,9 +610,27 @@ void unloadTerrain(const TerrainHandle handle) {
     TerrainAsset& asset = s_terrains[handle.id - 1];
     if (!asset.active) { return; }
 
+    // M4: Stop worker thread before freeing GL resources to avoid use-after-free.
+    if (asset.workerRunning.load()) {
+        asset.workerRunning.store(false);
+        asset.queueCV.notify_all();
+        if (asset.workerThread.joinable()) {
+            asset.workerThread.join();
+        }
+    }
+    {
+        std::lock_guard<std::mutex> lock(asset.queueMutex);
+        asset.workQueue.clear();
+    }
+
     for (u32 i = 0; i < asset.chunkCount; ++i) {
         destroyChunk(asset.chunks[i]);
+        // Reset stream state
+        asset.chunkStream[i].state.store(ChunkState::EAGER);
+        asset.chunkStream[i].cpuVertices.clear();
+        asset.chunkStream[i].cpuIndices.clear();
     }
+    asset.streamConfig = TerrainStreamingConfig{};
     asset.heightData.reset();
     asset.active = false;
     asset.chunkCount = 0;
@@ -726,16 +770,482 @@ TerrainHandle getFirstActiveTerrain() {
 // Internal accessors for terrain_renderer.cpp
 // ---------------------------------------------------------------------------
 
-// These functions are declared in terrain_renderer.cpp as extern or we make
-// them accessible via a shared internal header. For simplicity, we expose them
-// with internal linkage via a namespace-scope function.
-
 const TerrainAsset* getTerrainAsset(const TerrainHandle handle) {
     if (!isValid(handle)) { return nullptr; }
     if (handle.id > MAX_TERRAIN_ASSETS) { return nullptr; }
     const TerrainAsset& asset = s_terrains[handle.id - 1];
     if (!asset.active) { return nullptr; }
     return &asset;
+}
+
+TerrainAsset* getTerrainAssetMut(const TerrainHandle handle) {
+    if (!isValid(handle)) { return nullptr; }
+    if (handle.id > MAX_TERRAIN_ASSETS) { return nullptr; }
+    TerrainAsset& asset = s_terrains[handle.id - 1];
+    if (!asset.active) { return nullptr; }
+    return &asset;
+}
+
+// ---------------------------------------------------------------------------
+// M4: Streaming implementation
+// ---------------------------------------------------------------------------
+
+// Generate ALL LOD levels for a streaming chunk into ChunkStreamState CPU buffers.
+// Called ONLY from the worker thread -- no GL calls permitted here.
+// The worker fills cpuVertices (LOD 0 only for streaming -- lowest-overhead path:
+// one GL upload per chunk). For simplicity streaming uses LOD 0 only; LOD
+// selection reverts to EAGER chunks when streaming is disabled.
+static void generateChunkMeshCpu(const TerrainAsset& asset,
+                                  const u32 chunkX, const u32 chunkZ,
+                                  ChunkStreamState& cs) {
+    const TerrainConfig& cfg = asset.config;
+    const u32 baseRes = cfg.chunkResolution;
+
+    static constexpr u32 MIN_LOD_RES = 4;
+    const u32 lodRes[MAX_LOD_LEVELS] = {
+        baseRes,
+        (baseRes / 2 >= MIN_LOD_RES) ? baseRes / 2 : MIN_LOD_RES,
+        (baseRes / 4 >= MIN_LOD_RES) ? baseRes / 4 : MIN_LOD_RES,
+    };
+
+    u32 lodCount = 1;
+    if (lodRes[1] < lodRes[0]) { lodCount = 2; }
+    if (lodCount == 2 && lodRes[2] < lodRes[1]) { lodCount = 3; }
+
+    // We encode all LOD levels into a single flat buffer with a header per LOD.
+    // Layout: [lodCount (u32)] [lod0_vertexCount (u32)] [lod0_indexCount (u32)]
+    //         [lod0 vertex floats] [lod0 index u32s]
+    //         [lod1_vertexCount (u32)] [lod1_indexCount (u32)]
+    //         [lod1 vertex floats] [lod1 index u32s]
+    //         ... etc.
+    // This avoids multiple allocations. The upload path decodes the same layout.
+
+    // We'll use separate per-LOD vectors in ChunkStreamState for clarity.
+    // cpuVertices layout: [lodCount][lod0_vcount][lod0_icount][lod0 verts 8f each][lod0 idx u32 as float pairs...
+    // Actually simpler: store a flat encoding. Let's use cpuVertices for
+    // all vertex floats concatenated (LOD0 first, then LOD1, ...) and cpuIndices
+    // for all index u32s concatenated, with sizes stored in the first few floats/u32s.
+
+    // Format chosen:
+    //   cpuVertices[0]   = float(lodCount)
+    //   cpuVertices[1]   = float(lod0_vertexCount)   (number of MeshVertex structs)
+    //   cpuVertices[2]   = float(lod1_vertexCount)   (0 if unused)
+    //   cpuVertices[3]   = float(lod2_vertexCount)   (0 if unused)
+    //   cpuVertices[4..] = lod0 vertices (8 floats each), lod1, lod2
+    //   cpuIndices[0]    = lod0_indexCount
+    //   cpuIndices[1]    = lod1_indexCount (0 if unused)
+    //   cpuIndices[2]    = lod2_indexCount (0 if unused)
+    //   cpuIndices[3..]  = lod0 indices, lod1, lod2
+
+    cs.cpuVertices.clear();
+    cs.cpuIndices.clear();
+
+    // Reserve header
+    cs.cpuVertices.resize(4, 0.0f); // [lodCount, vcount0, vcount1, vcount2]
+    cs.cpuIndices.resize(3, 0);     // [icount0, icount1, icount2]
+
+    cs.cpuVertices[0] = static_cast<float>(lodCount);
+
+    f32 minY =  1e30f;
+    f32 maxY = -1e30f;
+
+    for (u32 li = 0; li < lodCount; ++li) {
+        std::vector<float>    verts;
+        std::vector<uint32_t> idxs;
+        buildChunkLodArrays(verts, idxs,
+                            asset.heightData.get(),
+                            asset.heightDataWidth, asset.heightDataHeight,
+                            cfg, chunkX, chunkZ, lodRes[li],
+                            minY, maxY);
+
+        const u32 vc = lodRes[li] * lodRes[li];
+        cs.cpuVertices[1 + li] = static_cast<float>(vc);
+        cs.cpuIndices[li]      = static_cast<uint32_t>(idxs.size());
+
+        cs.cpuVertices.insert(cs.cpuVertices.end(), verts.begin(), verts.end());
+        cs.cpuIndices.insert(cs.cpuIndices.end(),   idxs.begin(),  idxs.end());
+    }
+
+    // Store AABB and center in cpuVertices tail (after all vertex data) for
+    // extraction by the main-thread upload path.
+    // Append: [minY, maxY, originX, originZ, chunkWorldW, chunkWorldD, lodCount_repeated]
+    // (lodCount already stored at index 0)
+    const f32 chunkWorldW  = cfg.worldWidth  / static_cast<f32>(cfg.chunkCountX);
+    const f32 chunkWorldD  = cfg.worldDepth  / static_cast<f32>(cfg.chunkCountZ);
+    const f32 chunkOriginX = static_cast<f32>(chunkX) * chunkWorldW;
+    const f32 chunkOriginZ = static_cast<f32>(chunkZ) * chunkWorldD;
+
+    cs.cpuVertices.push_back(minY);
+    cs.cpuVertices.push_back(maxY);
+    cs.cpuVertices.push_back(chunkOriginX);
+    cs.cpuVertices.push_back(chunkOriginZ);
+    cs.cpuVertices.push_back(chunkWorldW);
+    cs.cpuVertices.push_back(chunkWorldD);
+}
+
+// Upload a READY_TO_UPLOAD chunk to the GPU. Main thread only.
+// Decodes the buffer layout written by generateChunkMeshCpu.
+static void uploadStreamedChunk(TerrainAsset& asset, const u32 chunkIdx,
+                                 const u32 chunkX, const u32 chunkZ) {
+    ChunkStreamState& cs = asset.chunkStream[chunkIdx];
+    TerrainChunkGpu&  chunk = asset.chunks[chunkIdx];
+
+    if (cs.cpuVertices.size() < 4 || cs.cpuIndices.size() < 3) {
+        cs.state.store(ChunkState::UNLOADED);
+        return;
+    }
+
+    const u32 lodCount = static_cast<u32>(cs.cpuVertices[0]);
+    if (lodCount == 0 || lodCount > MAX_LOD_LEVELS) {
+        cs.state.store(ChunkState::UNLOADED);
+        return;
+    }
+
+    // Destroy any existing LODs for this chunk (e.g. re-entering radius)
+    destroyChunk(chunk);
+
+    // Decode header
+    const u32 vcounts[MAX_LOD_LEVELS] = {
+        static_cast<u32>(cs.cpuVertices[1]),
+        static_cast<u32>(cs.cpuVertices[2]),
+        static_cast<u32>(cs.cpuVertices[3]),
+    };
+    const u32 icounts[MAX_LOD_LEVELS] = {
+        cs.cpuIndices[0],
+        cs.cpuIndices[1],
+        cs.cpuIndices[2],
+    };
+
+    // Vertex data starts at offset 4 in cpuVertices (after 4-float header)
+    size_t vOffset = 4;
+    // Index data starts at offset 3 in cpuIndices (after 3-u32 header)
+    size_t iOffset = 3;
+
+    // Read AABB metadata from the tail of cpuVertices:
+    // [minY, maxY, originX, originZ, chunkWorldW, chunkWorldD]
+    // Tail starts 6 elements before end.
+    if (cs.cpuVertices.size() < 10) {
+        cs.state.store(ChunkState::UNLOADED);
+        return;
+    }
+    const size_t tailStart = cs.cpuVertices.size() - 6;
+    const f32 minY        = cs.cpuVertices[tailStart + 0];
+    const f32 maxY        = cs.cpuVertices[tailStart + 1];
+    const f32 chunkOriginX = cs.cpuVertices[tailStart + 2];
+    const f32 chunkOriginZ = cs.cpuVertices[tailStart + 3];
+    const f32 chunkWorldW  = cs.cpuVertices[tailStart + 4];
+    const f32 chunkWorldD  = cs.cpuVertices[tailStart + 5];
+
+    for (u32 li = 0; li < lodCount; ++li) {
+        const u32 vc = vcounts[li];
+        const u32 ic = icounts[li];
+        if (vc == 0 || ic == 0) { continue; }
+
+        const size_t vByteCount = static_cast<size_t>(vc) * sizeof(rhi::MeshVertex);
+        const size_t iByteCount = static_cast<size_t>(ic) * sizeof(u32);
+
+        // Bounds check
+        if (vOffset + vc * 8 > tailStart || iOffset + ic > cs.cpuIndices.size()) {
+            break;
+        }
+
+        TerrainChunkLod& lod = chunk.lods[li];
+
+        glGenVertexArrays(1, &lod.vaoId);
+        glGenBuffers(1, &lod.vboId);
+        glGenBuffers(1, &lod.iboId);
+
+        glBindVertexArray(lod.vaoId);
+
+        glBindBuffer(GL_ARRAY_BUFFER, lod.vboId);
+        glBufferData(GL_ARRAY_BUFFER,
+                     static_cast<GLsizeiptr>(vByteCount),
+                     cs.cpuVertices.data() + vOffset,
+                     GL_STATIC_DRAW);
+
+        {
+            const GLenum err = glGetError();
+            if (err != GL_NO_ERROR) {
+                FFE_LOG_ERROR("terrain", "streaming VBO upload failed (GL error 0x%X)", err);
+                glDeleteBuffers(1, &lod.vboId);
+                glDeleteBuffers(1, &lod.iboId);
+                glDeleteVertexArrays(1, &lod.vaoId);
+                lod.vaoId = 0; lod.vboId = 0; lod.iboId = 0;
+                glBindVertexArray(0);
+                break;
+            }
+        }
+
+        // Vertex attributes (MeshVertex: px,py,pz,nx,ny,nz,u,v = 32 bytes)
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE,
+                              static_cast<GLsizei>(sizeof(rhi::MeshVertex)),
+                              reinterpret_cast<const void*>(0));
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE,
+                              static_cast<GLsizei>(sizeof(rhi::MeshVertex)),
+                              reinterpret_cast<const void*>(12));
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE,
+                              static_cast<GLsizei>(sizeof(rhi::MeshVertex)),
+                              reinterpret_cast<const void*>(24));
+
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, lod.iboId);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+                     static_cast<GLsizeiptr>(iByteCount),
+                     cs.cpuIndices.data() + iOffset,
+                     GL_STATIC_DRAW);
+
+        {
+            const GLenum err = glGetError();
+            if (err != GL_NO_ERROR) {
+                FFE_LOG_ERROR("terrain", "streaming IBO upload failed (GL error 0x%X)", err);
+                glDeleteBuffers(1, &lod.vboId);
+                glDeleteBuffers(1, &lod.iboId);
+                glDeleteVertexArrays(1, &lod.vaoId);
+                lod.vaoId = 0; lod.vboId = 0; lod.iboId = 0;
+                glBindVertexArray(0);
+                break;
+            }
+        }
+
+        glBindVertexArray(0);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+        lod.indexCount = ic;
+        vOffset += static_cast<size_t>(vc) * 8;
+        iOffset += ic;
+        chunk.lodCount = li + 1;
+    }
+
+    // Set AABB and center
+    chunk.aabbMin = {chunkOriginX, minY, chunkOriginZ};
+    chunk.aabbMax = {chunkOriginX + chunkWorldW, maxY, chunkOriginZ + chunkWorldD};
+    chunk.center  = (chunk.aabbMin + chunk.aabbMax) * 0.5f;
+
+    // Free CPU buffers immediately after upload
+    cs.cpuVertices.clear();
+    cs.cpuVertices.shrink_to_fit();
+    cs.cpuIndices.clear();
+    cs.cpuIndices.shrink_to_fit();
+}
+
+// Worker thread loop: waits for work items, generates CPU mesh data, signals READY_TO_UPLOAD.
+// No GL calls -- pure CPU mesh generation only.
+static void terrainWorkerLoop(TerrainAsset* asset) {
+    while (asset->workerRunning.load()) {
+        ChunkCoord coord{};
+        {
+            std::unique_lock<std::mutex> lock(asset->queueMutex);
+            asset->queueCV.wait(lock, [asset] {
+                return !asset->workQueue.empty() || !asset->workerRunning.load();
+            });
+            if (!asset->workerRunning.load()) { break; }
+            if (asset->workQueue.empty()) { continue; }
+            coord = asset->workQueue.front();
+            asset->workQueue.pop_front();
+        }
+
+        const u32 chunkIdx = coord.z * asset->config.chunkCountX + coord.x;
+        if (chunkIdx >= MAX_CHUNKS_TOTAL) { continue; }
+
+        ChunkStreamState& cs = asset->chunkStream[chunkIdx];
+
+        // CAS: only proceed if still QUEUED
+        ChunkState expected = ChunkState::QUEUED;
+        if (!cs.state.compare_exchange_strong(expected, ChunkState::GENERATING)) {
+            // Stale request (e.g. chunk moved out of radius and was set to UNLOADED)
+            continue;
+        }
+
+        generateChunkMeshCpu(*asset, coord.x, coord.z, cs);
+
+        cs.state.store(ChunkState::READY_TO_UPLOAD);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// M4: Public streaming API
+// ---------------------------------------------------------------------------
+
+void setTerrainStreamingRadius(const TerrainHandle handle, const int radiusInChunks) {
+    if (!isValid(handle)) { return; }
+    if (handle.id > MAX_TERRAIN_ASSETS) { return; }
+
+    TerrainAsset& asset = s_terrains[handle.id - 1];
+    if (!asset.active) { return; }
+
+    if (radiusInChunks < 0) {
+        FFE_LOG_ERROR("terrain", "setTerrainStreamingRadius: radius must be >= 0");
+        return;
+    }
+
+    const int prevRadius = asset.streamConfig.radiusChunks;
+    asset.streamConfig.radiusChunks = radiusInChunks;
+
+    if (radiusInChunks == 0) {
+        // Disable streaming: stop worker, convert all UNLOADED/QUEUED/etc back to EAGER.
+        // For simplicity: signal worker to stop, join, then reload all chunks eagerly.
+        if (asset.workerRunning.load()) {
+            asset.workerRunning.store(false);
+            asset.queueCV.notify_all();
+            if (asset.workerThread.joinable()) {
+                asset.workerThread.join();
+            }
+        }
+        // Transition all non-EAGER chunks back: mark everything EAGER.
+        // Chunks that were LOADED stay on GPU (already have GL resources).
+        // Chunks that were UNLOADED need to be regenerated eagerly.
+        for (u32 ci = 0; ci < asset.chunkCount; ++ci) {
+            ChunkStreamState& cs = asset.chunkStream[ci];
+            const ChunkState st = cs.state.load();
+            if (st == ChunkState::LOADED) {
+                cs.state.store(ChunkState::EAGER);
+            } else if (st == ChunkState::UNLOADED || st == ChunkState::QUEUED ||
+                       st == ChunkState::GENERATING || st == ChunkState::READY_TO_UPLOAD ||
+                       st == ChunkState::UNLOADING) {
+                // Need to regenerate -- call generateChunk (main thread, has GL context)
+                const u32 cx = ci % asset.config.chunkCountX;
+                const u32 cz = ci / asset.config.chunkCountX;
+                destroyChunk(asset.chunks[ci]);
+                generateChunk(asset.chunks[ci], asset.heightData.get(),
+                               asset.heightDataWidth, asset.heightDataHeight,
+                               asset.config, cx, cz);
+                cs.state.store(ChunkState::EAGER);
+            }
+        }
+        return;
+    }
+
+    // Enabling (or changing radius):
+    // Set dirty threshold to 0.5 * chunkWorldSize so ticks skip tiny camera moves.
+    const f32 chunkWorldW = asset.config.worldWidth  / static_cast<f32>(asset.config.chunkCountX);
+    const f32 chunkWorldD = asset.config.worldDepth  / static_cast<f32>(asset.config.chunkCountZ);
+    asset.streamConfig.dirtyCamThreshold = 0.5f * std::min(chunkWorldW, chunkWorldD);
+
+    // Reset camera dirty tracking so we do an immediate tick next frame.
+    asset.streamConfig.lastCamX = 1e9f;
+    asset.streamConfig.lastCamZ = 1e9f;
+
+    // If streaming was previously disabled (all EAGER), transition all chunks to UNLOADED
+    // and destroy their GL resources so streaming can take over.
+    if (prevRadius == 0) {
+        for (u32 ci = 0; ci < asset.chunkCount; ++ci) {
+            ChunkStreamState& cs = asset.chunkStream[ci];
+            if (cs.state.load() == ChunkState::EAGER) {
+                // Free GL resources -- streaming will reload as needed
+                destroyChunk(asset.chunks[ci]);
+                cs.state.store(ChunkState::UNLOADED);
+            }
+        }
+    }
+
+    // Start worker thread if not already running
+    if (!asset.workerRunning.load()) {
+        asset.workerRunning.store(true);
+        asset.workerThread = std::thread(terrainWorkerLoop, &asset);
+    }
+
+    FFE_LOG_INFO("terrain", "setTerrainStreamingRadius: handle=%u radius=%d", handle.id, radiusInChunks);
+}
+
+int getTerrainLoadedChunkCount(const TerrainHandle handle) {
+    if (!isValid(handle)) { return 0; }
+    if (handle.id > MAX_TERRAIN_ASSETS) { return 0; }
+
+    const TerrainAsset& asset = s_terrains[handle.id - 1];
+    if (!asset.active) { return 0; }
+
+    int count = 0;
+    for (u32 ci = 0; ci < asset.chunkCount; ++ci) {
+        const ChunkState st = asset.chunkStream[ci].state.load();
+        if (st == ChunkState::EAGER || st == ChunkState::LOADED) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+// ---------------------------------------------------------------------------
+// M4: Per-frame streaming tick (called from terrain_renderer.cpp, main thread)
+// ---------------------------------------------------------------------------
+
+void terrainStreamingTick(TerrainAsset& asset, const f32 camX, const f32 camZ) {
+    if (asset.streamConfig.radiusChunks == 0) { return; }
+
+    // Gate: skip tick if camera hasn't moved enough
+    const f32 dx = camX - asset.streamConfig.lastCamX;
+    const f32 dz = camZ - asset.streamConfig.lastCamZ;
+    const f32 dist2 = dx * dx + dz * dz;
+    const f32 thresh = asset.streamConfig.dirtyCamThreshold;
+    if (dist2 < thresh * thresh) { return; }
+
+    asset.streamConfig.lastCamX = camX;
+    asset.streamConfig.lastCamZ = camZ;
+
+    const int radius = asset.streamConfig.radiusChunks;
+    const f32 chunkWorldW = asset.config.worldWidth  / static_cast<f32>(asset.config.chunkCountX);
+    const f32 chunkWorldD = asset.config.worldDepth  / static_cast<f32>(asset.config.chunkCountZ);
+
+    // Camera chunk coordinate (clamp to grid)
+    const int camCX = static_cast<int>(camX / chunkWorldW);
+    const int camCZ = static_cast<int>(camZ / chunkWorldD);
+
+    const int gridW = static_cast<int>(asset.config.chunkCountX);
+    const int gridD = static_cast<int>(asset.config.chunkCountZ);
+
+    for (u32 ci = 0; ci < asset.chunkCount; ++ci) {
+        const int cx = static_cast<int>(ci % asset.config.chunkCountX);
+        const int cz = static_cast<int>(ci / asset.config.chunkCountX);
+
+        // Chebyshev distance to camera chunk
+        const int chebyDist = std::max(std::abs(cx - camCX), std::abs(cz - camCZ));
+        const bool inRadius = (chebyDist <= radius) && (cx >= 0) && (cz >= 0) &&
+                              (cx < gridW) && (cz < gridD);
+
+        ChunkStreamState& cs = asset.chunkStream[ci];
+        const ChunkState st = cs.state.load();
+
+        if (inRadius) {
+            if (st == ChunkState::UNLOADED) {
+                // Transition to QUEUED and enqueue for worker
+                cs.state.store(ChunkState::QUEUED);
+                std::lock_guard<std::mutex> lock(asset.queueMutex);
+                asset.workQueue.push_back({static_cast<u32>(cx), static_cast<u32>(cz)});
+                asset.queueCV.notify_one();
+            }
+        } else {
+            // Out of radius
+            if (st == ChunkState::LOADED) {
+                cs.state.store(ChunkState::UNLOADING);
+                // Free GL objects immediately (main thread)
+                destroyChunk(asset.chunks[ci]);
+                cs.state.store(ChunkState::UNLOADED);
+            } else if (st == ChunkState::QUEUED) {
+                // Cancel: revert to UNLOADED so worker discards via CAS check
+                cs.state.store(ChunkState::UNLOADED);
+            }
+        }
+    }
+}
+
+// Per-frame upload pass: find READY_TO_UPLOAD chunks and upload them. Main thread only.
+void terrainUploadPendingChunks(TerrainAsset& asset) {
+    if (asset.streamConfig.radiusChunks == 0) { return; }
+
+    for (u32 ci = 0; ci < asset.chunkCount; ++ci) {
+        ChunkStreamState& cs = asset.chunkStream[ci];
+        ChunkState expected = ChunkState::READY_TO_UPLOAD;
+        if (cs.state.compare_exchange_strong(expected, ChunkState::LOADED)) {
+            const u32 cx = ci % asset.config.chunkCountX;
+            const u32 cz = ci / asset.config.chunkCountX;
+            // Upload only if GL context is available
+            if (glad_glGenVertexArrays != nullptr) {
+                uploadStreamedChunk(asset, ci, cx, cz);
+            }
+            // If no GL context (headless test), just mark LOADED with no VAOs
+        }
+    }
 }
 
 } // namespace ffe::renderer

@@ -26,6 +26,10 @@ local GAMEPAD_SENSITIVITY = 120  -- degrees per second for right stick
 local FOLLOW_SPEED     = 8.0     -- lerp speed for smooth follow
 local CAMERA_HEIGHT_OFFSET = 1.5 -- look slightly above player center
 
+-- Terrain clearance: when terrain-aware mode is on, clamp the camera
+-- so it never goes below terrain surface + this margin.
+local TERRAIN_CLEARANCE = 0.5
+
 --------------------------------------------------------------------
 -- State
 --------------------------------------------------------------------
@@ -35,6 +39,7 @@ local radius     = ORBIT_RADIUS
 local targetX    = 0.0       -- smoothed target position
 local targetY    = 0.0
 local targetZ    = 0.0
+local terrainAware = false   -- set true by levels that use terrain
 
 --------------------------------------------------------------------
 -- Camera.update(dt)
@@ -104,6 +109,31 @@ function Camera.update(dt)
         effectiveRadius = math.max(ORBIT_MIN_RADIUS, hitDist - buffer)
     end
 
+    -- Terrain-aware Y clamp: compute where the camera will actually be placed
+    -- and ensure it never dips into the terrain surface.
+    -- Engine orbit formula: camY = targetY + effectiveRadius * sin(pitch)
+    -- pitchRad is already computed above.
+    if terrainAware then
+        local camX = targetX + effectiveRadius * math.cos(pitchRad) * math.sin(yawRad)
+        local camY = targetY + effectiveRadius * math.sin(pitchRad)
+        local camZ = targetZ + effectiveRadius * math.cos(pitchRad) * math.cos(yawRad)
+        local groundY = ffe.getTerrainHeight(camX, camZ) or 0
+        local minCamY = groundY + TERRAIN_CLEARANCE
+        if camY < minCamY then
+            -- The camera dips below terrain. Increase the effective pitch until
+            -- the camera Y is above the minimum, but never exceed PITCH_MAX.
+            -- Solve: targetY + r*sin(p) >= minCamY  =>  sin(p) >= (minCamY - targetY)/r
+            local sinNeeded = (minCamY - targetY) / effectiveRadius
+            if sinNeeded <= 1.0 then
+                local pClamped = math.deg(math.asin(sinNeeded))
+                if pClamped > pitch then
+                    pitch = math.min(pClamped, PITCH_MAX)
+                    pitchRad = math.rad(pitch)
+                end
+            end
+        end
+    end
+
     -- Apply orbit camera
     ffe.set3DCameraOrbit(targetX, targetY, targetZ, effectiveRadius, yaw, pitch)
 end
@@ -139,6 +169,18 @@ end
 function Camera.setYawPitch(y, p)
     yaw   = y or yaw
     pitch = p or pitch
+end
+
+--------------------------------------------------------------------
+-- Camera.setTerrainAware(enabled)
+-- When true, the camera Y is clamped so it never dips below the
+-- terrain surface + TERRAIN_CLEARANCE (0.5m). Call this after
+-- ffe.loadTerrain() in any level that uses a terrain heightmap.
+-- Default is false (off) so non-terrain levels are unaffected.
+--------------------------------------------------------------------
+function Camera.setTerrainAware(enabled)
+    terrainAware = enabled and true or false
+    ffe.log("[Camera] terrainAware=" .. tostring(terrainAware))
 end
 
 ffe.log("[Camera] Module loaded")

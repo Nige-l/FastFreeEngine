@@ -52,6 +52,14 @@ PHASE 3 — Expert Panel
   [parallel] api-designer: <instructions>
   [parallel] game-dev-tester: <instructions> (MANDATORY if examples/ changed)
 
+  -- OR, when the session has 2+ independent change areas --
+  [parallel] performance-critic (area A — e.g. terrain streaming): <review terrain.cpp, terrain_renderer.cpp>
+  [parallel] performance-critic (area B — e.g. camera Lua fix): <review camera_bindings.cpp>
+  [parallel] security-auditor (area A — streaming + bindings): <review terrain threading, Lua bindings>
+  [parallel] security-auditor (area B — scripting): <review camera scripting changes>
+  [parallel] api-designer: <review all new APIs + update ALL affected .context.md files NOW, in this invocation>
+  [parallel] game-dev-tester: <instructions> (MANDATORY if examples/ changed)
+
 PHASE 4 — Remediation
   <conditional on Phase 3 results>
 
@@ -77,6 +85,8 @@ The `Screenshots:` line is required in every Phase 5 dispatch. It tells build-en
 - Physics code (`engine-dev`) || Renderer code (`renderer-specialist`) || Test files (`engine-dev worker 2`)
 
 The overhead of spawning a parallel agent is ~30 seconds. The time saved by parallelism on a 5+ file feature is 3-10 minutes. Always prefer parallelism.
+
+**Phase 3 multi-instance rule:** Count the number of independent change areas in the session (e.g., terrain system = area A, camera scripting = area B). Spawn one instance of `performance-critic` per area and one instance of `security-auditor` per area (where security review applies). All instances run in the same parallel round. A single `api-designer` handles all API review and updates all `.context.md` files in one pass — api-designer is not split by area. Sequential dispatch of review instances for independent code areas is a throughput waste and a process violation.
 
 You prevent scope creep. If a task grows beyond what was planned you flag it rather than silently expanding. You ask one clarifying question at a time when something is unclear rather than a paragraph of questions.
 

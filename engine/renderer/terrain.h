@@ -152,4 +152,20 @@ void setTerrainLodDistances(TerrainHandle handle, f32 lod1Distance, f32 lod2Dist
 // Returns TerrainHandle{0} if no terrains are loaded.
 TerrainHandle getFirstActiveTerrain();
 
+// --- Streaming (M4) ---
+
+// Enable background chunk streaming for a terrain.
+// radiusInChunks: Chebyshev distance (in chunk-grid coordinates) within which chunks
+//   are kept loaded. 0 disables streaming (all chunks remain EAGER -- default).
+// When enabled, all chunks outside the camera radius are evicted from GPU memory
+// and regenerated on demand as the camera moves.
+//
+// Must be called after loadTerrain(). Starts the background worker thread.
+// Cold path only -- do NOT call per frame.
+void setTerrainStreamingRadius(TerrainHandle handle, int radiusInChunks);
+
+// Get the number of chunks currently on the GPU (state EAGER or LOADED).
+// Used for debug/UI display and unit tests. O(chunkCount).
+int getTerrainLoadedChunkCount(TerrainHandle handle);
+
 } // namespace ffe::renderer

@@ -110,6 +110,9 @@ end
 -- Terrain: dramatic summit heightmap with mountain ring
 --------------------------------------------------------------------
 ffe.loadTerrain("terrain/summit_height.png", 60, 60, 12)
+-- Enable terrain-aware camera clamping so the orbit arc never dips
+-- into the summit terrain ring visible in the background (Bug 2 fix).
+if Camera then Camera.setTerrainAware(true) end
 
 --------------------------------------------------------------------
 -- Skybox: unload any previous skybox; use fog + background for sky
@@ -169,11 +172,14 @@ createStaticBox(0, -0.25, 0, 12, 0.25, 12, 0.55, 0.45, 0.35)
 -- Arena inner ring (slightly raised decorative center)
 createStaticBox(0, 0.05, 0, 3.5, 0.05, 3.5, 0.65, 0.55, 0.42)
 
--- Edge border walls for spatial reference (Bug 2)
-createStaticBox(0, 0.25, 30,  30, 0.25, 0.3,  0.3, 0.22, 0.18)
-createStaticBox(0, 0.25, -30, 30, 0.25, 0.3,  0.3, 0.22, 0.18)
-createStaticBox(30, 0.25, 0,  0.3, 0.25, 30,  0.3, 0.22, 0.18)
-createStaticBox(-30, 0.25, 0, 0.3, 0.25, 30,  0.3, 0.22, 0.18)
+-- Edge border walls: sunk well below the play area so they cannot
+-- appear in the camera FOV as stray geometry (Bug 3 fix).
+-- They remain as thin static physics walls to bound the play space,
+-- but at y=-2.0 they are invisible from the floating platform area.
+createStaticBox(0, -2.0, 30,  30, 0.25, 0.3,  0.3, 0.22, 0.18)
+createStaticBox(0, -2.0, -30, 30, 0.25, 0.3,  0.3, 0.22, 0.18)
+createStaticBox(30, -2.0, 0,  0.3, 0.25, 30,  0.3, 0.22, 0.18)
+createStaticBox(-30, -2.0, 0, 0.3, 0.25, 30,  0.3, 0.22, 0.18)
 
 --------------------------------------------------------------------
 -- ALTAR: Central raised platform for the final artifact

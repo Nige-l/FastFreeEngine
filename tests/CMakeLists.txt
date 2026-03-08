@@ -26,6 +26,7 @@ add_executable(ffe_tests
     renderer/test_texture_atlas.cpp
     renderer/test_rhi_vulkan.cpp
     renderer/test_terrain.cpp
+    renderer/test_terrain_streaming.cpp
     renderer/test_water.cpp
     renderer/test_frustum.cpp
 )
@@ -40,6 +41,11 @@ target_link_libraries(ffe_tests
 )
 
 target_compile_definitions(ffe_tests PRIVATE FFE_TEST)
+
+# test_terrain_streaming.cpp includes terrain_internal.h which pulls in glad/glad.h.
+# glad is linked PRIVATE into ffe_renderer so its include path does not propagate.
+# Add it explicitly so test_terrain_streaming.cpp can find <glad/glad.h>.
+target_include_directories(ffe_tests PRIVATE ${CMAKE_SOURCE_DIR}/third_party/glad/include)
 
 # When building with Vulkan backend, propagate SPIR-V compiled flag and include dirs
 # so that test_rhi_vulkan.cpp can find the generated shader headers.

@@ -116,6 +116,10 @@ void terrainRenderSystem(World& world, const Camera& camera3d,
                 rhi::setUniformMat4(shadowShader, "u_model", model);
 
                 for (u32 ci = 0; ci < asset->chunkCount; ++ci) {
+                    // M4: skip chunks not on GPU
+                    const ChunkState cst = asset->chunkStream[ci].state.load();
+                    if (cst != ChunkState::EAGER && cst != ChunkState::LOADED) { continue; }
+
                     const TerrainChunkGpu& chunk = asset->chunks[ci];
                     if (chunk.lodCount == 0) { continue; }
                     // Shadow pass uses LOD 0 (full detail) for accuracy.
@@ -214,6 +218,16 @@ void terrainRenderSystem(World& world, const Camera& camera3d,
 
     // --- Extract view frustum for culling ---
     const Frustum frustum = extractFrustum(vpMatrix);
+
+    // --- M4: streaming tick + GPU upload (before draw loop, main thread) ---
+    for (const auto [entity, transform3d, terrainComp] : view.each()) {
+        TerrainAsset* assetMut = getTerrainAssetMut(terrainComp.terrainHandle);
+        if (assetMut == nullptr) { continue; }
+        if (assetMut->streamConfig.radiusChunks > 0) {
+            terrainStreamingTick(*assetMut, camera3d.position.x, camera3d.position.z);
+            terrainUploadPendingChunks(*assetMut);
+        }
+    }
 
     // --- Draw terrain entities ---
     for (const auto [entity, transform3d, terrainComp] : view.each()) {
@@ -336,6 +350,10 @@ void terrainRenderSystem(World& world, const Camera& camera3d,
 
             // Draw visible chunks with LOD selection
             for (u32 ci = 0; ci < asset->chunkCount; ++ci) {
+                // M4: skip chunks not on GPU
+                const ChunkState cst = asset->chunkStream[ci].state.load();
+                if (cst != ChunkState::EAGER && cst != ChunkState::LOADED) { continue; }
+
                 const TerrainChunkGpu& chunk = asset->chunks[ci];
                 if (chunk.lodCount == 0) { continue; }
 
@@ -393,6 +411,10 @@ void terrainRenderSystem(World& world, const Camera& camera3d,
 
             // Draw visible chunks with LOD selection
             for (u32 ci = 0; ci < asset->chunkCount; ++ci) {
+                // M4: skip chunks not on GPU
+                const ChunkState cst = asset->chunkStream[ci].state.load();
+                if (cst != ChunkState::EAGER && cst != ChunkState::LOADED) { continue; }
+
                 const TerrainChunkGpu& chunk = asset->chunks[ci];
                 if (chunk.lodCount == 0) { continue; }
 

@@ -111,6 +111,9 @@ end
 -- Terrain: gently rolling courtyard heightmap
 --------------------------------------------------------------------
 ffe.loadTerrain("terrain/courtyard_height.png", 60, 60, 8)
+-- Enable terrain-aware camera clamping so the orbit arc never dips
+-- below the courtyard surface on hilly terrain (Bug 1 fix).
+if Camera then Camera.setTerrainAware(true) end
 
 --------------------------------------------------------------------
 -- Helper: create a static box entity with mesh, color, and physics

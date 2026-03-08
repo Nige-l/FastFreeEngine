@@ -7447,6 +7447,52 @@ void ScriptEngine::registerEcsBindings() {
     lua_pushcfunction(L, ffe_setTerrainLodDistances);
     lua_setfield(L, -2, "setTerrainLodDistances");
 
+    // ffe.setTerrainStreamingRadius(radius: integer) -> nothing
+    // Enable background streaming for the first active terrain.
+    // radius: Chebyshev chunk-grid distance within which chunks are kept on GPU.
+    // 0 = disabled (all chunks remain eagerly loaded -- default).
+    // Valid range: 0 <= radius <= 32.
+    auto ffe_setTerrainStreamingRadius = [](lua_State* state) -> int {
+        const ffe::renderer::TerrainHandle terrain =
+            ffe::renderer::getFirstActiveTerrain();
+        if (!ffe::renderer::isValid(terrain)) {
+            FFE_LOG_ERROR("ScriptEngine",
+                          "ffe.setTerrainStreamingRadius: no active terrain");
+            return 0;
+        }
+
+        const lua_Integer rawRadius = lua_tointeger(state, 1);
+        if (rawRadius < 0 || rawRadius > 32) {
+            FFE_LOG_ERROR("ScriptEngine",
+                          "ffe.setTerrainStreamingRadius: radius must be 0-32, got %lld",
+                          static_cast<long long>(rawRadius));
+            return 0;
+        }
+
+        ffe::renderer::setTerrainStreamingRadius(terrain,
+                                                  static_cast<int>(rawRadius));
+        return 0;
+    };
+    lua_pushcfunction(L, ffe_setTerrainStreamingRadius);
+    lua_setfield(L, -2, "setTerrainStreamingRadius");
+
+    // ffe.getTerrainChunkCount() -> integer
+    // Return the number of terrain chunks currently resident on the GPU
+    // (state EAGER or LOADED). Useful for debug display and streaming monitoring.
+    auto ffe_getTerrainChunkCount = [](lua_State* state) -> int {
+        const ffe::renderer::TerrainHandle terrain =
+            ffe::renderer::getFirstActiveTerrain();
+        if (!ffe::renderer::isValid(terrain)) {
+            lua_pushinteger(state, 0);
+            return 1;
+        }
+        const int count = ffe::renderer::getTerrainLoadedChunkCount(terrain);
+        lua_pushinteger(state, static_cast<lua_Integer>(count));
+        return 1;
+    };
+    lua_pushcfunction(L, ffe_getTerrainChunkCount);
+    lua_setfield(L, -2, "getTerrainChunkCount");
+
     // ----------------------------------------------------------------
     // Water bindings
     // ----------------------------------------------------------------

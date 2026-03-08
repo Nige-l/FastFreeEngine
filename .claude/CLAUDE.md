@@ -265,6 +265,8 @@ Skip Phase 1 entirely for straightforward features where the implementation path
 
 This applies to any writing agent — `engine-dev`, `renderer-specialist`, `game-dev-tester`, `api-designer` — as long as file ownership does not conflict. PM specifies the split in the dispatch plan; Claude executes it.
 
+**Concrete example of same-type parallel workers:** A session adding terrain streaming (touching `terrain_system.cpp`, `terrain_chunk.cpp`, `terrain_renderer.cpp`) and a separate camera Lua fix (touching `script_engine.cpp`, `camera_bindings.cpp`) can run as two parallel `engine-dev` instances — one owning the terrain files, one owning the camera/scripting files. Similarly, two `renderer-specialist` instances can work simultaneously on independent shader files and RHI files. PM assigns each instance an explicit, non-overlapping file list.
+
 **Key rule:** If `engine-dev` and `renderer-specialist` are both needed and their files don't overlap, they MUST run in parallel. Sequential dispatch of independent writers is a throughput waste.
 
 ##### Multi-Feature Sessions
@@ -281,12 +283,16 @@ All reviewers run in parallel with zero dependencies between them:
 
 These are all read-only agents. **Sequential dispatch of Phase 3 agents is a process violation.** They have no dependencies on each other and must run simultaneously.
 
+**Multiple instances of the same review agent:** When a session has two or more independent areas of change (e.g., engine C++ streaming code AND a separate Lua camera fix), PM MUST spawn one instance of each reviewer per independent area — running all instances simultaneously. Example: two `performance-critic` instances in the same parallel round, one reviewing streaming, one reviewing the camera fix. Two `security-auditor` instances reviewing different files. This is not optional — sequential review of independent code is a throughput waste.
+
+**`api-designer` combines review and doc update in one pass.** In Phase 3, `api-designer` reads the new code, writes review findings, AND updates `.context.md` files — all in the same agent invocation. PM must not plan a separate doc-writing step after Phase 3.
+
 #### Phase 4 — Remediation (write only, NO build)
 
 - **BLOCK or CRITICAL findings:** `engine-dev` fixes the code. Does NOT build.
 - **All PASS or MINOR ISSUES:** skip to Phase 5
 
-Any feedback from api-designer (`.context.md` updates, doc fixes) is also addressed here — before any build step.
+Any remediation feedback from api-designer (API naming changes, structural fixes) is addressed here — before any build step. Note: `.context.md` doc updates are written by api-designer during Phase 3 itself, not here. Phase 4 only handles follow-on fixes that api-designer's Phase 3 review flagged as requiring code changes.
 
 #### Phase 5 — Build + Test (`build-engineer`)
 
