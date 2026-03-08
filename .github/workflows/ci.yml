@@ -248,6 +248,7 @@ jobs:
       - name: Configure
         run: |
           cmake -B build-cov -G Ninja \
+            -DCMAKE_C_COMPILER=clang-18 \
             -DCMAKE_CXX_COMPILER=clang++-18 \
             -DCMAKE_BUILD_TYPE=Debug \
             -DFFE_TIER=LEGACY \
@@ -352,9 +353,8 @@ jobs:
             -DFFE_TIER=LEGACY \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-            -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64-x86_64.cmake \
             -DVCPKG_TARGET_TRIPLET=x64-mingw-dynamic \
-            -DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64-x86_64.cmake \
+            -DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=${{ github.workspace }}/cmake/toolchains/mingw-w64-x86_64.cmake \
             -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake
 
       - name: Build
