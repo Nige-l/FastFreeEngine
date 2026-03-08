@@ -720,6 +720,17 @@ bool ScriptEngine::isInitialised() const {
     return m_initialised;
 }
 
+void ScriptEngine::setCommandLineArgs(int argc, char** argv) {
+    if (!m_initialised || m_luaState == nullptr) { return; }
+    lua_State* L = static_cast<lua_State*>(m_luaState);
+    lua_newtable(L);
+    for (int i = 0; i < argc; ++i) {
+        lua_pushstring(L, argv[i]);
+        lua_rawseti(L, -2, i);  // arg[0], arg[1], etc.
+    }
+    lua_setglobal(L, "arg");
+}
+
 void ScriptEngine::setWorld(ffe::World* world) {
     if (!m_initialised || m_luaState == nullptr) {
         FFE_LOG_ERROR("ScriptEngine", "setWorld() called before init()");

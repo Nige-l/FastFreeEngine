@@ -18,7 +18,7 @@ Claude has two jobs: (1) relay between the user and the agent team, and (2) disp
 
 ### The Plan-Dispatch-Relay Loop
 
-1. **PM plans.** Claude invokes `project-manager` with the user's goal. PM reads context (CLAUDE.md, `docs/project-state.md`, `docs/architecture-map.md`, and recent devlog if needed) and outputs an ordered plan: which agents to invoke, in what order, with what instructions, and which can run in parallel. PM does NOT read engine source files — `architecture-map.md` provides the technical reference PM needs for planning.
+1. **PM plans.** Claude invokes `project-manager` with the user's goal. PM reads context (CLAUDE.md, `docs/project-state.md`, `docs/architecture-map.md`, and recent devlog if needed) and outputs an ordered plan: which agents to invoke, in what order, with what instructions, and which can run in parallel. **PM does NOT read engine source files** (`engine/**`, `examples/**`, `tests/**`) — `architecture-map.md` provides the technical reference PM needs for planning. If `architecture-map.md` lacks the information PM needs, PM flags it as a gap for `director` to fix — PM does not read source files as a workaround. **PM does not diagnose failures or propose root causes** — if something is broken or unknown, PM dispatches the appropriate engineer agent to investigate and report back.
 2. **Claude dispatches.** Claude reads PM's plan and spawns agents exactly as specified. When PM says agents can run in parallel, Claude dispatches them simultaneously. When PM says sequential, Claude waits for each to complete before spawning the next.
 3. **Claude relays results.** After agents complete, Claude feeds their output back to PM for decisions (fix cycles, commit, devlog).
 4. **Repeat.** PM may issue follow-up dispatches based on results. Claude executes those too.
@@ -252,6 +252,17 @@ Each directory has a clear owner. Agents do not write to directories they do not
 
 **`project-manager` is the sole planner of agent work.** All routing rules in this section define PM's plan. PM decides which agents run, in what order, and whether they run in parallel or sequentially. Claude then dispatches those agents exactly as PM specifies. Claude does not decide which agents to invoke or in what order — that authority belongs to PM. If Claude dispatches an agent that PM did not include in the plan, that is a process violation.
 
+### PM Prohibited Actions
+
+PM must NOT do any of the following — these are engineering tasks that belong to specialist agents:
+
+- **Read engine source files** (`engine/**`, `examples/**`, `tests/**`) for any reason while planning. Use `architecture-map.md`. If it lacks something, flag the gap and dispatch `architect` or `director`.
+- **Diagnose failures or propose root causes.** If a build fails, a test fails, or an agent returns unexpected output, PM's job is to dispatch the right engineer to investigate — not to theorise about why it failed. Example: do NOT write "possible root causes include X, Y, Z." Instead write: "dispatch `engine-dev` to investigate the failure and report findings."
+- **Run builds, tests, or any Bash command that executes compiled code.** PM has Bash access for git operations and file management only. `build-engineer` is the sole agent that runs CMake, Ninja, or ctest.
+- **Default to sequential dispatch.** Before outputting any plan, PM must explicitly verify: are any Phase 2 workers independent? Are all Phase 3 reviewers in one parallel round? Sequential dispatch of independent work is a process violation.
+
+**The test:** If PM's plan could be executed faster by running two steps simultaneously without any ordering dependency, those steps MUST be parallel. If PM cannot justify why a step is sequential, it should be parallel.
+
 ### 5-Phase Development Flow
 
 Every feature follows this flow. PM dispatches each phase. The key principle: **all coding and review happens before any build step.** Build+test is expensive (10+ minutes on both compilers) and only happens once at the end.
@@ -479,3 +490,7 @@ Performance is how we deliver on this mission. By running well on old hardware, 
 | Who does git commits? | **`project-manager`** — no other agent commits |
 | Who pushes to remote? | **`project-manager`** — pushes at session end by default |
 | Where do I get project context? | Read `docs/project-state.md` first (includes current-phase roadmap), then recent `docs/devlog.md` if needed. Full roadmap at `docs/ROADMAP.md` is archival — only for phase transitions. |
+| Can PM read engine source files to plan? | **No** — `architecture-map.md` is the technical reference. If it lacks something, flag the gap for `director`. Reading `engine/**` or `examples/**` to plan is a process violation. |
+| Something failed — can PM diagnose it? | **No** — PM dispatches the right engineer to investigate and report back. PM never theorises root causes or writes "possible explanations." |
+| Can PM run builds or tests via Bash? | **No** — `build-engineer` exclusively. PM's Bash access is for git operations only. |
+| Are Phase 2 workers sequential by default? | **No** — parallelism is the default. PM must justify any sequential ordering. If two workers have no file overlap, they are parallel. |

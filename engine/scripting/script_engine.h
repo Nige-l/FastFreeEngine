@@ -86,6 +86,13 @@ public:
     // Returns true if init() has been called successfully.
     bool isInitialised() const;
 
+    // Populate the Lua global `arg` table with command-line arguments.
+    // arg[0] = argv[0] (binary name), arg[1] = argv[1], etc.
+    // Matches standard LuaJIT behaviour. Safe to call multiple times
+    // (overwrites the previous `arg` global). No-op if init() has not
+    // been called. Must be called after init() and before doFile().
+    void setCommandLineArgs(int argc, char** argv);
+
     // Maximum number of concurrent timers.
     static constexpr u32 MAX_TIMERS = 256;
 

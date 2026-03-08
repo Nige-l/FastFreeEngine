@@ -167,7 +167,7 @@ void showcaseSystem(ffe::World& world, const float dt)
 // ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
-int main()
+int main(int argc, char** argv)
 {
     ffe::ApplicationConfig config;
     config.windowTitle  = "FFE - Echoes of the Ancients";
@@ -191,6 +191,7 @@ int main()
     if (!scriptEngine.init()) {
         FFE_LOG_ERROR("Showcase", "ScriptEngine init failed");
     } else {
+        scriptEngine.setCommandLineArgs(argc, argv);
         app.world().registry().ctx().get<ShowcaseContext>().scripts = &scriptEngine;
     }
 
