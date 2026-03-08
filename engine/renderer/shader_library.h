@@ -27,6 +27,7 @@ enum class BuiltinShader : u8 {
     SSAO_BLUR                  = 18, // 4x4 box blur for SSAO noise reduction
     TERRAIN                    = 19, // Terrain splat-map texturing with triplanar projection
     WATER                      = 20, // Planar water with reflection, fresnel, animated distortion
+    VEGETATION                 = 21, // GPU-instanced billboard grass (cylindrical Y-axis billboard, alpha-test)
     COUNT
 };
 

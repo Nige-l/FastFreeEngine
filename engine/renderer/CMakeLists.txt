@@ -27,6 +27,7 @@ set(RENDERER_GL_DEPENDENT_SOURCES
     terrain.cpp
     terrain_renderer.cpp
     water.cpp
+    vegetation.cpp
     shadow_map.cpp
     screenshot.cpp
     post_process.cpp

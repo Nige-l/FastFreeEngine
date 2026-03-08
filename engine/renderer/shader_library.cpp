@@ -1635,6 +1635,92 @@ void main() {
 }
 )glsl";
 
+// --- Vegetation shader (GPU-instanced billboard grass, Y-axis cylindrical billboard) ---
+// GLSL 330 core (LEGACY tier).
+// Vertex inputs:
+//   slot 0: vec3 a_pos    -- local quad position (X in [-0.5,+0.5], Y in [0,1], Z=0)
+//   slot 1: vec2 a_uv     -- UV coordinates
+//   slot 4: vec3 i_position  (divisor=1) -- world-space instance position
+//   slot 5: float i_scale    (divisor=1) -- uniform scale
+//   slot 6: float i_rotation (divisor=1) -- Y-axis pre-rotation (radians, unused; billboarding computed per-frame)
+// The billboard rotates the quad X-axis toward the camera each frame.
+// Alpha-test via discard (no blending) — eliminates sorting.
+
+static const char* const VEGETATION_VERT_SOURCE = R"glsl(
+#version 330 core
+
+layout(location = 0) in vec3 a_pos;
+layout(location = 1) in vec2 a_uv;
+
+layout(location = 4) in vec3  i_position;
+layout(location = 5) in float i_scale;
+layout(location = 6) in float i_rotation;
+
+uniform mat4  u_view;
+uniform mat4  u_projection;
+uniform vec3  u_cameraPos;
+uniform float u_fadeStart;
+uniform float u_fadeEnd;
+
+out vec2  v_uv;
+out float v_alpha;
+
+void main() {
+    // Cylindrical Y-axis billboard: rotate quad to face camera around Y only.
+    vec3 toCamera = u_cameraPos - i_position;
+    toCamera.y = 0.0;
+    float len = length(toCamera);
+    vec3 forward = (len > 0.0001) ? (toCamera / len) : vec3(0.0, 0.0, 1.0);
+    // right = cross(up, forward) — negate to maintain correct winding.
+    vec3 right = cross(vec3(0.0, 1.0, 0.0), forward);
+
+    // Build world position: translate along right (X) and up (Y) from instance origin.
+    vec3 worldPos = i_position
+        + right        * (a_pos.x * i_scale)
+        + vec3(0.0, 1.0, 0.0) * (a_pos.y * i_scale);
+
+    gl_Position = u_projection * u_view * vec4(worldPos, 1.0);
+    v_uv = a_uv;
+
+    float dist = length(u_cameraPos - i_position);
+    v_alpha = 1.0 - smoothstep(u_fadeStart, u_fadeEnd, dist);
+}
+)glsl";
+
+static const char* const VEGETATION_FRAG_SOURCE = R"glsl(
+#version 330 core
+
+in vec2  v_uv;
+in float v_alpha;
+
+uniform sampler2D u_grassTex;
+uniform int       u_hasTexture;
+uniform vec3      u_lightColor;
+uniform vec3      u_ambientColor;
+
+out vec4 fragColor;
+
+void main() {
+    vec4 color;
+    if (u_hasTexture != 0) {
+        color = texture(u_grassTex, v_uv);
+    } else {
+        // Solid opaque green fallback — matches the 4x4 green fallback texture.
+        color = vec4(0.2, 0.6, 0.15, 1.0);
+    }
+
+    // Alpha-test: discard fragments below threshold (includes distance fade).
+    if (color.a * v_alpha < 0.5) {
+        discard;
+    }
+
+    // Simple diffuse lighting (no specular — grass is a flat billboard).
+    color.rgb *= (u_ambientColor + u_lightColor * 0.7);
+    color.a    = 1.0;
+    fragColor  = color;
+}
+)glsl";
+
 // ==================== Library Implementation ====================
 
 struct ShaderPair {
@@ -1665,6 +1751,7 @@ static const ShaderPair PAIRS[] = {
     { FULLSCREEN_VERT_SOURCE,          SSAO_BLUR_FRAG_SOURCE,           "ssao_blur"             },
     { TERRAIN_VERT_SOURCE,             TERRAIN_FRAG_SOURCE,             "terrain"               },
     { WATER_VERT_SOURCE,               WATER_FRAG_SOURCE,               "water"                 },
+    { VEGETATION_VERT_SOURCE,          VEGETATION_FRAG_SOURCE,          "vegetation"            },
 };
 static_assert(sizeof(PAIRS) / sizeof(PAIRS[0]) == static_cast<u32>(BuiltinShader::COUNT));
 

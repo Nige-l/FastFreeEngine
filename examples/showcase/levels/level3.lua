@@ -109,10 +109,21 @@ end
 --------------------------------------------------------------------
 -- Terrain: dramatic summit heightmap with mountain ring
 --------------------------------------------------------------------
-ffe.loadTerrain("terrain/summit_height.png", 60, 60, 12)
+local terrainHandle = ffe.loadTerrain("terrain/summit_height.png", 60, 60, 12)
 -- Enable terrain-aware camera clamping so the orbit arc never dips
 -- into the summit terrain ring visible in the background (Bug 2 fix).
 if Camera then Camera.setTerrainAware(true) end
+
+-- Vegetation: trees at summit quadrant positions
+local treePositions = {
+    {-20, -20}, {20, -20}, {-20, 20}, {20, 20}
+}
+for _, pos in ipairs(treePositions) do
+    local ty = ffe.getTerrainHeight(pos[1], pos[2])
+    if ty then ffe.addTree(pos[1], ty, pos[2], 1.5) end
+end
+setTreesActive(true)
+ffe.log("[Level3] Trees placed on summit")
 
 --------------------------------------------------------------------
 -- Skybox: unload any previous skybox; use fog + background for sky

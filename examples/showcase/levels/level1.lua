@@ -110,10 +110,19 @@ end
 --------------------------------------------------------------------
 -- Terrain: gently rolling courtyard heightmap
 --------------------------------------------------------------------
-ffe.loadTerrain("terrain/courtyard_height.png", 60, 60, 8)
+local terrainHandle = ffe.loadTerrain("terrain/courtyard_height.png", 60, 60, 8)
 -- Enable terrain-aware camera clamping so the orbit arc never dips
 -- below the courtyard surface on hilly terrain (Bug 1 fix).
 if Camera then Camera.setTerrainAware(true) end
+
+-- Vegetation: grass across The Courtyard
+if terrainHandle and terrainHandle ~= 0 then
+    local vegHandle = ffe.addVegetationPatch(terrainHandle, 128, 0)
+    if vegHandle and vegHandle ~= 0 then
+        setGrassHandle(vegHandle)
+        ffe.log("[Level1] Grass patch added")
+    end
+end
 
 --------------------------------------------------------------------
 -- Helper: create a static box entity with mesh, color, and physics

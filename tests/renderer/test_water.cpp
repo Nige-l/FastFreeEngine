@@ -258,6 +258,6 @@ TEST_CASE("BuiltinShader::WATER exists at index 20", "[water]") {
     CHECK(static_cast<ffe::u32>(ffe::renderer::BuiltinShader::WATER) == 20);
 }
 
-TEST_CASE("BuiltinShader::COUNT is 21 after WATER addition", "[water]") {
-    CHECK(static_cast<ffe::u32>(ffe::renderer::BuiltinShader::COUNT) == 21);
+TEST_CASE("BuiltinShader::COUNT is 22 after VEGETATION addition", "[water]") {
+    CHECK(static_cast<ffe::u32>(ffe::renderer::BuiltinShader::COUNT) == 22);
 }

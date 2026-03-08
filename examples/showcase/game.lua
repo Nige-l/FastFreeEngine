@@ -27,6 +27,10 @@ local totalArtifactsAll  = 0   -- total artifacts collected across all levels
 local totalPlayTime      = 0   -- seconds of active play time
 local victoryScreenTimer = 0   -- animation timer for congratulations screen
 
+-- Per-level vegetation state (cleaned up at every level transition)
+local grassHandle  = nil
+local treesActive  = false
+
 --------------------------------------------------------------------
 -- Level registry — maps level number to its loader script path
 --------------------------------------------------------------------
@@ -95,6 +99,15 @@ local function loadLevel(levelNum)
         if Player then Player.cleanup() end
         if AI then AI.reset() end
         ffe.cancelAllTimers()
+        -- Clean up vegetation BEFORE unloading terrain
+        if grassHandle then
+            ffe.removeVegetationPatch(grassHandle)
+            grassHandle = nil
+        end
+        if treesActive then
+            ffe.clearTrees()
+            treesActive = false
+        end
         -- Unload terrain and disable post-processing BEFORE destroying entities
         ffe.unloadTerrain()
         ffe.disablePostProcessing()
@@ -127,6 +140,12 @@ local function loadLevel(levelNum)
     ffe.log("[Showcase] Loading level " .. tostring(levelNum) .. ": " .. path)
     ffe.loadScene(path)
 end
+
+--------------------------------------------------------------------
+-- Vegetation state setters (called by level scripts)
+--------------------------------------------------------------------
+function setGrassHandle(h)  grassHandle = h end
+function setTreesActive(v)  treesActive = v end
 
 --------------------------------------------------------------------
 -- Global accessors for level scripts
@@ -163,6 +182,15 @@ local function cleanupToMenu()
         if Player then Player.cleanup() end
         if AI then AI.reset() end
         ffe.cancelAllTimers()
+        -- Clean up vegetation BEFORE unloading terrain
+        if grassHandle then
+            ffe.removeVegetationPatch(grassHandle)
+            grassHandle = nil
+        end
+        if treesActive then
+            ffe.clearTrees()
+            treesActive = false
+        end
         -- Unload terrain and disable post-processing BEFORE destroying entities
         ffe.unloadTerrain()
         ffe.disablePostProcessing()
@@ -590,6 +618,15 @@ function shutdown()
     ffe.log("[Showcase] Shutdown")
     ffe.setCursorCaptured(false)  -- Ensure cursor is released on exit
     if Player then Player.cleanup() end
+    -- Clean up vegetation BEFORE unloading terrain
+    if grassHandle then
+        ffe.removeVegetationPatch(grassHandle)
+        grassHandle = nil
+    end
+    if treesActive then
+        ffe.clearTrees()
+        treesActive = false
+    end
     ffe.unloadTerrain()
     ffe.disablePostProcessing()
     ffe.disableSSAO()

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/types.h"
+#include "renderer/vegetation.h"
 
 // sol2 and lua headers are NOT included here.
 // They are heavyweight — include only in script_engine.cpp.
@@ -136,6 +137,12 @@ private:
     // Cast to lua_State* in the .cpp file where lua.h is included.
     void* m_luaState = nullptr;
     bool  m_initialised = false;
+
+    // Vegetation system — GPU-instanced billboard grass + trees.
+    // init() must be called after the OpenGL context exists (deferred until
+    // first addPatch/addTree call via the render coordinator). shutdown() is
+    // safe to call even if init() was never called.
+    ffe::renderer::VegetationSystem m_vegetationSystem;
 
     // Sets up the whitelist sandbox: removes dangerous globals and
     // installs the ffe.* API table.

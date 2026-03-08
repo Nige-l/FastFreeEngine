@@ -29,6 +29,7 @@ add_executable(ffe_tests
     renderer/test_terrain_streaming.cpp
     renderer/test_water.cpp
     renderer/test_frustum.cpp
+    renderer/test_vegetation.cpp
 )
 
 target_link_libraries(ffe_tests

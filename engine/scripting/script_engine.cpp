@@ -26,6 +26,7 @@ extern "C" {
 #include "renderer/ssao.h"
 #include "renderer/terrain.h"
 #include "renderer/water.h"
+#include "renderer/vegetation.h"
 
 #include "audio/audio.h"
 #include "renderer/text_renderer.h"
@@ -443,6 +444,9 @@ void ScriptEngine::shutdown() {
         m_timers[i] = {};
     }
     m_timerCount = 0;
+
+    // Free vegetation GPU resources. Safe to call even if init() was never called.
+    m_vegetationSystem.shutdown();
 
     lua_close(L);
     m_luaState   = nullptr;
@@ -7492,6 +7496,106 @@ void ScriptEngine::registerEcsBindings() {
     };
     lua_pushcfunction(L, ffe_getTerrainChunkCount);
     lua_setfield(L, -2, "getTerrainChunkCount");
+
+    // ----------------------------------------------------------------
+    // Vegetation bindings (Phase 9 M5)
+    // ----------------------------------------------------------------
+
+    // ffe.addVegetationPatch(terrainHandle: integer, density: integer, textureHandle: integer) -> integer
+    // Scatter grass instances across a terrain surface and upload to GPU.
+    // density is clamped to [1, 256] by VegetationSystem. textureHandle == 0 uses solid green fallback.
+    // Returns VegetationHandle.id on success; 0 if MAX_VEGETATION_PATCHES reached or terrain invalid.
+    // Cold path only — do NOT call per frame.
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_engineRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); lua_pushinteger(state, 0); return 1; }
+        auto* engine = static_cast<ffe::ScriptEngine*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawTerrain = lua_tointeger(state, 1);
+        const lua_Integer rawDensity = lua_tointeger(state, 2);
+        const lua_Integer rawTexture = lua_tointeger(state, 3);
+
+        if (rawTerrain <= 0) {
+            FFE_LOG_ERROR("ScriptEngine",
+                          "ffe.addVegetationPatch: terrainHandle must be > 0, got %lld",
+                          static_cast<long long>(rawTerrain));
+            lua_pushinteger(state, 0);
+            return 1;
+        }
+
+        ffe::renderer::TerrainHandle terrain{static_cast<ffe::u32>(rawTerrain)};
+        ffe::renderer::VegetationConfig cfg;
+        cfg.density       = static_cast<ffe::u32>(rawDensity > 0 ? rawDensity : 1);
+        cfg.textureHandle = ffe::rhi::TextureHandle{
+            static_cast<ffe::u32>(rawTexture > 0 ? rawTexture : 0)};
+
+        const ffe::renderer::VegetationHandle h =
+            engine->m_vegetationSystem.addPatch(terrain, cfg);
+
+        lua_pushinteger(state, static_cast<lua_Integer>(h.id));
+        return 1;
+    });
+    lua_setfield(L, -2, "addVegetationPatch");
+
+    // ffe.removeVegetationPatch(handle: integer) -> nil
+    // Remove a grass patch and free its GPU resources. No-op on invalid handle.
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_engineRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* engine = static_cast<ffe::ScriptEngine*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawHandle = lua_tointeger(state, 1);
+        ffe::renderer::VegetationHandle h{
+            static_cast<ffe::u32>(rawHandle > 0 ? rawHandle : 0)};
+        engine->m_vegetationSystem.removePatch(h);
+        return 0;
+    });
+    lua_setfield(L, -2, "removeVegetationPatch");
+
+    // ffe.addTree(x: number, y: number, z: number, scale: number) -> nil
+    // Add a tree at world position (x, y, z) with uniform scale.
+    // Caller supplies Y directly — use ffe.getTerrainHeight() first if needed.
+    // Silently ignores the call if MAX_TREES (512) is reached.
+    // scale <= 0 is clamped to 1.0.
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_engineRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* engine = static_cast<ffe::ScriptEngine*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const double rawX     = lua_tonumber(state, 1);
+        const double rawY     = lua_tonumber(state, 2);
+        const double rawZ     = lua_tonumber(state, 3);
+        const double rawScale = lua_tonumber(state, 4);
+
+        const ffe::f32 x     = static_cast<ffe::f32>(rawX);
+        const ffe::f32 y     = static_cast<ffe::f32>(rawY);
+        const ffe::f32 z     = static_cast<ffe::f32>(rawZ);
+        const ffe::f32 scale = (rawScale > 0.0) ? static_cast<ffe::f32>(rawScale) : 1.0f;
+
+        engine->m_vegetationSystem.addTree(x, y, z, scale);
+        return 0;
+    });
+    lua_setfield(L, -2, "addTree");
+
+    // ffe.clearTrees() -> nil
+    // Remove all trees and reset GPU instance buffers. Does not affect grass patches.
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_engineRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* engine = static_cast<ffe::ScriptEngine*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        engine->m_vegetationSystem.clearTrees();
+        return 0;
+    });
+    lua_setfield(L, -2, "clearTrees");
 
     // ----------------------------------------------------------------
     // Water bindings
