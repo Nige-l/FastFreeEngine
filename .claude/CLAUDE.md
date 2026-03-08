@@ -273,6 +273,8 @@ This applies to any writing agent — `engine-dev`, `renderer-specialist`, `game
 
 PM should batch 2-3 features into a single session when they touch different subsystems with no shared headers. Run their Phase 2 implementations in parallel, then review everything in one Phase 3 pass and one Phase 5 build. This is significantly faster than running 3 separate sessions.
 
+**PM pre-plans the next phase while the current phase runs.** PM does not sit idle during Phase 2 or Phase 3. Claude should dispatch PM as a background agent to pre-write the next phase's dispatch instructions at the same time as the current phase's agents are working. PM needs review results to DECIDE (pass/fail/block), but can pre-write both the remediation plan and the build instructions before results arrive — one variant for PASS, one for BLOCK. Claude then picks the correct variant when results come in. This reduces total session wall-clock time by one full round-trip per phase transition.
+
 #### Phase 3 — Expert Panel (parallel — MUST be dispatched simultaneously, NO build)
 
 All reviewers run in parallel with zero dependencies between them:
