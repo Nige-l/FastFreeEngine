@@ -375,5 +375,5 @@ Returns the number of animation clips in the entity's mesh. Returns `0` if the e
 4. **Bone count validation** — unit test: mesh with >64 bones is rejected at load time.
 5. **Joint index validation** — unit test: vertex referencing out-of-range bone index is rejected.
 6. **Weight normalization** — unit test: non-normalized weights are renormalized at load time.
-7. **Shader compilation** — integration test: `MESH_SKINNED` and `SHADOW_DEPTH_SKINNED` compile without errors (headless may skip this; build-engineer verifies).
+7. **Shader compilation** — integration test: `MESH_SKINNED` and `SHADOW_DEPTH_SKINNED` compile without errors (headless may skip this; ops verifies).
 8. **Lua bindings** — scripting tests: each of the 6 Lua functions with valid and invalid inputs.

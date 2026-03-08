@@ -15,14 +15,14 @@
 local HALF_W         = 640
 local HALF_H         = 360
 
-local PADDLE_W       = 120
+local PADDLE_W       = 168
 local PADDLE_H       = 16
 local PADDLE_Y       = -300
 local PADDLE_SPEED   = 500.0
 
 local BALL_SIZE      = 12
-local BALL_SPEED     = 350.0
-local BALL_MAX_SPEED = 600.0
+local BALL_SPEED     = 297.0
+local BALL_MAX_SPEED = 510.0
 
 local BRICK_W        = 80
 local BRICK_H        = 24

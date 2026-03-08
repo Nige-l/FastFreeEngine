@@ -583,7 +583,7 @@ arm64 native builds.
   it tries to execute `.exe` files directly. This is expected — it is not a build error. The EXEs
   are valid and run correctly on Windows.
 
-**Outstanding work for engine-dev (POSIX audit — not blocking this session):**
+**Outstanding work for implementer (POSIX audit — not blocking this session):**
 - `realpath()` appears in 11 call sites across 5 files (see POSIX audit section below). This is
   the last remaining POSIX-only call that needs a `_WIN32` guard before the Windows builds will
   run correctly on a Windows machine. The pattern to use is documented in the POSIX audit section.
@@ -636,14 +636,14 @@ arm64 native builds.
   deprecation warnings — it does not disable any functionality.
 
 **Verification:**
-- Deferred to build-engineer (Session 40 Phase 5). No build run on this machine (Linux host cannot
+- Deferred to ops (Session 40 Phase 5). No build run on this machine (Linux host cannot
   execute macOS binaries). CI will be the verification path for macOS.
 - Linux builds: no changes to Linux-specific code paths. The mold guard change (`UNIX AND NOT APPLE`
   evaluates identically to `NOT WIN32` on Linux) leaves all Linux behaviour intact.
 
 ## POSIX-Specific Calls Requiring Windows Guards
 
-These are the calls engine-dev must wrap in `#ifdef`/`#else` guards before a Windows cross-build can succeed. None of these are in hot paths — they are all in load-time I/O functions.
+These are the calls implementer must wrap in `#ifdef`/`#else` guards before a Windows cross-build can succeed. None of these are in hot paths — they are all in load-time I/O functions.
 
 ### `realpath()` — not available on MinGW/Windows
 
@@ -720,7 +720,7 @@ MinGW provides `<sys/stat.h>` — no change needed for the MinGW target.
 
 Not present in any engine source file directly. miniaudio uses `dlopen` internally on Linux to load ALSA/PulseAudio/JACK. This is handled inside the miniaudio single-header with its own platform `#ifdef`s — miniaudio already has full Windows support and will use DirectSound/WASAPI instead of dl-loading ALSA on Windows. The `$<$<PLATFORM_ID:Linux>:dl>` entry in `engine/audio/CMakeLists.txt` already guards this correctly.
 
-### Summary for engine-dev
+### Summary for implementer
 
 One change is required before the Windows EXEs will run correctly on a Windows machine:
 
@@ -936,5 +936,5 @@ Please update backend & user code."' failed.
 
 **Root cause:** CODE BUG. The engine's ImGui integration passes raw integer key indices to
 `ImGui::GetKeyData()` instead of named `ImGuiKey` enum values. ImGui 1.91.9 dropped support
-for legacy integer key indices. This requires a code fix by engine-dev in the editor's input
+for legacy integer key indices. This requires a code fix by implementer in the editor's input
 handling code. No environment changes needed.

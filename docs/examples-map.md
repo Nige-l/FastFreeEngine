@@ -223,7 +223,7 @@ ffe.loadScene("lib/player.lua")  -- sets global Player table
 Player.create(x, y, z, meshHandle)
 ```
 
-**Screenshot targets for build-engineer:**
+**Screenshot targets for ops:**
 - showcase_menu: `ffe_runtime examples/showcase/game.lua` (wait 5s, shows title screen)
 - showcase_level1/2/3: no direct launcher — must load via menu or test_level.lua
 - Single-level test: `ffe_runtime examples/showcase/levels/test_level.lua` if it exists
