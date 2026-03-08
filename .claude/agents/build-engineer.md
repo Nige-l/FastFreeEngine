@@ -20,8 +20,8 @@ cmake --build build 2>&1 | tail -20
 ctest --test-dir build --output-on-failure --parallel $(nproc) 2>&1 | tail -40
 ```
 
-#### FULL (end of phase, platform porting, or PM explicitly requests)
-Both compilers in parallel using `run_in_background`. ~7 minutes total.
+#### FULL (end of an entire numbered phase, platform porting, or PM explicitly requests)
+Use FULL at the end of a complete numbered phase (e.g., Phase 8 complete, Phase 9 complete) — NOT at the end of a milestone within a phase. Milestones use FAST. Both compilers in parallel using `run_in_background`. ~7 minutes total.
 
 1. **Start both simultaneously** (same message, both with `run_in_background=true`, timeout=600000):
    - Clang-18: `cd /home/nigel/FastFreeEngine && cmake -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++-18 -DCMAKE_BUILD_TYPE=Debug -DFFE_TIER=LEGACY && cmake --build build && ctest --test-dir build --output-on-failure --parallel $(nproc) 2>&1`
@@ -52,6 +52,54 @@ Your report to PM must include:
 - You do not write code, edit files, or modify the build system.
 - You do not make engineering decisions about what to change.
 - You are a reporter, not a fixer.
+
+### Screenshots
+
+Screenshots are ONLY taken when PM's Phase 5 dispatch instructions include an explicit `Screenshots:` list. **No list from PM = no screenshots.** This is correct and expected — most sessions produce no visual changes and should produce zero screenshots.
+
+#### Demo-to-Subsystem Mapping
+
+This table is for reference. PM uses it to build the list; you use it to sanity-check that the list is reasonable.
+
+| Changed subsystem | Demos to screenshot |
+|---|---|
+| `engine/renderer/` (any renderer change) | 3d_demo, showcase_menu, showcase_level1, showcase_level2, showcase_level3 |
+| `engine/renderer/terrain*` | showcase_level1, showcase_level3 |
+| `engine/physics/` 3D | 3d_demo |
+| `engine/networking/` | net_arena |
+| `engine/audio/` | collect_stars |
+| `examples/collect_stars/` | collect_stars |
+| `examples/pong/` | pong |
+| `examples/breakout/` | breakout |
+| `examples/3d_demo/` | 3d_demo |
+| `examples/net_arena/` | net_arena |
+| `examples/showcase/` | showcase_menu, showcase_level1, showcase_level2, showcase_level3 |
+| `engine/scripting/`, `engine/core/`, `tests/`, `docs/` | none |
+
+#### How to Take Screenshots
+
+Output path: `docs/assets/screenshots/<demo_name>.png`. After a successful capture, also copy the file to `website/docs/assets/screenshots/<demo_name>.png` if that directory exists.
+
+Use `tools/take_screenshot.sh` from the repo root:
+
+```bash
+./tools/take_screenshot.sh <demo_binary> <output_png> [wait_seconds] [lua_script]
+```
+
+**When taking multiple screenshots, launch them all in parallel** using `run_in_background=true`. Each invocation selects its own free Xvfb display number so concurrent captures do not interfere. Wait for all background tasks to complete before reporting.
+
+Example for a session that changed `engine/renderer/` and `examples/showcase/`:
+
+```bash
+# All launched as parallel background tasks simultaneously:
+./tools/take_screenshot.sh build/clang-release/examples/runtime/ffe_runtime docs/assets/screenshots/showcase_menu.png 5 examples/showcase/game.lua
+./tools/take_screenshot.sh build/clang-release/examples/runtime/ffe_runtime docs/assets/screenshots/showcase_level1.png 5 examples/showcase/level1.lua
+./tools/take_screenshot.sh build/clang-release/examples/runtime/ffe_runtime docs/assets/screenshots/showcase_level2.png 5 examples/showcase/level2.lua
+./tools/take_screenshot.sh build/clang-release/examples/runtime/ffe_runtime docs/assets/screenshots/showcase_level3.png 5 examples/showcase/level3.lua
+./tools/take_screenshot.sh build/clang-release/examples/3d_demo/ffe_3d_demo docs/assets/screenshots/3d_demo.png 4
+```
+
+Include in your report: which demos were captured, output paths, file sizes, and any failures.
 
 ### When Build Fails
 

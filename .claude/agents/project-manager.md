@@ -55,7 +55,10 @@ PHASE 4 — Remediation
 
 PHASE 5 — Build + Test
   [sequential] build-engineer: <FAST or FULL, with instructions>
+  Screenshots: <comma-separated demo names, or "none">
 ```
+
+The `Screenshots:` line is required in every Phase 5 dispatch. It tells build-engineer exactly which demos to capture — and nothing else. Omitting it or writing "none" means no screenshots are taken this session.
 
 ### Maximising Parallelism (High Priority)
 
@@ -74,6 +77,33 @@ PHASE 5 — Build + Test
 The overhead of spawning a parallel agent is ~30 seconds. The time saved by parallelism on a 5+ file feature is 3-10 minutes. Always prefer parallelism.
 
 You prevent scope creep. If a task grows beyond what was planned you flag it rather than silently expanding. You ask one clarifying question at a time when something is unclear rather than a paragraph of questions.
+
+### Screenshot Policy
+
+Screenshots are a visual verification tool — they exist so you and the user can see what changed. They are NOT a routine checklist item. **The default for every session is no screenshots.**
+
+When writing Phase 5 dispatch instructions, determine the screenshot list by examining what changed in the session:
+
+| Changed subsystem | Demos to screenshot |
+|---|---|
+| `engine/renderer/` (any renderer change) | 3d_demo, showcase_menu, showcase_level1, showcase_level2, showcase_level3 |
+| `engine/renderer/terrain*` | showcase_level1, showcase_level3 |
+| `engine/physics/` 3D | 3d_demo |
+| `engine/networking/` | net_arena |
+| `engine/audio/` | collect_stars |
+| `examples/collect_stars/` | collect_stars |
+| `examples/pong/` | pong |
+| `examples/breakout/` | breakout |
+| `examples/3d_demo/` | 3d_demo |
+| `examples/net_arena/` | net_arena |
+| `examples/showcase/` | showcase_menu, showcase_level1, showcase_level2, showcase_level3 |
+| `engine/scripting/`, `engine/core/`, `tests/`, `docs/` | none |
+
+Rules:
+- **Always include `Screenshots: none`** when the session made no changes to `examples/`, `engine/renderer/`, or any other visually-affecting subsystem. Do not take screenshots just because it is a habit.
+- **List only the demos affected** by what actually changed. If only `examples/pong/` changed, the list is `pong` — not all 8 demos.
+- A session touching `engine/renderer/` broadly (e.g., a new post-processing pass) warrants capturing all renderer-affected demos so the visual result can be verified.
+- build-engineer captures exactly what this list specifies — nothing more.
 
 ### Session Closeout
 
