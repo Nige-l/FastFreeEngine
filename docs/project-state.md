@@ -6,8 +6,8 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 105 |
-| Total tests | 1347+ (Clang-18, zero warnings — exact count pending build) |
+| Last session | 106 |
+| Total tests | 1358 |
 | Total Lua bindings | ~207 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
 | Phase 2 (3D Foundation) | COMPLETE |
@@ -46,7 +46,8 @@
 
 | Session | Summary |
 |---------|---------|
-| 105 | Keyboard Input Latch + fox.glb Mesh Fix -- latched keyboard press/release detection (`pressedThisTick[512]`/`releasedThisTick[512]`), flat normal computation for unindexed glTF meshes (fixes fox.glb blob), fox.glb restored in showcase guardians, .context.md updates. +11 tests (1347+). |
+| 106 | Real-Hardware Bug Fixes Round 3 — TBD (mouse axes, terrain spawn height, combat, player model). |
+| 105 | Keyboard Input Latch + fox.glb Mesh Fix -- latched keyboard press/release detection (`pressedThisTick[512]`/`releasedThisTick[512]`), flat normal computation for unindexed glTF meshes (fixes fox.glb blob), fox.glb restored in showcase guardians, .context.md updates. +11 tests (1358 total). |
 | 104 | Real-Hardware Bug Fixes -- deferred cursor capture (mouse grab fix), HDR FBO clear colour (black sky fix), terrain AABB/UV centring (floating wedge fix), inverted mouse Y fix, fox.glb replaced with cube.glb, crosshair removed, F-key attack fallback. +11 tests (1347 total). |
 | 102 | CMake Lua Asset Copy at Build-Time -- new CopyExampleAssets.cmake helper (ffe_copy_example_lua/dir), all 6 examples use POST_BUILD copy, showcase CMakeLists simplified, deleted 30MB Pixel Crown.wav duplicate. 1336 tests. |
 | 101 | Input Race Condition + Physics Transform Fix -- mouse click latching (fixes LMB attack), fillTransform3D reads Jolt body (fixes floating player), Level 2 artifact bypass fix, kinematic bridges/platforms, deleted tone placeholders. 1336 tests. |
