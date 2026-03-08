@@ -8,52 +8,24 @@
 add_executable(ffe_showcase main.cpp)
 target_link_libraries(ffe_showcase PRIVATE ffe_engine)
 
-# --- Collect Lua scripts and asset files ---
-file(GLOB_RECURSE SHOWCASE_LUA_FILES
-    "${CMAKE_CURRENT_SOURCE_DIR}/*.lua"
+# --- Copy Lua scripts and assets to build dir on every build ---
+# Using copy_directory so new files are picked up without re-running cmake.
+ffe_copy_example_dir(
+    TARGET ffe_showcase
+    SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib"
+    DST_DIR "${CMAKE_CURRENT_BINARY_DIR}/lib"
 )
-file(GLOB_RECURSE SHOWCASE_ASSET_FILES
-    "${CMAKE_CURRENT_SOURCE_DIR}/assets/*"
+ffe_copy_example_dir(
+    TARGET ffe_showcase
+    SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/levels"
+    DST_DIR "${CMAKE_CURRENT_BINARY_DIR}/levels"
 )
-
-# --- Copy at configure time (initial population) ---
-foreach(LUA_FILE ${SHOWCASE_LUA_FILES})
-    file(RELATIVE_PATH REL_PATH "${CMAKE_CURRENT_SOURCE_DIR}" "${LUA_FILE}")
-    configure_file(
-        "${LUA_FILE}"
-        "${CMAKE_CURRENT_BINARY_DIR}/${REL_PATH}"
-        COPYONLY
-    )
-endforeach()
-
-foreach(ASSET_FILE ${SHOWCASE_ASSET_FILES})
-    file(RELATIVE_PATH REL_PATH "${CMAKE_CURRENT_SOURCE_DIR}" "${ASSET_FILE}")
-    configure_file(
-        "${ASSET_FILE}"
-        "${CMAKE_CURRENT_BINARY_DIR}/${REL_PATH}"
-        COPYONLY
-    )
-endforeach()
-
-# --- Re-copy on changes at build time ---
-foreach(LUA_FILE ${SHOWCASE_LUA_FILES})
-    file(RELATIVE_PATH REL_PATH "${CMAKE_CURRENT_SOURCE_DIR}" "${LUA_FILE}")
-    add_custom_command(
-        TARGET ffe_showcase POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${LUA_FILE}"
-            "${CMAKE_CURRENT_BINARY_DIR}/${REL_PATH}"
-        COMMENT "Copying ${REL_PATH}"
-    )
-endforeach()
-
-foreach(ASSET_FILE ${SHOWCASE_ASSET_FILES})
-    file(RELATIVE_PATH REL_PATH "${CMAKE_CURRENT_SOURCE_DIR}" "${ASSET_FILE}")
-    add_custom_command(
-        TARGET ffe_showcase POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${ASSET_FILE}"
-            "${CMAKE_CURRENT_BINARY_DIR}/${REL_PATH}"
-        COMMENT "Copying asset ${REL_PATH}"
-    )
-endforeach()
+ffe_copy_example_dir(
+    TARGET ffe_showcase
+    SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+    DST_DIR "${CMAKE_CURRENT_BINARY_DIR}/assets"
+)
+ffe_copy_example_lua(
+    TARGET ffe_showcase
+    FILES game.lua
+)

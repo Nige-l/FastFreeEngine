@@ -52,6 +52,7 @@ message(STATUS "FFE RHI Backend: ${FFE_BACKEND}")
 
 include(cmake/CompilerFlags.cmake)
 include(cmake/TierDefinitions.cmake)
+include(cmake/CopyExampleAssets.cmake)
 
 # --- Build options (declared before subdirectories so all targets see them) ---
 option(FFE_BUILD_EXAMPLES "Build example programs" ON)
