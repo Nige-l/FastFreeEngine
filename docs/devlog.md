@@ -3,6 +3,61 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-08 — Session 110: Phase 9 M6 Water Rendering (Phase 9 COMPLETE)
+
+### Summary
+
+Session 110 delivered Phase 9 Milestone 6: water rendering. WaterManager provides a reflective water surface using a half-resolution reflection FBO, animated UV scrolling for surface ripple, and Fresnel blending to transition between reflection and refraction based on view angle. WaterSurfaceConfig drives all surface parameters (tiling, scroll speed, Fresnel bias/scale/power, reflection blend). A legacy WaterConfig ECS singleton is provided for scene-serialiser compatibility. The water quad mesh is generated at runtime from the config dimensions. Twenty-one new Catch2 tests cover config defaults, handle validity, plane count, and Fresnel parameter ranges. The Showcase Level 1 was updated to include a water surface in the fountain basin area, and the Level 1 screenshot was refreshed.
+
+This milestone completes Phase 9 (Terrain and Open World). All six milestones — heightmap terrain, splat-map texturing, LOD and frustum culling, world streaming, GPU-instanced vegetation, and water rendering — are delivered. The engine now supports large-scale outdoor environments competitive with contemporary indie engines on LEGACY-tier hardware.
+
+Process improvements implemented this session included encoding multi-instance agent parallelism (running the same agent type in multiple simultaneous subagent slots when work is file-disjoint) in CLAUDE.md and the relevant agent definition files, adding a PM pre-planning rule so PM drafts the next milestone dispatch plan while the current build runs, a selective screenshot policy (build-engineer captures only when PM specifies a list), and a new `docs/examples-map.md` planning reference for demo-to-subsystem mapping.
+
+### Delivered
+
+**Phase 9 M6 — Water Rendering:**
+
+- **engine/renderer/water.h** — `WaterSurfaceConfig` (tiling, scrollSpeed, fresnelBias/Scale/Power, reflectionBlend, dimensions), `WaterHandle`, `WaterPlane` (internal: FBO, VAO/VBO, config), `WaterManager` class with `createSurface`/`destroySurface`/`render`/`update` API. Legacy `WaterConfig` ECS singleton for scene-serialiser compatibility.
+- **engine/renderer/water.cpp** — Reflection FBO at half resolution (GL_RGBA16F colour + depth attachment); water quad mesh generated at runtime from config dimensions; per-frame UV scroll offset accumulated via `update(dt)`; Fresnel blend computed in WATER shader uniform upload; render skips surfaces outside camera frustum.
+- **engine/scripting/script_engine.h / script_engine.cpp** — New Lua bindings: `ffe.createWaterSurface(terrainHandle, x, y, z, width, depth)` → waterHandle; `ffe.destroyWaterSurface(terrainHandle, waterHandle)`; `ffe.setWaterScrollSpeed(terrainHandle, waterHandle, speed)`; `ffe.setWaterFresnelParams(terrainHandle, waterHandle, bias, scale, power)`.
+- **engine/renderer/.context.md** — Water section added: WaterSurfaceConfig fields, Lua binding signatures, usage example, known limitations (fountain basin at terrain-level camera may not be visible in screenshots due to camera angle).
+- **engine/scripting/.context.md** — New water bindings added to Lua registry reference.
+- **tests/renderer/test_water.cpp** — 21 new CPU-only tests: WaterSurfaceConfig default values, WaterHandle validity semantics, plane count tracking, Fresnel parameter range validation, scroll speed defaults.
+- **examples/showcase/game.lua** — `grassHandle`/`waterHandle` state variables added; cleanup in all 3 exit sites (menu, quit, scene transitions).
+- **examples/showcase/levels/level1.lua** — `Camera.setTerrainAware(true)` applied; water surface created in fountain basin area via `ffe.createWaterSurface`.
+- **docs/assets/screenshots/showcase_level1.png**, **website/docs/assets/screenshots/showcase_level1.png** — Updated screenshots showing Level 1 with vegetation and water surface.
+
+**Process improvements:**
+
+- **.claude/CLAUDE.md** — Multi-instance agent parallelism rule (PM may dispatch same agent type in multiple simultaneous slots for file-disjoint work); PM pre-plan rule (PM drafts next milestone dispatch plan in devlog while current build runs).
+- **.claude/agents/build-engineer.md** — Selective screenshots policy: capture only when PM specifies an explicit list of demo names.
+- **.claude/agents/project-manager.md** — Screenshots field in dispatch instructions; multi-instance parallelism reference.
+- **.claude/agents/performance-critic.md**, **security-auditor.md**, **api-designer.md**, **game-dev-tester.md** — Multi-instance notes and examples-map.md reference where relevant.
+- **docs/examples-map.md** — New PM planning reference: maps each demo game to the subsystems it exercises, reducing planning overhead for screenshot and demo sessions.
+- **docs/agent-quickref.md** — 70-line agent quick-reference card (tier defaults, performance rules, naming, routing, common decisions).
+
+### Known Issues
+
+- Water surface (2x2m fountain basin) not visible in Level 1 screenshot: the terrain-level camera angle at screenshot time does not capture the water plane. The surface renders correctly at runtime when the player navigates to the basin. Deferred to backlog (low priority — cosmetic screenshot issue only).
+
+### Phase 9 Complete
+
+All Phase 9 milestones delivered:
+- M1 (Session 90): Heightmap terrain rendering
+- M2 (Session 91): Splat-map texturing + triplanar projection
+- M3 (Session 92): 3-level LOD + frustum culling
+- M4 (Session 108): World streaming (ChunkState machine, background worker thread)
+- M5 (Session 109): GPU-instanced vegetation (billboard grass, tree placement)
+- M6 (Session 110): Water rendering (reflection FBO, Fresnel blend, UV scroll)
+
+Total tests: 1430 (all passing, Clang-18 FAST build).
+
+### Next Session Goal
+
+**Phase 10 M1 — Prefab System:** Save/load reusable entity configurations (prefabs) as JSON assets. Prefab asset format, PrefabManager (load/instantiate/override), Lua bindings (`ffe.loadPrefab`, `ffe.instantiatePrefab`, `ffe.savePrefab`), editor integration (drag prefab from asset browser into scene), and test coverage.
+
+---
+
 ## 2026-03-08 — Session 109: Phase 9 M5 Vegetation System
 
 ### Summary

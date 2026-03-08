@@ -6,9 +6,9 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 109 |
-| Total tests | 1406 |
-| Total Lua bindings | ~213 |
+| Last session | 110 |
+| Total tests | 1430 |
+| Total Lua bindings | ~217 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
 | Phase 2 (3D Foundation) | COMPLETE |
 | Phase 3 (Standalone Editor) | MVP COMPLETE (6 milestones, Sessions 51-56) |
@@ -17,7 +17,8 @@
 | Phase 6 (Showcase Game) | COMPLETE (Sessions 66-73) |
 | Phase 7 (Rendering Pipeline) | COMPLETE (Sessions 74-84) |
 | Phase 8 (Vulkan Backend) | COMPLETE (Sessions 85-89) |
-| Phase 9 (Terrain/Open World) | IN PROGRESS — M1-M5 done, M6 next |
+| Phase 9 (Terrain/Open World) | COMPLETE (Sessions 90-92, 108-110) |
+| Phase 10 (Prefab System) | NEXT |
 | Windows build | DONE (MinGW-w64 cross-compilation) |
 | macOS build | DISABLED (upstream LuaJIT arm64-osx vcpkg issue) |
 | GitHub Actions CI | DONE (Linux Clang-18, Linux GCC-13) |
@@ -29,7 +30,7 @@
 3. **Breakout** -- brick-breaker 2D, Lua-only
 4. **3D Demo** -- mesh loading, Blinn-Phong, point lights, materials, shadows, skybox
 5. **Net Arena** -- 2D multiplayer arena, client-side prediction, server reconciliation
-6. **Echoes of the Ancients** -- 3-level 3D showcase game (COMPLETE: menus, puzzles, combat, victory, terrain, post-processing, vegetation)
+6. **Echoes of the Ancients** -- 3-level 3D showcase game (terrain, post-processing, vegetation, water)
 
 ## Known Issues / Deferred Items
 
@@ -38,44 +39,29 @@
 - MSVC native build support -- deferred (MinGW cross-compile works)
 - set3DCameraFPS lacks NaN/Inf guards (MINOR -- backlog)
 - NAT traversal / relay server -- deferred to backlog
-- Installer / easy setup wizard -- user should install, connect AI model, start making games without build complexity (user request, Session 75)
-- **Procedural Music Generation** -- Algorithmic music system using built-in synthesis/instruments to generate thematic background music for scenes. Could integrate with the editor for preview. Reduces dependency on external music creation tools.
-- **3D particle system** -- showcase demo uses a geometry-based workaround; a proper 3D particle system is needed for effects like fire, smoke, and impact bursts.
+- Installer / easy setup wizard -- user request (Session 75), backlog
+- **Procedural Music Generation** -- algorithmic music system using built-in synthesis/instruments
+- **3D particle system** -- showcase uses geometry workaround; proper system needed for fire/smoke/impact
+- Water surface (2x2m fountain basin) not visible in Level 1 screenshot -- cosmetic, low priority
 
 ## Recent Sessions (last 5)
 
 | Session | Summary |
 |---------|---------|
-| 109 | Phase 9 M5 Vegetation -- GPU-instanced billboard grass (256/chunk) + tree placement (512 trees), VEGETATION shader (GLSL 330, alpha-test, distance fade), 4 Lua bindings, 27 new tests (1406 total). Showcase Levels 1+3 updated with grass and trees. Agent quick-reference card added. Process: PM pre-plans-ahead pattern encoded in CLAUDE.md. |
-| 108 | Phase 9 M4 World Streaming -- ChunkState machine, background worker thread, main-thread GL upload, dirty-distance gating, 2 new Lua bindings (setTerrainStreamingRadius, getTerrainChunkCount), 20 new tests (1379 total). Showcase camera Y clamp fix. Process: multi-instance parallelism documented in CLAUDE.md + agent files. |
-| 107 | Director Process Review + Screenshot Pipeline Refresh -- selective screenshot policy in build-engineer.md + project-manager.md (capture only when PM specifies list), all 8 demo screenshots refreshed to reflect Sessions 105-106 visual fixes. No engine changes. 1358 tests. |
-| 106 | Real-Hardware Bug Fixes Round 3 -- mouse axis inversion fixed (FLIP_BOTH=true), terrain spawn height dynamic (getTerrainHeight + 2.5m), F-key + held-F attack fallbacks, combat debug logs removed, .context.md Terrain section added. 1358 tests. |
-| 105 | Keyboard Input Latch + fox.glb Mesh Fix -- latched keyboard press/release detection (`pressedThisTick[512]`/`releasedThisTick[512]`), flat normal computation for unindexed glTF meshes (fixes fox.glb blob), fox.glb restored in showcase guardians, .context.md updates. +11 tests (1358 total). |
+| 110 | Phase 9 M6 Water Rendering -- WaterManager, reflection FBO (half-res), Fresnel blend, animated UV scroll, 4 Lua bindings (createWaterSurface, destroyWaterSurface, setWaterScrollSpeed, setWaterFresnelParams), 21 new tests (1430 total). Level 1 water surface. Phase 9 COMPLETE. Process: multi-instance parallelism, PM pre-plan rule, selective screenshots, examples-map.md, agent-quickref.md. |
+| 109 | Phase 9 M5 Vegetation -- GPU-instanced billboard grass (256/chunk) + tree placement (512 trees), VEGETATION shader (GLSL 330, alpha-test, distance fade), 4 Lua bindings, 27 new tests (1406 total). Showcase Levels 1+3 updated. PM pre-plans-ahead pattern encoded. |
+| 108 | Phase 9 M4 World Streaming -- ChunkState machine, background worker thread, main-thread GL upload, dirty-distance gating, 2 Lua bindings, 20 new tests (1379 total). Showcase camera Y clamp fix. Multi-instance parallelism documented. |
+| 107 | Director Process Review + Screenshot Pipeline Refresh -- selective screenshot policy, all 8 demo screenshots refreshed. No engine changes. 1358 tests. |
+| 106 | Real-Hardware Bug Fixes Round 3 -- mouse axis inversion, terrain spawn height, F-key attack fallbacks, combat debug logs removed. 1358 tests. |
 
-## Phase 8 — Vulkan Backend (COMPLETE, Sessions 85-89)
+## Phase 9 — Terrain and Open World (COMPLETE, Sessions 90-92, 108-110)
 
-**Goal:** Add a Vulkan rendering backend alongside OpenGL, targeting STANDARD and MODERN tiers. ADR: `docs/architecture/adr-phase8-vulkan-backend.md`
-
-### Milestones
-
-- [x] M1 (Session 85): Vulkan Backend Bootstrap -- compile-time FFE_BACKEND selection, volk function loader, Vulkan instance/device/swapchain init (FIFO, 2 frames in flight), RHI Vulkan impl (beginFrame/endFrame clear-color, stubs for rest), tier/backend validation (Vulkan requires STANDARD+), 6 CPU-only tests.
-- [x] M2 (Session 86): Vulkan Shader Compilation + Vertex Buffers -- VMA integration, embedded SPIR-V shaders (constexpr u32 arrays), VkManagedBuffer (staging upload), VkManagedShader, PipelineConfig + createGraphicsPipeline (dynamic viewport/scissor), colored triangle rendering. 13 new CPU-only tests.
-- [x] M3 (Session 87): Vulkan Textures + Uniform Buffers -- VkImage/VkImageView/VkSampler via VMA, descriptor sets/pools (UBO + sampler), MVPUniform (192B per-frame host-coherent), embedded SPIR-V textured quad shaders, orthographic MVP, indexed draw with checkerboard texture. 10 new CPU-only tests.
-- [x] M4 (Session 88): Vulkan Mesh Rendering -- vk_resource_manager (256 buffer/texture, 32 shader handle pools, 1-based handles), full RHI impl (createBuffer/updateBuffer/destroyBuffer, createTexture/destroyTexture/bindTexture, createShader/destroyShader/useShader, setUniformMat4/Vec3/Float/Int via FNV-1a hash, drawArrays/drawIndexed), SceneUBO (256B) + LightUBO (64B), Blinn-Phong SPIR-V headers (placeholder, glslc TODO), render pass restructured for multi-draw-call frames. 17 new CPU-only tests.
-- [x] M5 (Session 89): Vulkan Depth Buffer + Build-Time SPIR-V -- VkImage depth attachment (VMA, D32_SFLOAT/D32_SFLOAT_S8/D24_UNORM_S8 format selection), PipelineConfig depth state, CMake glslc/glslangValidator pipeline (embed_spirv.cmake, constexpr u32 arrays), 6 GLSL 450 shader source files (triangle/textured/blinn_phong vert+frag), full Blinn-Phong directional lighting. 10 new tests. FULL build: 1234 tests, zero warnings, Clang-18 + GCC-13. **PHASE 8 COMPLETE.**
-
-## Phase 9 — Terrain and Open World (IN PROGRESS, Sessions 90+)
-
-**Goal:** Large-scale outdoor environment support with terrain rendering, LOD, streaming, vegetation, and water. ADR: `docs/architecture/adr-phase9-terrain.md`. See `docs/ROADMAP.md` for full deliverables.
-
-### Milestones
-
-- [x] M1 (Session 90): Heightmap Terrain Rendering -- TerrainHandle, TerrainConfig, raw float + PNG heightmap loading (stb_image), chunked mesh generation (configurable resolution up to 128x128 per chunk), normal computation via finite differences, bilinear height queries, path security, NaN rejection, terrain renderer (MESH_BLINN_PHONG, directional + point lights, shadows, fog), Terrain ECS component (8B), 4 Lua bindings, 18 new tests.
-- [x] M2 (Session 91): Terrain Texturing -- RGBA splat map (4 texture layers), triplanar projection for steep surfaces (threshold-gated), TerrainMaterial struct (splatTexture + 4 TerrainLayers with uvScale), TERRAIN shader (GLSL 330 core, Blinn-Phong + shadow PCF + point lights + fog + splat blending + triplanar), 3 Lua bindings (setTerrainSplatMap, setTerrainLayer, setTerrainTriplanar), 16 new tests.
-- [x] M3 (Session 92): Terrain LOD + Frustum Culling -- 3 LOD levels per chunk (full/half/quarter resolution), pre-generated at load time, distance-based LOD selection with configurable distances, reusable frustum culling utility (Griess-Hartmann plane extraction, p-vertex AABB test, O(1) per chunk), TerrainLodConfig, 1 Lua binding (setTerrainLodDistances), 13 new tests.
-- [x] M4 (Session 108): World Streaming -- ChunkState machine (EAGER/UNLOADED/QUEUED/GENERATING/READY_TO_UPLOAD/LOADED/UNLOADING), per-terrain background worker thread, main-thread GL upload gate, dirty-distance gating, 2 Lua bindings (setTerrainStreamingRadius, getTerrainChunkCount), 20 new tests (1379 total). ADR: `docs/architecture/adr-phase9-m4-world-streaming.md`.
-- [x] M5 (Session 109): Vegetation -- GPU-instanced billboard grass patches (up to 256/chunk), tree placement (up to 512 trees), VEGETATION shader (GLSL 330 core, Y-axis cylindrical billboard, alpha-test, distance fade), GrassInstance (24B), TreeInstance (16B), 4 Lua bindings (addVegetationPatch, removeVegetationPatch, addTree, clearTrees), 27 new tests (1406 total). ADR: `docs/architecture/adr-phase9-m5-vegetation.md`.
-- [ ] M6: Water Rendering -- reflective/refractive water plane, shoreline blending, animated surface.
+- [x] M1 (Session 90): Heightmap terrain rendering -- TerrainHandle, raw float + PNG heightmap, chunked mesh, bilinear height queries, 4 Lua bindings, 18 tests.
+- [x] M2 (Session 91): Terrain texturing -- RGBA splat map, triplanar projection, TERRAIN shader (GLSL 330), 3 Lua bindings, 16 tests.
+- [x] M3 (Session 92): LOD + frustum culling -- 3 LOD levels, distance-based selection, Griess-Hartmann frustum, 1 Lua binding, 13 tests.
+- [x] M4 (Session 108): World streaming -- ChunkState machine, background worker thread, GL upload gate, dirty-distance gating, 2 Lua bindings, 20 tests.
+- [x] M5 (Session 109): Vegetation -- GPU-instanced grass (24B/instance), tree placement (16B/instance), VEGETATION shader, 4 Lua bindings, 27 tests.
+- [x] M6 (Session 110): Water rendering -- reflection FBO, Fresnel blend, UV scroll, WaterManager, 4 Lua bindings, 21 tests.
 
 ## Build Commands
 
