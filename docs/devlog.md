@@ -3,6 +3,64 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-08 — Session 113: Phase 10 M3 LLM Integration Panel
+
+### Goal
+
+Phase 10 Milestone 3: LLM Integration Panel — an in-editor AI assistant that issues context-aware queries to an LLM provider, uses the subsystem's `.context.md` file as system prompt, and inserts generated Lua snippets into the active script slot via an explicit Insert button.
+
+### Delivered
+
+**Phase 10 M3 — LLM Integration Panel:**
+
+- **engine/editor/llm_panel.h** — `LlmConfig` struct (endpoint, model, API key, maxTokens, temperature, contextPath), `LlmResponse` (content, errorMsg, succeeded, latencyMs), `LlmPanel` class with `render()`/`configure()`/`getLastResponse()` API. Internal state: query buffer, response buffer, async request lifecycle, snippet-insertion callback.
+- **engine/editor/llm_panel.cpp** — full implementation: async HTTP thread via vendored cpp-httplib (POST to `/v1/chat/completions`), OpenAI-compatible JSON body, streaming-off response mode, 32KB response cap before JSON parse, context file assembly (`.context.md` loaded as system message, prefix-checked against project root), Lua snippet extraction from fenced code blocks, Insert button triggers registered callback. Config validation: `https://` enforcement, token clamp 1-8192, temperature clamp 0.0-2.0. API key scrubbed from all error strings.
+- **engine/editor/CMakeLists.txt** — `llm_panel.cpp` registered in build.
+- **engine/editor/.context.md** — LLM Panel section added: config fields, render() usage, callback pattern, security constraints, anti-patterns (no http:// endpoints, no unbounded context, no inline key storage).
+- **engine/scripting/script_engine.h / script_engine.cpp** — 2 new Lua bindings, both guarded `#ifdef FFE_EDITOR`: `ffe.llmQuery(config_table, prompt)` → result table; `ffe.isLLMConfigured()` → bool. Sandbox escape prevention: bindings compile out entirely in non-editor runtime builds.
+- **engine/scripting/.context.md** — ffe.llmQuery and ffe.isLLMConfigured documented (parameters, return type, editor-only note, usage pattern).
+- **third_party/httplib.h** — vendored cpp-httplib single-header (MIT licence). No new vcpkg dependency.
+- **tests/editor/test_llm_panel.cpp** — 15 Catch2 tests: config validation (token clamp low/high, temperature clamp, https:// enforcement), path traversal rejection (absolute paths outside project root, `../` traversal, null bytes), context file assembly (missing file returns empty string, valid file loads content), CA bundle path validation, snippet extraction from fenced Lua blocks, Insert button callback invocation.
+- **tests/CMakeLists.txt** — `test_llm_panel` registered.
+- **docs/architecture/adr-phase10-m3-llm-panel.md** — 645+ line ADR, Rev 2: problem statement, design options (embedded model vs API-forward vs plugin), chosen OpenAI-compatible API-forward design rationale, security model (all constraints enumerated), async threading model, shared_ptr lifecycle guarantee (no UB abandon path), context assembly algorithm, tier compatibility (LEGACY+ — CPU-only, no GPU requirement), future extension points (streaming mode, local model endpoint).
+
+### Security Review
+
+`security-auditor` shift-left review of the ADR (Phase 1) raised 2 HIGH findings, both resolved before implementation began:
+
+1. **HTTP endpoint allowed** — initial design permitted `http://` endpoints for local model servers. Finding: local models on shared machines could be MITM'd by other users on the same host via loopback sniffing. Resolution: `https://` enforcement mandatory; documentation notes that local model servers must use TLS or run via localhost proxy. ADR updated.
+2. **Unbounded response buffer before JSON parse** — initial design parsed the full HTTP response body with no size cap. Finding: a malicious or misconfigured endpoint could return a multi-GB payload, causing OOM. Resolution: 32KB hard cap enforced before `nlohmann::json::parse` is called; response is truncated and an error is returned. ADR updated.
+
+Post-implementation review (Phase 3): PASS. No CRITICAL or HIGH findings. MINOR noted: CA bundle path is platform-default (not pinned) — accepted as known limitation, documented in ADR.
+
+### Build Fix Cycle
+
+`build-engineer` Phase 5 (Clang-18 FAST) found 2 issues on first build:
+
+1. **Exception usage in engine core** — `llm_panel.cpp` used `try/catch` around JSON parse. Engine core prohibits exceptions (`-fno-rtti`, no-exceptions rule). Fixed: replaced with `nlohmann::json::accept()` pre-validation check followed by conditional parse; all error paths return via `LlmResponse.errorMsg`.
+2. **Path traversal security gap in tests** — `test_llm_panel.cpp` constructed a test fixture path using `std::filesystem::temp_directory_path()`, which on some CI configurations resolves outside the project root, causing the traversal-rejection test to pass for the wrong reason (the path was legitimately outside root, not caught by the traversal check). Fixed: test now uses a project-relative fixture path with an explicit `..` component that is caught by the prefix check.
+
+Rebuild: 1511/1511 PASS, zero warnings.
+
+### Build
+
+1511/1511 PASS — Clang-18, zero warnings. FAST build (single compiler, as specified).
+
+### game-dev-tester
+
+Skipped. The LLM panel is an editor-only UI feature with no Lua-side demo workflow (the `ffe.llmQuery` binding is `#ifdef FFE_EDITOR` and therefore not available to game Lua scripts). No example game update is applicable.
+
+### Session Close
+
+Session 113 commit pushed to origin/main:
+- `66fed59` — feat(editor): Phase 10 M3 — LLM Integration Panel
+
+### Next Session Goal
+
+**Phase 10 M4 — Editor Preferences and Project Wizard / Installer:** Persistent editor preferences (theme, key bindings, recent projects), a new-project wizard (template selection, directory picker, initial asset scaffold), and an installer or easy-setup script so a new developer can go from zero to running a game without manual build complexity.
+
+---
+
 ## 2026-03-08 — Session 112: Phase 10 M2 Visual Scripting
 
 ### Goal

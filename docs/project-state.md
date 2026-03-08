@@ -6,9 +6,9 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 112 |
-| Total tests | 1493 |
-| Total Lua bindings | ~223 |
+| Last session | 113 |
+| Total tests | 1511 |
+| Total Lua bindings | ~225 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
 | Phase 2 (3D Foundation) | COMPLETE |
 | Phase 3 (Standalone Editor) | MVP COMPLETE (6 milestones, Sessions 51-56) |
@@ -18,7 +18,7 @@
 | Phase 7 (Rendering Pipeline) | COMPLETE (Sessions 74-84) |
 | Phase 8 (Vulkan Backend) | COMPLETE (Sessions 85-89) |
 | Phase 9 (Terrain/Open World) | COMPLETE (Sessions 90-92, 108-110) |
-| Phase 10 (Advanced Editor) | IN PROGRESS — M1-M2 COMPLETE, M3 next |
+| Phase 10 (Advanced Editor) | IN PROGRESS — M1-M3 COMPLETE, M4 next |
 | Windows build | DONE (MinGW-w64 cross-compilation) |
 | macOS build | DISABLED (upstream LuaJIT arm64-osx vcpkg issue) |
 | GitHub Actions CI | DONE (Linux Clang-18, Linux GCC-13) |
@@ -49,18 +49,18 @@
 
 | Session | Summary |
 |---------|---------|
+| 113 | Phase 10 M3 LLM Integration Panel -- LlmPanel (async HTTP via vendored cpp-httplib, context-aware queries using .context.md files, Lua snippet insertion), 2 Lua bindings (ffe.llmQuery, ffe.isLLMConfigured, #ifdef FFE_EDITOR guarded), 15 tests (1511 total, Clang-18 FAST). Security: 2 HIGH findings in shift-left ADR review resolved (https:// enforcement, 32KB response cap, API key scrubbing, path traversal prevention). Build fix cycle: try/catch → error-code refactor + path traversal security gap in tests. ADR 645+ lines (Rev 2). 1 commit (66fed59). |
 | 112 | Phase 10 M2 Visual Scripting -- VisualScriptingSystem (11 built-in nodes, topological sort, function-pointer dispatch, 14-step security pipeline), GraphEditorPanel (ImGui node canvas, pan/zoom, bezier connections, RMB add menu), 3 Lua bindings (loadGraph, attachGraph, detachGraph), 42 tests (1493 total, Clang-18 FAST). Build fix cycle: macro/braced-init + field name. Warning cleanup: terrain.cpp + vegetation.h. ADR 918 lines. Process: build-engineer kill-stale-processes rule. 1 commit (d2d169d). |
 | 111 | Phase 10 M1 Prefab System -- PrefabSystem (JSON load, ECS instantiate, override, security hardening), 3 Lua bindings (loadPrefab, instantiatePrefab, unloadPrefab), 21 tests (1451 total, Clang-18 + GCC-13 FULL). Screenshot pipeline fixes (xdotool, real-display, camera angle, setCommandLineArgs argv). Process discipline additions (director). 2 commits (066f496, f460525). |
 | 110 | Phase 9 M6 Water Rendering -- WaterManager, reflection FBO (half-res), Fresnel blend, animated UV scroll, 4 Lua bindings (createWaterSurface, destroyWaterSurface, setWaterScrollSpeed, setWaterFresnelParams), 21 new tests (1430 total). Level 1 water surface. Phase 9 COMPLETE. Process: multi-instance parallelism, PM pre-plan rule, selective screenshots, examples-map.md, agent-quickref.md. |
 | 109 | Phase 9 M5 Vegetation -- GPU-instanced billboard grass (256/chunk) + tree placement (512 trees), VEGETATION shader (GLSL 330, alpha-test, distance fade), 4 Lua bindings, 27 new tests (1406 total). Showcase Levels 1+3 updated. PM pre-plans-ahead pattern encoded. |
-| 108 | Phase 9 M4 World Streaming -- ChunkState machine, background worker thread, main-thread GL upload, dirty-distance gating, 2 Lua bindings, 20 new tests (1379 total). Showcase camera Y clamp fix. Multi-instance parallelism documented. |
 
 ## Phase 10 — Advanced Editor (IN PROGRESS)
 
 - [x] M1 (Session 111): Prefab System -- PrefabSystem (JSON load, security hardening, ECS instantiate, PrefabOverride), 3 Lua bindings, 21 tests, ADR (553 lines), .context.md updated.
 - [x] M2 (Session 112): Visual Scripting -- VisualScriptingSystem (11 nodes, topological sort, 14-step security pipeline), GraphEditorPanel (ImGui canvas, bezier wires, pan/zoom), 3 Lua bindings, 42 tests, ADR (918 lines), .context.md updated.
-- [ ] M3: LLM Integration Panel (NEXT)
-- [ ] M4: Editor Preferences and Project Wizard / Installer
+- [x] M3 (Session 113): LLM Integration Panel -- LlmPanel (async HTTP, context-aware queries, Lua snippet insertion), 2 Lua bindings (#ifdef FFE_EDITOR guarded), 15 tests, ADR (645+ lines Rev 2), .context.md updated.
+- [ ] M4: Editor Preferences and Project Wizard / Installer (NEXT)
 - [ ] M5: Animation Editor
 
 ## Phase 9 — Terrain and Open World (COMPLETE, Sessions 90-92, 108-110)
