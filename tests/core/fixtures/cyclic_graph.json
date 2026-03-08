@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "OnUpdate",
+      "editorX": 100.0,
+      "editorY": 100.0,
+      "defaults": {}
+    },
+    {
+      "id": 2,
+      "type": "Add",
+      "editorX": 300.0,
+      "editorY": 100.0,
+      "defaults": {
+        "a": 0.0,
+        "b": 0.0
+      }
+    },
+    {
+      "id": 3,
+      "type": "Multiply",
+      "editorX": 500.0,
+      "editorY": 100.0,
+      "defaults": {
+        "a": 0.0,
+        "b": 1.0
+      }
+    }
+  ],
+  "connections": [
+    { "srcNode": 1, "srcPort": 0, "dstNode": 2, "dstPort": 0 },
+    { "srcNode": 2, "srcPort": 0, "dstNode": 3, "dstPort": 0 },
+    { "srcNode": 3, "srcPort": 0, "dstNode": 2, "dstPort": 1 }
+  ]
+}

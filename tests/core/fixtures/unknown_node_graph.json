@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "MaliciousNode",
+      "editorX": 100.0,
+      "editorY": 100.0,
+      "defaults": {}
+    }
+  ],
+  "connections": []
+}

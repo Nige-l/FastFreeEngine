@@ -6,11 +6,14 @@ add_library(ffe_core STATIC
     input.cpp
     logging.cpp
     prefab_system.cpp
+    visual_scripting.cpp
 )
 
 target_include_directories(ffe_core
     PUBLIC ${CMAKE_SOURCE_DIR}/engine  # so includes are: #include "core/types.h"
 )
+
+find_package(nlohmann_json CONFIG REQUIRED)
 
 target_link_libraries(ffe_core
     PUBLIC
@@ -21,6 +24,7 @@ target_link_libraries(ffe_core
     PRIVATE
         glad
         glfw
+        nlohmann_json::nlohmann_json
 )
 
 # Windows requires explicit link against Winsock (ws2_32) and OpenGL (opengl32).

@@ -9,6 +9,7 @@ extern "C" {
 
 #include "scripting/script_engine.h"
 #include "core/prefab_system.h"
+#include "core/visual_scripting.h"
 #include "core/logging.h"
 #include "core/ecs.h"
 #include "core/input.h"
@@ -409,6 +410,17 @@ bool ScriptEngine::init() {
     lua_pushlightuserdata(L, this);
     lua_settable(L, LUA_REGISTRYINDEX);
 
+    // Step 7: Register the audio play-sound callback with VisualScriptingSystem.
+    // This avoids a circular link dependency: ffe_core cannot link ffe_audio,
+    // so the node executor uses a registered callback instead.
+    ffe::VisualScriptingSystem::registerPlaySoundFn([](uint32_t soundId) {
+        if (soundId == 0) return;
+        ffe::audio::SoundHandle sh{soundId};
+        if (ffe::audio::isValid(sh)) {
+            ffe::audio::playSound(sh);
+        }
+    });
+
     m_initialised = true;
     FFE_LOG_INFO("ScriptEngine", "Lua scripting initialised (budget: 1,000,000 instructions/call)");
     return true;
@@ -750,6 +762,14 @@ void ScriptEngine::setWorld(ffe::World* world) {
         lua_pushnil(L);                               // value: clear it
     }
     lua_settable(L, LUA_REGISTRYINDEX);
+}
+
+// ---------------------------------------------------------------------------
+// executeGraphs — delegates to VisualScriptingSystem::execute()
+// ---------------------------------------------------------------------------
+
+void ScriptEngine::executeGraphs(World& world, const float dt) {
+    m_visualScripting.execute(world, dt);
 }
 
 void ScriptEngine::deliverCollisionEvents(World& world) {
@@ -8166,6 +8186,173 @@ void ScriptEngine::registerEcsBindings() {
         return 0;
     });
     lua_setfield(L, -2, "unloadPrefab");
+
+    // ================================================================
+    // Visual scripting bindings
+    //
+    // ffe.loadGraph(path: string) -> integer
+    //   Load a node graph JSON file from a path relative to the asset root.
+    //   Returns integer handle id > 0 on success, 0 on failure.
+    //   Cold path only — call at startup or scene load, not per frame.
+    //
+    // ffe.attachGraph(entityId: integer, handle: integer) -> (none)
+    //   Attach a loaded graph to an entity (adds GraphComponent).
+    //   No-op if handle == 0 or entity == ffe.NULL_ENTITY.
+    //
+    // ffe.detachGraph(entityId: integer) -> (none)
+    //   Remove the GraphComponent from an entity.
+    //   No-op if the entity has no GraphComponent.
+    // ================================================================
+
+    // ffe.loadGraph(path: string) -> integer
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TSTRING) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.loadGraph: argument 1 must be a string (path)");
+            lua_pushinteger(state, 0);
+            return 1;
+        }
+        const char* path = lua_tostring(state, 1);
+        if (path == nullptr || path[0] == '\0') {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.loadGraph: path is null or empty");
+            lua_pushinteger(state, 0);
+            return 1;
+        }
+
+        // Retrieve ScriptEngine pointer from registry.
+        lua_pushlightuserdata(state, &s_engineRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            FFE_LOG_ERROR("ScriptEngine", "ffe.loadGraph: ScriptEngine not in registry");
+            lua_pushinteger(state, 0);
+            return 1;
+        }
+        auto* engine = static_cast<ffe::ScriptEngine*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        // Lazily propagate asset root to the visual scripting system.
+        if (engine->m_assetRoot[0] != '\0') {
+            engine->m_visualScripting.setAssetRoot(engine->m_assetRoot);
+        }
+
+        const ffe::GraphHandle handle = engine->m_visualScripting.loadGraph(path);
+        lua_pushinteger(state, static_cast<lua_Integer>(handle.id));
+        return 1;
+    });
+    lua_setfield(L, -2, "loadGraph");
+
+    // ffe.attachGraph(entityId: integer, handle: integer) -> (none)
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TNUMBER) {
+            FFE_LOG_ERROR("ScriptEngine",
+                          "ffe.attachGraph: argument 1 must be a number (entityId)");
+            return 0;
+        }
+        if (lua_type(state, 2) != LUA_TNUMBER) {
+            FFE_LOG_ERROR("ScriptEngine",
+                          "ffe.attachGraph: argument 2 must be a number (handle)");
+            return 0;
+        }
+
+        const lua_Integer rawEntity = lua_tointeger(state, 1);
+        const lua_Integer rawHandle = lua_tointeger(state, 2);
+
+        if (rawHandle <= 0 ||
+            rawHandle >= static_cast<lua_Integer>(ffe::MAX_GRAPHS_LOADED)) {
+            FFE_LOG_ERROR("ScriptEngine",
+                          "ffe.attachGraph: invalid handle %" PRId64,
+                          static_cast<long long>(rawHandle));
+            return 0;
+        }
+
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawEntity);
+        if (entityId == ffe::NULL_ENTITY) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.attachGraph: entityId is NULL_ENTITY");
+            return 0;
+        }
+
+        // Retrieve World pointer.
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            FFE_LOG_ERROR("ScriptEngine", "ffe.attachGraph: world not registered");
+            return 0;
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        // Retrieve ScriptEngine pointer to validate handle occupancy.
+        lua_pushlightuserdata(state, &s_engineRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            FFE_LOG_ERROR("ScriptEngine", "ffe.attachGraph: ScriptEngine not in registry");
+            return 0;
+        }
+        auto* engine = static_cast<ffe::ScriptEngine*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const ffe::GraphHandle handle{static_cast<ffe::u32>(rawHandle)};
+        if (!engine->m_visualScripting.getGraphAsset(handle)) {
+            FFE_LOG_ERROR("ScriptEngine",
+                          "ffe.attachGraph: handle %u is not a loaded graph",
+                          handle.id);
+            return 0;
+        }
+
+        if (!world->isValid(entityId)) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.attachGraph: entity %u is not valid", entityId);
+            return 0;
+        }
+
+        if (world->hasComponent<ffe::GraphComponent>(entityId)) {
+            auto& gc = world->getComponent<ffe::GraphComponent>(entityId);
+            gc.handle = handle;
+            gc.active = true;
+        } else {
+            world->addComponent<ffe::GraphComponent>(entityId, ffe::GraphComponent{handle, true});
+        }
+        return 0;
+    });
+    lua_setfield(L, -2, "attachGraph");
+
+    // ffe.detachGraph(entityId: integer) -> (none)
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TNUMBER) {
+            FFE_LOG_ERROR("ScriptEngine",
+                          "ffe.detachGraph: argument 1 must be a number (entityId)");
+            return 0;
+        }
+
+        const lua_Integer rawEntity = lua_tointeger(state, 1);
+        const ffe::EntityId entityId = static_cast<ffe::EntityId>(rawEntity);
+
+        if (entityId == ffe::NULL_ENTITY) {
+            return 0;  // no-op
+        }
+
+        // Retrieve World pointer.
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            FFE_LOG_ERROR("ScriptEngine", "ffe.detachGraph: world not registered");
+            return 0;
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        if (!world->isValid(entityId)) {
+            return 0;  // no-op — entity does not exist
+        }
+
+        if (world->hasComponent<ffe::GraphComponent>(entityId)) {
+            world->removeComponent<ffe::GraphComponent>(entityId);
+        }
+        return 0;
+    });
+    lua_setfield(L, -2, "detachGraph");
 
     lua_setglobal(L, "ffe");
 }

@@ -3,6 +3,7 @@
 
 add_library(ffe_editor STATIC
     editor.cpp
+    graph_editor_panel.cpp
 )
 
 target_include_directories(ffe_editor PUBLIC ${CMAKE_SOURCE_DIR}/engine)

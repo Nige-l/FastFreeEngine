@@ -78,6 +78,15 @@ This table is for reference. PM uses it to build the list; you use it to sanity-
 
 #### How to Take Screenshots
 
+**Before launching any demo for screenshot capture, kill stale FFE processes.** Run this once before the first screenshot command (not before each individual launch — a single kill pass is sufficient):
+
+```bash
+pkill -f "ffe_showcase\|ffe_3d_demo\|ffe_lua_demo\|ffe_pong\|ffe_breakout\|ffe_net_demo\|ffe_runtime" 2>/dev/null || true
+sleep 1
+```
+
+This prevents port conflicts (net_demo), stale Xvfb windows, and non-deterministic captures from leftover processes started by interrupted sessions or user testing.
+
 Output path: `docs/assets/screenshots/<demo_name>.png`. After a successful capture, also copy the file to `website/docs/assets/screenshots/<demo_name>.png` if that directory exists.
 
 Use `tools/take_screenshot.sh` from the repo root:

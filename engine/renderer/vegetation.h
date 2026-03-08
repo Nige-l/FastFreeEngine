@@ -200,7 +200,6 @@ private:
 
     // Unit-cube VBO shared by trunk and crown (position + normal, no UVs needed).
     u32 m_cubeVbo = 0;
-    u32 m_cubeIbo = 0;
     u32 m_cubeIndexCount = 0;
 
     // Fallback 4×4 solid-green RGBA texture used when patch textureHandle == 0.

@@ -886,7 +886,8 @@ static void generateChunkMeshCpu(const TerrainAsset& asset,
 // Upload a READY_TO_UPLOAD chunk to the GPU. Main thread only.
 // Decodes the buffer layout written by generateChunkMeshCpu.
 static void uploadStreamedChunk(TerrainAsset& asset, const u32 chunkIdx,
-                                 const u32 chunkX, const u32 chunkZ) {
+                                 [[maybe_unused]] const u32 chunkX,
+                                 [[maybe_unused]] const u32 chunkZ) {
     ChunkStreamState& cs = asset.chunkStream[chunkIdx];
     TerrainChunkGpu&  chunk = asset.chunks[chunkIdx];
 

@@ -2,6 +2,7 @@
 
 #include "core/types.h"
 #include "core/prefab_system.h"
+#include "core/visual_scripting.h"
 #include "renderer/vegetation.h"
 #include "renderer/water.h"
 
@@ -71,6 +72,11 @@ public:
     // Must call init() and setWorld() before use.
     // entityId maps to lua_Integer; dt maps to lua_Number (double).
     bool callFunction(const char* funcName, ffe::i64 entityId, double dt);
+
+    // Execute all active GraphComponents in `world` via the VisualScriptingSystem.
+    // Call once per fixed tick, before callFunction() so Lua can override graph outputs.
+    // No-op if no entities have active GraphComponents.
+    void executeGraphs(World& world, float dt);
 
     // Deliver collision events to the registered Lua callback.
     // Reads CollisionEventList from the World's ECS context and calls the
@@ -151,6 +157,10 @@ private:
     // setAssetRoot is called lazily from ffe.loadPrefab binding using
     // the engine's m_assetRoot. No explicit init/shutdown needed.
     ffe::PrefabSystem m_prefabSystem;
+
+    // Visual scripting system — node graph loader/executor.
+    // setAssetRoot is called lazily from ffe.loadGraph binding using m_assetRoot.
+    ffe::VisualScriptingSystem m_visualScripting;
 
     // Vegetation system — GPU-instanced billboard grass + trees.
     // init() must be called after the OpenGL context exists (deferred until
