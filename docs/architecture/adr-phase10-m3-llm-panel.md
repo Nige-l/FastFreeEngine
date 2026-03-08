@@ -370,15 +370,15 @@ The `m_pending` atomic flag is the only communication channel polled each frame.
 
 | File | Action | Owner |
 |------|--------|-------|
-| `engine/editor/llm_panel.h` | Create | engine-dev |
-| `engine/editor/llm_panel.cpp` | Create | engine-dev |
-| `engine/editor/CMakeLists.txt` | Modify (add llm_panel.cpp, CPPHTTPLIB_OPENSSL_SUPPORT) | engine-dev |
-| `engine/editor/.context.md` | Modify (add LLM panel section) | api-designer |
-| `engine/scripting/script_engine.h` | Modify (declare 2 new Lua bindings) | engine-dev |
-| `engine/scripting/script_engine.cpp` | Modify (implement `ffe.llmQuery`, `ffe.isLLMConfigured`) | engine-dev |
-| `tests/editor/test_llm_panel.cpp` | Create | engine-dev |
-| `tests/CMakeLists.txt` | Modify (add test_llm_panel) | engine-dev |
-| `third_party/httplib.h` | Vendor (pin to known release) | engine-dev |
+| `engine/editor/llm_panel.h` | Create | implementer |
+| `engine/editor/llm_panel.cpp` | Create | implementer |
+| `engine/editor/CMakeLists.txt` | Modify (add llm_panel.cpp, CPPHTTPLIB_OPENSSL_SUPPORT) | implementer |
+| `engine/editor/.context.md` | Modify (add LLM panel section) | architect |
+| `engine/scripting/script_engine.h` | Modify (declare 2 new Lua bindings) | implementer |
+| `engine/scripting/script_engine.cpp` | Modify (implement `ffe.llmQuery`, `ffe.isLLMConfigured`) | implementer |
+| `tests/editor/test_llm_panel.cpp` | Create | tester |
+| `tests/CMakeLists.txt` | Modify (add test_llm_panel) | tester |
+| `third_party/httplib.h` | Vendor (pin to known release) | implementer |
 
 No files under `engine/renderer/`, `engine/physics/`, `engine/networking/`, `engine/audio/`, or `engine/core/` are modified by this milestone.
 
@@ -585,7 +585,7 @@ static int lua_llmQuery(lua_State* L);
 
 **Risk:** A malicious or corrupted `.context.md` file contains text that hijacks the LLM's instructions (e.g., "Ignore all previous instructions and...").
 
-**Assessment:** `.context.md` files are engine assets checked into the repository and owned by `api-designer`. They are not user-supplied input. The threat surface is low: an attacker would need write access to the repository to inject content.
+**Assessment:** `.context.md` files are engine assets checked into the repository and owned by `architect`. They are not user-supplied input. The threat surface is low: an attacker would need write access to the repository to inject content.
 
 **Mitigations:**
 - Context files are loaded from paths under the project root only. The `loadContextBlock` function validates each path against the project root before opening it (same canonicalization logic as `core/platform.h`).
@@ -671,7 +671,7 @@ The following must be resolved before or during implementation. The implementati
 
 **OQ-1 — RESOLVED.** The destructor abandon-path UB has been eliminated by mandating the `shared_ptr<LLMSharedState>` handoff pattern (see §7.3). The panel releases its `shared_ptr` reference in the destructor; the background thread's captured copy keeps the state alive until the thread exits. No UB is possible. Implementation agents must follow §7.3 exactly.
 
-**OQ-2 (vcpkg / Windows):** Does the MinGW cross-compile environment provide OpenSSL headers? If not, `"openssl"` must be added to `vcpkg.json`. The build-engineer should test the MinGW build after M3 lands. If it fails due to missing OpenSSL, the fix is to add the vcpkg entry — this is a one-line change and does not require a new ADR.
+**OQ-2 (vcpkg / Windows):** Does the MinGW cross-compile environment provide OpenSSL headers? If not, `"openssl"` must be added to `vcpkg.json`. `ops` should test the MinGW build after M3 lands. If it fails due to missing OpenSSL, the fix is to add the vcpkg entry — this is a one-line change and does not require a new ADR.
 
 **OQ-3 (cpp-httplib version pin):** The implementation agent must pin `third_party/httplib.h` to a specific release (SHA or tagged version). The recommended version is the latest stable release at implementation time. The commit message must include: `vendor: cpp-httplib vX.Y.Z (SHA: ...)`.
 

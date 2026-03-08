@@ -44,15 +44,15 @@ Phase 10 M2 delivers the first usable iteration of visual scripting in FFE: a gr
 
 | File | Owner |
 |------|-------|
-| `engine/core/visual_scripting.h` | `engine-dev` |
-| `engine/core/visual_scripting.cpp` | `engine-dev` |
-| `engine/scripting/script_engine.h` (add member + 3 bindings) | `engine-dev` |
-| `engine/scripting/script_engine.cpp` (bind `ffe.loadGraph`, `ffe.attachGraph`, `ffe.detachGraph`) | `engine-dev` |
-| `tests/core/test_visual_scripting.cpp` | `engine-dev` |
-| `engine/editor/graph_editor_panel.h` | `renderer-specialist` |
-| `engine/editor/graph_editor_panel.cpp` | `renderer-specialist` |
-| `engine/core/.context.md` (Visual Scripting section) | `engine-dev` |
-| `engine/scripting/.context.md` (new bindings) | `api-designer` |
+| `engine/core/visual_scripting.h` | `implementer` |
+| `engine/core/visual_scripting.cpp` | `implementer` |
+| `engine/scripting/script_engine.h` (add member + 3 bindings) | `implementer` |
+| `engine/scripting/script_engine.cpp` (bind `ffe.loadGraph`, `ffe.attachGraph`, `ffe.detachGraph`) | `implementer` |
+| `tests/core/test_visual_scripting.cpp` | `tester` |
+| `engine/editor/graph_editor_panel.h` | `implementer` |
+| `engine/editor/graph_editor_panel.cpp` | `implementer` |
+| `engine/core/.context.md` (Visual Scripting section) | `architect` |
+| `engine/scripting/.context.md` (new bindings) | `architect` |
 
 **Rationale for `engine/core/`:** The visual scripting runtime is an ECS-level concern — it reads entities, attaches `GraphComponent`, and drives per-frame execution. It has no GPU dependency. The same reasoning that placed `PrefabSystem` in `engine/core/` applies here: the node executor is entity/component logic, not rendering logic. The editor canvas panel (`graph_editor_panel`) lives in `engine/editor/` because it is ImGui code that only compiles under `#ifdef FFE_EDITOR`.
 
@@ -649,7 +649,7 @@ static int lua_detachGraph(lua_State* L) {
 
 ### 2.8 Editor Integration — GraphEditorPanel
 
-The graph editor panel is a new ImGui panel docked in the existing editor dockspace. It is only compiled when `FFE_EDITOR` is defined. Owned by `renderer-specialist`.
+The graph editor panel is a new ImGui panel docked in the existing editor dockspace. It is only compiled when `FFE_EDITOR` is defined. Owned by `implementer`.
 
 ```cpp
 // engine/editor/graph_editor_panel.h
@@ -671,7 +671,7 @@ namespace ffe::editor {
 // node type list). No graph edits are persisted to disk in M2 — the
 // canvas is a viewer/layout tool. Save-to-disk is deferred to M3.
 //
-// Owner: renderer-specialist (ImGui code; no engine logic).
+// Owner: implementer (ImGui code; no engine logic).
 class GraphEditorPanel {
 public:
     GraphEditorPanel();
@@ -731,7 +731,7 @@ private:
 
 **Node drag:** In edit mode only. Left-drag on a node header updates `m_layouts[nodeIdx]`. The updated positions are not written back to the JSON file (save deferred to M3).
 
-**Read-only in play mode:** When `isPlaying == true`, drag and right-click are disabled. The panel renders node highlights (a coloured border) on nodes that executed this frame — this requires a per-node execution flag set by the executor, stored as a bitfield in `GraphAsset` during execution (or as a frame-counter integer per node). Implementation detail left to `renderer-specialist`.
+**Read-only in play mode:** When `isPlaying == true`, drag and right-click are disabled. The panel renders node highlights (a coloured border) on nodes that executed this frame — this requires a per-node execution flag set by the executor, stored as a bitfield in `GraphAsset` during execution (or as a frame-counter integer per node). Implementation detail left to `implementer`.
 
 **Right-click add-node menu:** Shows all 11 built-in node type names. Selecting one appends a `NodeInstance` to a local staging buffer (not the live `GraphAsset` — staging is editor-side only in M2). Because save-to-disk is deferred, this is primarily a UX preview for M3.
 
@@ -754,7 +754,7 @@ The graph executor is pure CPU code. The editor canvas uses ImGui (CPU-side draw
 
 ### 2.10 Security Threat Model
 
-This section is written for `security-auditor`'s shift-left review.
+This section is written for `critic`'s shift-left review.
 
 #### Threat 1: Path Traversal via `ffe.loadGraph`
 
@@ -913,13 +913,13 @@ Visual scripting and Lua scripting are parallel, independent systems. They share
 
 ~~The current design runs graph execution before `ScriptEngine::callFunction` so Lua can override graph outputs. If a game uses both systems on the same entity, this is the safest default. PM should confirm this ordering is correct for the use cases planned in M2 demos.~~
 
-**RESOLVED (security-auditor finding 2):** All nodes in a valid graph must be reachable from at least one event node. Isolated subgraphs are rejected at load time (Section 2.5 step 12b). This resolves the concern about accidentally-disconnected subgraphs consuming CPU silently. Execution ordering relative to Lua (graphs first, then Lua) is confirmed as the correct default for M2.
+**RESOLVED (critic finding 2):** All nodes in a valid graph must be reachable from at least one event node. Isolated subgraphs are rejected at load time (Section 2.5 step 12b). This resolves the concern about accidentally-disconnected subgraphs consuming CPU silently. Execution ordering relative to Lua (graphs first, then Lua) is confirmed as the correct default for M2.
 
 ### 4.3 OnCollision Node — Event Delivery Mechanism
 
 ~~`OnCollision` reads `CollisionEventList` from the ECS context. The collision system populates this list once per physics tick. If graph execution runs at render rate (not physics rate), `OnCollision` may fire multiple times for a single collision event, or miss events. PM should clarify whether graph execution should run at fixed-tick rate (alongside physics) or render rate. The safest answer for M2 is **fixed-tick rate** — same as `ScriptEngine::callFunction` — which makes `OnCollision` correct.~~
 
-**RESOLVED (security-auditor finding 8):** The `DestroyEntity` node now uses a deferred destroy buffer (Section 2.3, Section 2.4) to prevent use-after-free during the entity iteration loop. The destroyed entity's `GraphComponent` active flag is cleared immediately; `world.destroyEntity` is flushed after the iteration loop completes. `OnCollision` runs at fixed-tick rate (same as `ScriptEngine::callFunction`) — confirmed correct for M2.
+**RESOLVED (critic finding 8):** The `DestroyEntity` node now uses a deferred destroy buffer (Section 2.3, Section 2.4) to prevent use-after-free during the entity iteration loop. The destroyed entity's `GraphComponent` active flag is cleared immediately; `world.destroyEntity` is flushed after the iteration loop completes. `OnCollision` runs at fixed-tick rate (same as `ScriptEngine::callFunction`) — confirmed correct for M2.
 
 ### 4.4 `SetVelocity` Node — 2D Only or 2D+3D?
 
@@ -937,12 +937,12 @@ This section is for PM's reference when writing the Phase 5 dispatch plan.
 
 **Phase 2 — Implementation split:**
 
-- **Foundation (sequential, engine-dev):** Write `engine/core/visual_scripting.h` first. All types (`GraphHandle`, `PortType`, `PortValue`, `NodeDef`, `NodeInstance`, `Connection`, `GraphAsset`, `GraphComponent`, `VisualScriptingSystem` class declaration) must be in the header before parallel work begins. Define all 11 `NodeDef` entries in `visual_scripting.cpp`.
+- **Foundation (sequential, implementer):** Write `engine/core/visual_scripting.h` first. All types (`GraphHandle`, `PortType`, `PortValue`, `NodeDef`, `NodeInstance`, `Connection`, `GraphAsset`, `GraphComponent`, `VisualScriptingSystem` class declaration) must be in the header before parallel work begins. Define all 11 `NodeDef` entries in `visual_scripting.cpp`.
 
 - **Workers (parallel after foundation):**
-  - **engine-dev worker A:** `engine/core/visual_scripting.cpp` (executor: load pipeline, DFS sort, per-frame execute loop, node implementations for all 11 nodes), `engine/scripting/script_engine.h` (add member + 3 binding declarations), `engine/scripting/script_engine.cpp` (add `ffe.loadGraph`, `ffe.attachGraph`, `ffe.detachGraph`), `tests/core/test_visual_scripting.cpp` (33 tests), `engine/core/.context.md` (Visual Scripting section).
-  - **renderer-specialist:** `engine/editor/graph_editor_panel.h`, `engine/editor/graph_editor_panel.cpp`, integration into `EditorOverlay`.
+  - **implementer worker A:** `engine/core/visual_scripting.cpp` (executor: load pipeline, DFS sort, per-frame execute loop, node implementations for all 11 nodes), `engine/scripting/script_engine.h` (add member + 3 binding declarations), `engine/scripting/script_engine.cpp` (add `ffe.loadGraph`, `ffe.attachGraph`, `ffe.detachGraph`), `tests/core/test_visual_scripting.cpp` (33 tests), `engine/core/.context.md` (Visual Scripting section).
+  - **implementer worker B:** `engine/editor/graph_editor_panel.h`, `engine/editor/graph_editor_panel.cpp`, integration into `EditorOverlay`.
 
-**Phase 3 — Expert panel (parallel):** `performance-critic` + `security-auditor` + `api-designer` (updates `engine/scripting/.context.md` for 3 new bindings).
+**Phase 3 — Expert panel (parallel):** `critic` + `architect` (updates `engine/scripting/.context.md` for 3 new bindings).
 
 **Phase 5 — Build:** FAST (Clang-18 only). FULL (Clang-18 + GCC-13) at PM's discretion if compiler portability is a concern for new template code.

@@ -379,7 +379,7 @@ The binding must check `overrides.count < PrefabOverrides::MAX` before calling `
 
 ### 2.9 Security Surface
 
-This section is written for `security-auditor`'s shift-left review.
+This section is written for `critic`'s shift-left review.
 
 #### Threat 1: Path Traversal via `loadPrefab`
 
