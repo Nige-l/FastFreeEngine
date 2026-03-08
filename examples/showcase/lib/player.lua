@@ -209,6 +209,7 @@ function Player.update(dt)
     -- F key provides a reliable fallback until mouse capture is confirmed working.
     local wantAttack = ffe.isMousePressed(ffe.MOUSE_LEFT)
                     or ffe.isKeyPressed(ffe.KEY_F)
+                    or ffe.isKeyHeld(ffe.KEY_F)
     if ffe.isGamepadConnected(0) then
         wantAttack = wantAttack or ffe.isGamepadButtonPressed(0, ffe.GAMEPAD_X)
     end

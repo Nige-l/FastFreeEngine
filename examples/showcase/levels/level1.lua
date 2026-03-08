@@ -673,9 +673,12 @@ end
 
 --------------------------------------------------------------------
 -- Player spawn (south side of courtyard, at the entrance)
--- Ground plane top is at Y=0; spawn player above it.
+-- Query terrain height at spawn XZ so the player lands on the
+-- surface even when the heightmap raises the ground above Y=0.
 --------------------------------------------------------------------
-local SPAWN_Y = 0.6
+local terrainSurfaceY = ffe.getTerrainHeight(0, -12) or 0
+ffe.log("[Level1] Terrain surface at spawn XZ(0,-12): " .. tostring(terrainSurfaceY))
+local SPAWN_Y = math.max(terrainSurfaceY + 2.5, 2.5)
 Player.create(0, SPAWN_Y, -12, cesiumMesh)
 Camera.setPosition(0, SPAWN_Y + 2, -12)
 Camera.setYawPitch(180, 25)  -- Camera behind (south), looking north into courtyard toward fountain

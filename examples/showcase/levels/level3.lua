@@ -698,9 +698,14 @@ end)
 
 --------------------------------------------------------------------
 -- Player spawn (on first stepping stone platform)
+-- Query terrain height at spawn XZ so the player lands on the
+-- surface even when the summit heightmap raises the ground above Y=0.
 --------------------------------------------------------------------
-Player.create(0, 2.5, -11, cesiumMesh)
-Camera.setPosition(0, 5.5, -14)
+local terrainSurfaceY = ffe.getTerrainHeight(0, -11) or 0
+ffe.log("[Level3] Terrain surface at spawn XZ(0,-11): " .. tostring(terrainSurfaceY))
+local SPAWN_Y = math.max(terrainSurfaceY + 2.5, 2.5)
+Player.create(0, SPAWN_Y, -11, cesiumMesh)
+Camera.setPosition(0, SPAWN_Y + 3, -14)
 Camera.setYawPitch(180, 22)  -- Camera behind (south), looking north toward arena and floating platforms
 
 if HUD then
@@ -794,8 +799,8 @@ ffe.every(TICK_RATE, function()
         local px, py, pz = Player.getPosition()
         if py < -15 then
             Player.cleanup()
-            Player.create(0, 2.5, -11, cesiumMesh)
-            Camera.setPosition(0, 5.5, -14)
+            Player.create(0, SPAWN_Y, -11, cesiumMesh)
+            Camera.setPosition(0, SPAWN_Y + 3, -14)
             if HUD then HUD.showPrompt("Lost in the clouds... regaining footing!", 2.0) end
         end
     end

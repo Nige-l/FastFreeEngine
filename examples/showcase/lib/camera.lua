@@ -10,6 +10,9 @@
 
 Camera = {}
 
+local FLIP_BOTH = true  -- Set false if mouse look is inverted on your system
+-- FLIP_BOTH=true: Wayland cursor-disabled delivers opposite-sign deltas
+
 --------------------------------------------------------------------
 -- Constants
 --------------------------------------------------------------------
@@ -52,8 +55,9 @@ function Camera.update(dt)
     local dx = ffe.getMouseDeltaX()
     local dy = ffe.getMouseDeltaY()
 
-    yaw   = yaw   + dx * MOUSE_SENSITIVITY
-    pitch = pitch - dy * MOUSE_SENSITIVITY  -- negate: GLFW Y grows downward, so negative dy = mouse up = look up
+    local flipSign = FLIP_BOTH and -1 or 1
+    yaw   = yaw   + dx * MOUSE_SENSITIVITY * flipSign
+    pitch = pitch - dy * MOUSE_SENSITIVITY * flipSign  -- negate: GLFW Y grows downward, so negative dy = mouse up = look up
 
     -- Gamepad: right stick for camera orbit (with dead-zone)
     if ffe.isGamepadConnected(0) then
@@ -65,8 +69,8 @@ function Camera.update(dt)
         if math.abs(rx) < DEAD_ZONE then rx = 0 end
         if math.abs(ry) < DEAD_ZONE then ry = 0 end
 
-        yaw   = yaw   + rx * GAMEPAD_SENSITIVITY * dt
-        pitch = pitch - ry * GAMEPAD_SENSITIVITY * dt  -- negate: stick up = negative ry = look up
+        yaw   = yaw   + rx * GAMEPAD_SENSITIVITY * dt * flipSign
+        pitch = pitch - ry * GAMEPAD_SENSITIVITY * dt * flipSign  -- negate: stick up = negative ry = look up
     end
 
     -- Clamp pitch

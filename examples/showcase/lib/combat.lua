@@ -77,8 +77,6 @@ function Combat.attack(playerPos, playerForward)
 
             -- Camera shake on hit for feedback
             ffe.cameraShake(0.5, 0.15)
-        else
-            ffe.log("[Combat] Hit non-enemy entity " .. tostring(hitEntity))
         end
 
         return hitEntity
