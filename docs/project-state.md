@@ -6,8 +6,8 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 104 |
-| Total tests | 1347 (Clang-18, zero warnings) |
+| Last session | 105 |
+| Total tests | 1347+ (Clang-18, zero warnings — exact count pending build) |
 | Total Lua bindings | ~207 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
 | Phase 2 (3D Foundation) | COMPLETE |
@@ -40,18 +40,17 @@
 - NAT traversal / relay server -- deferred to backlog
 - Installer / easy setup wizard -- user should install, connect AI model, start making games without build complexity (user request, Session 75)
 - **Procedural Music Generation** -- Algorithmic music system using built-in synthesis/instruments to generate thematic background music for scenes. Could integrate with the editor for preview. Reduces dependency on external music creation tools.
-- **fox.glb unindexed mesh rendering broken** -- fox.glb renders as a triangle blob; replaced with cube.glb as workaround in showcase levels. Underlying bug in mesh loader for unindexed meshes needs investigation.
 - **3D particle system** -- showcase demo uses a geometry-based workaround; a proper 3D particle system is needed for effects like fire, smoke, and impact bursts.
 
 ## Recent Sessions (last 5)
 
 | Session | Summary |
 |---------|---------|
-| 104 | Real-Hardware Bug Fixes — deferred cursor capture (mouse grab fix), HDR FBO clear colour (black sky fix), terrain AABB/UV centring (floating wedge fix), inverted mouse Y fix, fox.glb replaced with cube.glb, crosshair removed, F-key attack fallback. +11 tests (1347 total). |
-| 102 | CMake Lua Asset Copy at Build-Time — new CopyExampleAssets.cmake helper (ffe_copy_example_lua/dir), all 6 examples use POST_BUILD copy, showcase CMakeLists simplified, deleted 30MB Pixel Crown.wav duplicate. 1336 tests. |
-| 101 | Input Race Condition + Physics Transform Fix — mouse click latching (fixes LMB attack), fillTransform3D reads Jolt body (fixes floating player), Level 2 artifact bypass fix, kinematic bridges/platforms, deleted tone placeholders. 1336 tests. |
-| 99 | Demo Visual Enrichment — point lights, flame tips, lava layers, gem pedestals, braziers, camera angle improvements across all 3 showcase levels. Retaken screenshots. 1336 tests. |
-| 98 | Screenshot Visual Quality Tuning — fog distances pushed out (60-200), material/ambient brightening on software renderer, camera angles face level geometry. Retaken screenshots. 1336 tests. |
+| 105 | Keyboard Input Latch + fox.glb Mesh Fix -- latched keyboard press/release detection (`pressedThisTick[512]`/`releasedThisTick[512]`), flat normal computation for unindexed glTF meshes (fixes fox.glb blob), fox.glb restored in showcase guardians, .context.md updates. +11 tests (1347+). |
+| 104 | Real-Hardware Bug Fixes -- deferred cursor capture (mouse grab fix), HDR FBO clear colour (black sky fix), terrain AABB/UV centring (floating wedge fix), inverted mouse Y fix, fox.glb replaced with cube.glb, crosshair removed, F-key attack fallback. +11 tests (1347 total). |
+| 102 | CMake Lua Asset Copy at Build-Time -- new CopyExampleAssets.cmake helper (ffe_copy_example_lua/dir), all 6 examples use POST_BUILD copy, showcase CMakeLists simplified, deleted 30MB Pixel Crown.wav duplicate. 1336 tests. |
+| 101 | Input Race Condition + Physics Transform Fix -- mouse click latching (fixes LMB attack), fillTransform3D reads Jolt body (fixes floating player), Level 2 artifact bypass fix, kinematic bridges/platforms, deleted tone placeholders. 1336 tests. |
+| 99 | Demo Visual Enrichment -- point lights, flame tips, lava layers, gem pedestals, braziers, camera angle improvements across all 3 showcase levels. Retaken screenshots. 1336 tests. |
 
 ## Phase 8 — Vulkan Backend (COMPLETE, Sessions 85-89)
 

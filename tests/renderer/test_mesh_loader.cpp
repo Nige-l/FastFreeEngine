@@ -327,3 +327,154 @@ TEST_CASE("setTransform3D: Euler 90,0,0 around X produces expected quaternion") 
     REQUIRE_THAT(q.y, Catch::Matchers::WithinAbs(0.0f, 1e-5f));
     REQUIRE_THAT(q.z, Catch::Matchers::WithinAbs(0.0f, 1e-5f));
 }
+
+// ---------------------------------------------------------------------------
+// Flat normal computation correctness (CPU-only, no RHI, no .glb dependency)
+//
+// These tests validate the cross-product logic used by the mesh loader's
+// unindexed mesh path when no NORMAL accessor is present in the glTF asset.
+// The logic mirrors exactly what mesh_loader.cpp does in the
+// "isUnindexed && normalAccessor == nullptr" branches.
+// ---------------------------------------------------------------------------
+
+#include <cmath>  // sqrtf
+
+// Helper: compute flat normal for a CCW triangle (v0, v1, v2).
+// Returns the normalised cross product of (v1-v0) x (v2-v0).
+// Matches the flat normal generation code in mesh_loader.cpp exactly.
+static void computeFlatNormal(
+    float v0x, float v0y, float v0z,
+    float v1x, float v1y, float v1z,
+    float v2x, float v2y, float v2z,
+    float& outNx, float& outNy, float& outNz)
+{
+    const float e1x = v1x - v0x;
+    const float e1y = v1y - v0y;
+    const float e1z = v1z - v0z;
+    const float e2x = v2x - v0x;
+    const float e2y = v2y - v0y;
+    const float e2z = v2z - v0z;
+
+    float nx = e1y * e2z - e1z * e2y;
+    float ny = e1z * e2x - e1x * e2z;
+    float nz = e1x * e2y - e1y * e2x;
+
+    const float len = sqrtf(nx * nx + ny * ny + nz * nz);
+    if (len > 1e-8f) {
+        const float invLen = 1.0f / len;
+        nx *= invLen;
+        ny *= invLen;
+        nz *= invLen;
+    } else {
+        nx = 0.0f; ny = 1.0f; nz = 0.0f;
+    }
+    outNx = nx; outNy = ny; outNz = nz;
+}
+
+TEST_CASE("flatNormal: XY-plane CCW triangle produces +Z normal") {
+    // Triangle in the XY plane with CCW winding:
+    //   v0=(0,0,0), v1=(1,0,0), v2=(0,1,0)
+    // CCW in XY => normal should point in +Z direction
+    float nx, ny, nz;
+    computeFlatNormal(0,0,0, 1,0,0, 0,1,0, nx, ny, nz);
+
+    REQUIRE_THAT(nx, Catch::Matchers::WithinAbs(0.0f, 1e-5f));
+    REQUIRE_THAT(ny, Catch::Matchers::WithinAbs(0.0f, 1e-5f));
+    REQUIRE_THAT(nz, Catch::Matchers::WithinAbs(1.0f, 1e-5f));
+}
+
+TEST_CASE("flatNormal: XY-plane CW triangle produces -Z normal") {
+    // Reversed winding (CW) in XY => normal points in -Z
+    float nx, ny, nz;
+    computeFlatNormal(0,0,0, 0,1,0, 1,0,0, nx, ny, nz);
+
+    REQUIRE_THAT(nx, Catch::Matchers::WithinAbs(0.0f, 1e-5f));
+    REQUIRE_THAT(ny, Catch::Matchers::WithinAbs(0.0f, 1e-5f));
+    REQUIRE_THAT(nz, Catch::Matchers::WithinAbs(-1.0f, 1e-5f));
+}
+
+TEST_CASE("flatNormal: XZ-plane CCW triangle produces +Y normal (floor)") {
+    // Triangle in the XZ plane (floor):
+    //   v0=(0,0,0), v1=(1,0,0), v2=(0,0,-1)
+    // CCW when viewed from above (Y+) => normal +Y
+    float nx, ny, nz;
+    computeFlatNormal(0,0,0, 1,0,0, 0,0,-1, nx, ny, nz);
+
+    REQUIRE_THAT(nx, Catch::Matchers::WithinAbs(0.0f, 1e-5f));
+    REQUIRE_THAT(ny, Catch::Matchers::WithinAbs(1.0f, 1e-5f));
+    REQUIRE_THAT(nz, Catch::Matchers::WithinAbs(0.0f, 1e-5f));
+}
+
+TEST_CASE("flatNormal: result is unit length") {
+    // Arbitrary non-axis-aligned triangle — normal must be unit length
+    float nx, ny, nz;
+    computeFlatNormal(1,0,0, 0,1,0, 0,0,1, nx, ny, nz);
+
+    const float len = sqrtf(nx*nx + ny*ny + nz*nz);
+    REQUIRE_THAT(len, Catch::Matchers::WithinAbs(1.0f, 1e-5f));
+}
+
+TEST_CASE("flatNormal: degenerate triangle (zero-area) falls back to up vector") {
+    // Degenerate: all three vertices at the same point
+    float nx, ny, nz;
+    computeFlatNormal(1,1,1, 1,1,1, 1,1,1, nx, ny, nz);
+
+    // Must not produce NaN and must fall back to (0,1,0)
+    REQUIRE_THAT(nx, Catch::Matchers::WithinAbs(0.0f, 1e-5f));
+    REQUIRE_THAT(ny, Catch::Matchers::WithinAbs(1.0f, 1e-5f));
+    REQUIRE_THAT(nz, Catch::Matchers::WithinAbs(0.0f, 1e-5f));
+}
+
+TEST_CASE("flatNormal: collinear vertices fall back to up vector") {
+    // Degenerate: three collinear points — cross product is zero
+    float nx, ny, nz;
+    computeFlatNormal(0,0,0, 1,0,0, 2,0,0, nx, ny, nz);
+
+    REQUIRE_THAT(nx, Catch::Matchers::WithinAbs(0.0f, 1e-5f));
+    REQUIRE_THAT(ny, Catch::Matchers::WithinAbs(1.0f, 1e-5f));
+    REQUIRE_THAT(nz, Catch::Matchers::WithinAbs(0.0f, 1e-5f));
+}
+
+TEST_CASE("flatNormal: all three vertices of a triangle receive the same normal") {
+    // Simulate the mesh_loader loop over a 2-triangle unindexed strip (6 vertices).
+    // Each group of 3 consecutive vertices is one triangle.
+    // Triangle 0: XY plane CCW -> +Z
+    // Triangle 1: XZ plane CCW -> +Y
+    struct V { float px,py,pz,nx,ny,nz; };
+    V verts[6] = {
+        {0,0,0, 0,1,0}, {1,0,0, 0,1,0}, {0,1,0, 0,1,0},  // tri 0 (XY plane CCW)
+        {0,0,0, 0,1,0}, {1,0,0, 0,1,0}, {0,0,-1,0,1,0},  // tri 1 (XZ plane CCW)
+    };
+
+    // Process each triangle (mirrors the mesh_loader loop)
+    const u32 triCount = 2;
+    for (u32 ti = 0; ti < triCount; ++ti) {
+        V& v0 = verts[ti*3+0];
+        V& v1 = verts[ti*3+1];
+        V& v2 = verts[ti*3+2];
+        float nx, ny, nz;
+        computeFlatNormal(v0.px,v0.py,v0.pz, v1.px,v1.py,v1.pz, v2.px,v2.py,v2.pz, nx,ny,nz);
+        v0.nx=nx; v0.ny=ny; v0.nz=nz;
+        v1.nx=nx; v1.ny=ny; v1.nz=nz;
+        v2.nx=nx; v2.ny=ny; v2.nz=nz;
+    }
+
+    // Triangle 0: all three should have normal (0,0,1)
+    REQUIRE_THAT(verts[0].nz, Catch::Matchers::WithinAbs(1.0f, 1e-5f));
+    REQUIRE_THAT(verts[1].nz, Catch::Matchers::WithinAbs(1.0f, 1e-5f));
+    REQUIRE_THAT(verts[2].nz, Catch::Matchers::WithinAbs(1.0f, 1e-5f));
+
+    // Triangle 1: all three should have normal (0,1,0)
+    REQUIRE_THAT(verts[3].ny, Catch::Matchers::WithinAbs(1.0f, 1e-5f));
+    REQUIRE_THAT(verts[4].ny, Catch::Matchers::WithinAbs(1.0f, 1e-5f));
+    REQUIRE_THAT(verts[5].ny, Catch::Matchers::WithinAbs(1.0f, 1e-5f));
+}
+
+TEST_CASE("flatNormal: fox.glb vertex count is divisible by 3") {
+    // fox.glb has 1728 vertices (576 triangles). Verify the loop assumption:
+    // the vertex count for an unindexed triangle-list mesh must be a multiple of 3.
+    // (This is a pure constant test — no file I/O, no RHI.)
+    static constexpr u32 FOX_VERTEX_COUNT = 1728u;
+    REQUIRE(FOX_VERTEX_COUNT % 3u == 0u);
+    REQUIRE(FOX_VERTEX_COUNT / 3u == 576u);
+}

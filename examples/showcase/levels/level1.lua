@@ -396,16 +396,17 @@ end
 -- Reset AI for fresh level load
 AI.reset()
 
--- Guardian 1: patrols east side (cube stand-in -- fiery red enemy)
--- Note: fox.glb renders as an unindexed mesh blob; use cube.glb instead.
+-- Guardian 1: patrols east side (fox model)
 local guardian1 = 0
-if cubeMesh ~= 0 then
+local g1Mesh = (foxMesh ~= 0) and foxMesh or cubeMesh
+if g1Mesh ~= 0 then
     local gx, gy, gz = 10, 0.8, -5
-    guardian1 = ffe.createEntity3D(cubeMesh, gx, gy, gz)
+    guardian1 = ffe.createEntity3D(g1Mesh, gx, gy, gz)
     if guardian1 ~= 0 then
-        ffe.setTransform3D(guardian1, gx, gy, gz, 0, 0, 0, 1.4, 1.3, 1.4)
-        ffe.setMeshColor(guardian1, 0.85, 0.25, 0.15, 1.0)  -- fiery red tint
-        ffe.setMeshSpecular(guardian1, 0.4, 0.15, 0.15, 32)
+        -- Fox model is ~1 unit tall in its bind pose; scale to match guardian hitbox
+        ffe.setTransform3D(guardian1, gx, gy, gz, 0, 180, 0, 0.012, 0.012, 0.012)
+        ffe.setMeshColor(guardian1, 0.85, 0.55, 0.25, 1.0)  -- warm amber fox tint
+        ffe.setMeshSpecular(guardian1, 0.3, 0.2, 0.1, 16)
         ffe.createPhysicsBody(guardian1, {
             shape       = "box",
             halfExtents = { 0.7, 0.65, 1.0 },
@@ -420,20 +421,26 @@ if cubeMesh ~= 0 then
             { x = 10, y = 0.8, z =   5 },
             { x = 15, y = 0.8, z =  10 },
         }, 80)
-        AI.setEnemyColor(guardian1, 0.85, 0.25, 0.15, 1.0)  -- fiery red
-        -- Cube has no animation clips; skip animation setup
+        AI.setEnemyColor(guardian1, 0.85, 0.55, 0.25, 1.0)
+        -- Play Walk animation if available
+        local animCount = ffe.getAnimationCount3D(guardian1)
+        if animCount > 1 then
+            ffe.playAnimation3D(guardian1, 1, true)  -- clip 1 = Walk
+            ffe.setAnimationSpeed3D(guardian1, 1.0)
+        end
     end
 end
 
--- Guardian 2: patrols west side (cube stand-in -- fiery red enemy)
+-- Guardian 2: patrols west side (fox model)
 local guardian2 = 0
-if cubeMesh ~= 0 then
+local g2Mesh = (foxMesh ~= 0) and foxMesh or cubeMesh
+if g2Mesh ~= 0 then
     local gx, gy, gz = -10, 0.8, 5
-    guardian2 = ffe.createEntity3D(cubeMesh, gx, gy, gz)
+    guardian2 = ffe.createEntity3D(g2Mesh, gx, gy, gz)
     if guardian2 ~= 0 then
-        ffe.setTransform3D(guardian2, gx, gy, gz, 0, 0, 0, 1.4, 1.3, 1.4)
-        ffe.setMeshColor(guardian2, 0.85, 0.25, 0.15, 1.0)  -- fiery red tint
-        ffe.setMeshSpecular(guardian2, 0.4, 0.15, 0.15, 32)
+        ffe.setTransform3D(guardian2, gx, gy, gz, 0, 0, 0, 0.012, 0.012, 0.012)
+        ffe.setMeshColor(guardian2, 0.85, 0.55, 0.25, 1.0)  -- warm amber fox tint
+        ffe.setMeshSpecular(guardian2, 0.3, 0.2, 0.1, 16)
         ffe.createPhysicsBody(guardian2, {
             shape       = "box",
             halfExtents = { 0.7, 0.65, 1.0 },
@@ -448,8 +455,13 @@ if cubeMesh ~= 0 then
             { x = -10, y = 0.8, z = -5 },
             { x = -15, y = 0.8, z = -10 },
         }, 80)
-        AI.setEnemyColor(guardian2, 0.85, 0.25, 0.15, 1.0)  -- fiery red
-        -- Cube has no animation clips; skip animation setup
+        AI.setEnemyColor(guardian2, 0.85, 0.55, 0.25, 1.0)
+        -- Play Walk animation if available
+        local animCount = ffe.getAnimationCount3D(guardian2)
+        if animCount > 1 then
+            ffe.playAnimation3D(guardian2, 1, true)  -- clip 1 = Walk
+            ffe.setAnimationSpeed3D(guardian2, 1.0)
+        end
     end
 end
 

@@ -74,6 +74,7 @@
 #include <cinttypes>  // PRIu64
 #include <memory>     // std::unique_ptr, std::make_unique
 #include <new>        // std::nothrow
+#include <cmath>      // sqrtf (flat normal computation)
 #include <glm/gtc/type_ptr.hpp>  // glm::make_mat4
 
 namespace ffe::renderer {
@@ -725,6 +726,52 @@ MeshHandle loadMesh(const char* const path) {
             }
             v.wx = weights[0]; v.wy = weights[1]; v.wz = weights[2]; v.ww = weights[3];
         }
+
+        // --- Flat normal generation for unindexed skinned meshes with no NORMAL accessor ---
+        // glTF unindexed triangle lists store vertices in sequential triplets: (v0,v1,v2), (v3,v4,v5)...
+        // When no normals are supplied, compute face normals from cross(edge1, edge2) and assign
+        // the same flat normal to all three vertices of each triangle.
+        // OpenGL default winding: counter-clockwise = front face.
+        if (isUnindexed && normalAccessor == nullptr) {
+            const u32 triCount = vertexCount / 3u;
+            for (u32 ti = 0; ti < triCount; ++ti) {
+                SkinnedMeshVertex& v0 = skinnedVerts[ti * 3u + 0u];
+                SkinnedMeshVertex& v1 = skinnedVerts[ti * 3u + 1u];
+                SkinnedMeshVertex& v2 = skinnedVerts[ti * 3u + 2u];
+
+                // Edge vectors
+                const float e1x = v1.px - v0.px;
+                const float e1y = v1.py - v0.py;
+                const float e1z = v1.pz - v0.pz;
+                const float e2x = v2.px - v0.px;
+                const float e2y = v2.py - v0.py;
+                const float e2z = v2.pz - v0.pz;
+
+                // Cross product: e1 x e2 (CCW winding gives outward-facing normal)
+                float nx = e1y * e2z - e1z * e2y;
+                float ny = e1z * e2x - e1x * e2z;
+                float nz = e1x * e2y - e1y * e2x;
+
+                // Normalise
+                const float len = sqrtf(nx * nx + ny * ny + nz * nz);
+                if (len > 1e-8f) {
+                    const float invLen = 1.0f / len;
+                    nx *= invLen;
+                    ny *= invLen;
+                    nz *= invLen;
+                } else {
+                    // Degenerate triangle — fall back to up vector
+                    nx = 0.0f; ny = 1.0f; nz = 0.0f;
+                }
+
+                v0.nx = nx; v0.ny = ny; v0.nz = nz;
+                v1.nx = nx; v1.ny = ny; v1.nz = nz;
+                v2.nx = nx; v2.ny = ny; v2.nz = nz;
+            }
+            FFE_LOG_INFO("MeshLoader",
+                         "loadMesh: computed flat normals for %u triangles (unindexed skinned mesh, no NORMAL in \"%s\")",
+                         triCount, canonPath);
+        }
     } else {
         auto* staticVerts = static_cast<rhi::MeshVertex*>(vertexData);
         for (u32 vi = 0; vi < vertexCount; ++vi) {
@@ -748,6 +795,45 @@ MeshHandle loadMesh(const char* const path) {
                 cgltf_accessor_read_float(texcoordAccessor, static_cast<cgltf_size>(vi), uv, 2);
             }
             v.u = uv[0]; v.v = uv[1];
+        }
+
+        // --- Flat normal generation for unindexed static meshes with no NORMAL accessor ---
+        // Same logic as the skinned path above.
+        if (isUnindexed && normalAccessor == nullptr) {
+            const u32 triCount = vertexCount / 3u;
+            for (u32 ti = 0; ti < triCount; ++ti) {
+                rhi::MeshVertex& v0 = staticVerts[ti * 3u + 0u];
+                rhi::MeshVertex& v1 = staticVerts[ti * 3u + 1u];
+                rhi::MeshVertex& v2 = staticVerts[ti * 3u + 2u];
+
+                const float e1x = v1.px - v0.px;
+                const float e1y = v1.py - v0.py;
+                const float e1z = v1.pz - v0.pz;
+                const float e2x = v2.px - v0.px;
+                const float e2y = v2.py - v0.py;
+                const float e2z = v2.pz - v0.pz;
+
+                float nx = e1y * e2z - e1z * e2y;
+                float ny = e1z * e2x - e1x * e2z;
+                float nz = e1x * e2y - e1y * e2x;
+
+                const float len = sqrtf(nx * nx + ny * ny + nz * nz);
+                if (len > 1e-8f) {
+                    const float invLen = 1.0f / len;
+                    nx *= invLen;
+                    ny *= invLen;
+                    nz *= invLen;
+                } else {
+                    nx = 0.0f; ny = 1.0f; nz = 0.0f;
+                }
+
+                v0.nx = nx; v0.ny = ny; v0.nz = nz;
+                v1.nx = nx; v1.ny = ny; v1.nz = nz;
+                v2.nx = nx; v2.ny = ny; v2.nz = nz;
+            }
+            FFE_LOG_INFO("MeshLoader",
+                         "loadMesh: computed flat normals for %u triangles (unindexed static mesh, no NORMAL in \"%s\")",
+                         triCount, canonPath);
         }
     }
 

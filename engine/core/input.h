@@ -219,6 +219,10 @@ bool isActionUp(i32 actionIndex);
 namespace test {
     void simulateKeyPress(Key key);
     void simulateKeyRelease(Key key);
+    // Simulate a raw GLFW key action (GLFW_PRESS or GLFW_RELEASE) in one call.
+    // Equivalent to calling simulateKeyPress / simulateKeyRelease but lets tests
+    // enqueue both a press AND a release in the same tick to exercise the latch.
+    void simulateKeyEvent(Key key, int glfwAction);
     void simulateMouseButtonPress(MouseButton btn);
     void simulateMouseButtonRelease(MouseButton btn);
     void simulateMouseMove(f64 x, f64 y);

@@ -14,6 +14,13 @@ namespace ffe {
 struct KeyboardState {
     bool current[MAX_KEYS];
     bool previous[MAX_KEYS];
+    // Latched press/release flags — set true if ANY press (or release) event
+    // arrived in the pending queue this tick. Prevents a quick tap (press+release
+    // within a single glfwPollEvents() batch) from swallowing the press edge.
+    // The last event still determines current[] (for "held" queries), but the
+    // latched flags ensure isKeyPressed/Released always detect the edge.
+    bool pressedThisTick[MAX_KEYS];
+    bool releasedThisTick[MAX_KEYS];
 };
 
 struct MouseState {
@@ -246,12 +253,23 @@ void shutdownInput() {
 }
 
 void updateInput() {
-    // 1. Keyboard: copy current -> previous
+    // 1. Keyboard: copy current -> previous, clear latched flags
     std::memcpy(g_keyboard.previous, g_keyboard.current, sizeof(g_keyboard.current));
+    std::memset(g_keyboard.pressedThisTick,  0, sizeof(g_keyboard.pressedThisTick));
+    std::memset(g_keyboard.releasedThisTick, 0, sizeof(g_keyboard.releasedThisTick));
 
-    // 2. Process pending key events
+    // 2. Process pending key events.
+    // Latch press/release flags so that a quick tap (press+release within a
+    // single glfwPollEvents() batch) does not swallow the press edge. The last
+    // event still determines current[] (for "held" queries), but the latched
+    // flags ensure isKeyPressed/Released always detect the edge.
     for (i32 i = 0; i < g_pendingKeyCount; ++i) {
         const auto& event = g_pendingKeyEvents[i];
+        if (event.down) {
+            g_keyboard.pressedThisTick[event.keyCode] = true;
+        } else {
+            g_keyboard.releasedThisTick[event.keyCode] = true;
+        }
         g_keyboard.current[event.keyCode] = event.down;
     }
     g_pendingKeyCount = 0;
@@ -380,7 +398,11 @@ void updateInput() {
 bool isKeyPressed(const Key key) {
     const i32 k = static_cast<i32>(key);
     if (k < 0 || k >= MAX_KEYS) return false;
-    return g_keyboard.current[k] && !g_keyboard.previous[k];
+    // Use latched flag: true if a press event arrived this tick AND the key was
+    // not already down last tick. This handles the case where press+release both
+    // arrive in the same glfwPollEvents() batch — without the latch, current[k]
+    // would be false and the press edge would be silently lost.
+    return g_keyboard.pressedThisTick[k] && !g_keyboard.previous[k];
 }
 
 bool isKeyHeld(const Key key) {
@@ -392,7 +414,9 @@ bool isKeyHeld(const Key key) {
 bool isKeyReleased(const Key key) {
     const i32 k = static_cast<i32>(key);
     if (k < 0 || k >= MAX_KEYS) return false;
-    return !g_keyboard.current[k] && g_keyboard.previous[k];
+    // Use latched flag: true if a release event arrived this tick AND the key
+    // was down last tick. Handles quick tap (press+release in one batch).
+    return g_keyboard.releasedThisTick[k] && g_keyboard.previous[k];
 }
 
 bool isKeyUp(const Key key) {
@@ -660,6 +684,16 @@ void simulateKeyRelease(const Key key) {
     if (k < 0 || k >= MAX_KEYS) return;
     if (g_pendingKeyCount < MAX_PENDING_KEY_EVENTS) {
         g_pendingKeyEvents[g_pendingKeyCount++] = {static_cast<i16>(k), false};
+    }
+}
+
+void simulateKeyEvent(const Key key, const int glfwAction) {
+    // glfwAction: GLFW_PRESS (1) enqueues a press; GLFW_RELEASE (0) enqueues a release.
+    // GLFW_REPEAT is ignored, matching the behaviour of the real GLFW callback.
+    if (glfwAction == GLFW_PRESS) {
+        simulateKeyPress(key);
+    } else if (glfwAction == GLFW_RELEASE) {
+        simulateKeyRelease(key);
     }
 }
 

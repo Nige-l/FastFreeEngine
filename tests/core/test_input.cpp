@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <GLFW/glfw3.h>
 #include "core/input.h"
 
 // Helper: init in headless mode, run tests, shutdown
@@ -718,4 +719,66 @@ TEST_CASE("pendingCapture is resolved when window gains focus", "[input][cursor]
     ffe::updateInput();
     REQUIRE(ffe::mouseDeltaX() == 0.0);
     REQUIRE(ffe::mouseDeltaY() == 0.0);
+}
+
+// Bug: If a key was pressed and released within the same glfwPollEvents() batch,
+// current[key] ended up false and isKeyPressed() saw nothing — the press was
+// silently swallowed. The fix uses pressedThisTick / releasedThisTick latches
+// (same pattern as mouse Session 101 fix) so the edge is always detected.
+TEST_CASE("Key press latch fires correctly on tap (press+release same tick)", "[input][keyboard][regression]") {
+    InputFixture fix;
+
+    // Enqueue press then release before any updateInput() — simulates both
+    // events arriving in the same glfwPollEvents() batch.
+    ffe::test::simulateKeyEvent(ffe::Key::SPACE, GLFW_PRESS);
+    ffe::test::simulateKeyEvent(ffe::Key::SPACE, GLFW_RELEASE);
+    ffe::updateInput();
+
+    // Without the latch, current[SPACE] == false and isKeyPressed returns false.
+    // With the latch, pressedThisTick[SPACE] is true and the press is detected.
+    REQUIRE(ffe::isKeyPressed(ffe::Key::SPACE));
+    // Release latch also fires because a release event also arrived.
+    // (previous[SPACE] was false, so isKeyReleased requires previous==true — it
+    //  should NOT fire here because the key was never "down" last frame.)
+    REQUIRE_FALSE(ffe::isKeyReleased(ffe::Key::SPACE));
+    REQUIRE_FALSE(ffe::isKeyHeld(ffe::Key::SPACE));
+}
+
+// Bug (held vs pressed): isKeyPressed must return false on the second frame
+// even though the key is still physically held. Without the latch this worked
+// accidentally (current&&!previous), but the latch must not re-fire each tick.
+TEST_CASE("Key held is not a repeated press", "[input][keyboard][regression]") {
+    InputFixture fix;
+
+    ffe::test::simulateKeyPress(ffe::Key::A);
+    ffe::updateInput();
+    REQUIRE(ffe::isKeyPressed(ffe::Key::A));
+
+    // Second frame: no new press event — latch is cleared, key stays current.
+    ffe::updateInput();
+    REQUIRE_FALSE(ffe::isKeyPressed(ffe::Key::A));
+    REQUIRE(ffe::isKeyHeld(ffe::Key::A));
+}
+
+// Verify isKeyReleased fires correctly via the latch when the key was genuinely
+// held before the release event arrives.
+TEST_CASE("Key release fires correctly", "[input][keyboard][regression]") {
+    InputFixture fix;
+
+    // Hold the key for one frame so previous[key] == true on the release frame.
+    ffe::test::simulateKeyPress(ffe::Key::D);
+    ffe::updateInput(); // pressed
+    ffe::updateInput(); // held — previous[D] is now true
+
+    ffe::test::simulateKeyRelease(ffe::Key::D);
+    ffe::updateInput();
+
+    REQUIRE(ffe::isKeyReleased(ffe::Key::D));
+    REQUIRE_FALSE(ffe::isKeyPressed(ffe::Key::D));
+    REQUIRE_FALSE(ffe::isKeyHeld(ffe::Key::D));
+
+    // Next frame: latch cleared, key is up.
+    ffe::updateInput();
+    REQUIRE(ffe::isKeyUp(ffe::Key::D));
+    REQUIRE_FALSE(ffe::isKeyReleased(ffe::Key::D));
 }
