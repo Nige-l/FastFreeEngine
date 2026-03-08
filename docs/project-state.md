@@ -6,7 +6,7 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 106 |
+| Last session | 107 |
 | Total tests | 1358 |
 | Total Lua bindings | ~207 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
@@ -46,12 +46,12 @@
 
 | Session | Summary |
 |---------|---------|
-| 106 | Real-Hardware Bug Fixes Round 3 — TBD (mouse axes, terrain spawn height, combat, player model). |
+| 107 | Director Process Review + Screenshot Pipeline Refresh -- selective screenshot policy in build-engineer.md + project-manager.md (capture only when PM specifies list), all 8 demo screenshots refreshed to reflect Sessions 105-106 visual fixes. No engine changes. 1358 tests. |
+| 106 | Real-Hardware Bug Fixes Round 3 -- mouse axis inversion fixed (FLIP_BOTH=true), terrain spawn height dynamic (getTerrainHeight + 2.5m), F-key + held-F attack fallbacks, combat debug logs removed, .context.md Terrain section added. 1358 tests. |
 | 105 | Keyboard Input Latch + fox.glb Mesh Fix -- latched keyboard press/release detection (`pressedThisTick[512]`/`releasedThisTick[512]`), flat normal computation for unindexed glTF meshes (fixes fox.glb blob), fox.glb restored in showcase guardians, .context.md updates. +11 tests (1358 total). |
 | 104 | Real-Hardware Bug Fixes -- deferred cursor capture (mouse grab fix), HDR FBO clear colour (black sky fix), terrain AABB/UV centring (floating wedge fix), inverted mouse Y fix, fox.glb replaced with cube.glb, crosshair removed, F-key attack fallback. +11 tests (1347 total). |
 | 102 | CMake Lua Asset Copy at Build-Time -- new CopyExampleAssets.cmake helper (ffe_copy_example_lua/dir), all 6 examples use POST_BUILD copy, showcase CMakeLists simplified, deleted 30MB Pixel Crown.wav duplicate. 1336 tests. |
 | 101 | Input Race Condition + Physics Transform Fix -- mouse click latching (fixes LMB attack), fillTransform3D reads Jolt body (fixes floating player), Level 2 artifact bypass fix, kinematic bridges/platforms, deleted tone placeholders. 1336 tests. |
-| 99 | Demo Visual Enrichment -- point lights, flame tips, lava layers, gem pedestals, braziers, camera angle improvements across all 3 showcase levels. Retaken screenshots. 1336 tests. |
 
 ## Phase 8 — Vulkan Backend (COMPLETE, Sessions 85-89)
 

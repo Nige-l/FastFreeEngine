@@ -3,6 +3,60 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-08 — Session 107: Director Process Review + Screenshot Pipeline Refresh
+
+### Summary
+
+Session 107 was a process-quality session with no engine C++ changes. A Director review tightened the screenshot policy in both agent definition files so that screenshots are only captured when PM explicitly requests them (with a named demo list), rather than being taken speculatively on every build. Alongside the policy change, all eight demo screenshots were regenerated to reflect the visual fixes landed in Sessions 105-106 (mouse axis correction, terrain centering, dynamic spawn height, fox.glb flat-face normals, HDR FBO black-sky fix, keyboard/mouse input latching). Test count remains 1358 passing.
+
+### Delivered
+
+**Process improvements (Director review):**
+
+- **.claude/agents/build-engineer.md** — New Screenshot section added: selective capture only when PM specifies a named list in the Phase 5 dispatch, demo-to-subsystem mapping documented (e.g. showcase = terrain/PBR/post-processing, 3d_demo = Blinn-Phong/skeletal animation), parallel capture via Xvfb+Mesa, output paths for both `docs/screenshots/` and `website/docs/assets/screenshots/`. FULL build trigger clarified to "end of entire numbered phase" (not "end of milestone").
+- **.claude/agents/project-manager.md** — New Screenshot Policy section with same demo-to-subsystem mapping. `Screenshots:` field added to Phase 5 dispatch format. FULL trigger wording aligned with build-engineer.
+
+**Screenshot refresh (8 demos, both `docs/screenshots/` and `website/docs/assets/screenshots/`):**
+
+- `showcase_menu.png`, `showcase_level1.png`, `showcase_level2.png`, `showcase_level3.png` — reflect terrain centering, HDR sky fix, fox.glb guardians rendering correctly
+- `collect_stars.png`, `pong.png`, `breakout.png`, `3d_demo.png` — refreshed to current state post input-latch fix
+
+These screenshots capture the visual state as of Session 106 fixes; no further rendering changes were made this session.
+
+### Context: Bug Fixes Committed in Sessions 105-106
+
+The following fixes (committed in earlier sessions) are documented here for completeness in the session 107 devlog entry:
+
+- **Mouse axis inversion** (`camera.lua`) — `FLIP_BOTH=true` negates both dx and dy; fixes inverted look on Wayland.
+- **Terrain centering** — `loadTerrain` centres the heightmap at world origin; player spawn XZ coordinates now map correctly to terrain.
+- **Dynamic spawn height** (`level1.lua`, `level3.lua`) — Player spawn Y computed as `getTerrainHeight(SPAWN_X, SPAWN_Z) + 2.5`; no more underground spawns on heightmap variation.
+- **Fox.glb flat-face normals** (`mesh_loader.cpp`) — Computed normals for unindexed glTF meshes lacking a NORMAL accessor; fox model renders correctly with proper lighting.
+- **HDR FBO clear-colour pass-through** — Black sky artefact fixed; clear colour propagates correctly through the HDR framebuffer.
+- **Keyboard/mouse input latching** — `pressedThisTick` / `releasedThisTick` prevent fast taps being missed between frames on real hardware.
+- **Combat debug log removal** — Per-frame attack log lines removed from hot path (perf-critic MINOR finding).
+
+### Files Modified This Session
+
+- `.claude/agents/build-engineer.md`
+- `.claude/agents/project-manager.md`
+- `docs/screenshots/*.png` (8 files refreshed)
+- `website/docs/assets/screenshots/*.png` (8 files refreshed)
+
+### Reviews
+
+- No engine C++ changes — no performance, security, or build review required.
+- Process changes reviewed inline by Director.
+
+### Build
+
+- No engine changes — test count unchanged at **1358 tests passing**.
+
+### Next Session
+
+**Phase 9, Milestone 4 — World Streaming.** The terrain system currently loads all chunks at startup; M4 will add runtime streaming: load/unload chunks as the camera moves, with a configurable view-distance radius and background thread I/O to avoid frame hitches. Target tier: STANDARD (LEGACY fallback with smaller radius).
+
+---
+
 ## 2026-03-08 — Session 106: Real-Hardware Bug Fixes Round 3
 
 ### Summary
