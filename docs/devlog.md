@@ -3,6 +3,61 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-08 — Session 108: Phase 9 M4 World Streaming + Showcase Camera Fix
+
+### Summary
+
+Session 108 delivered Phase 9 Milestone 4: terrain world streaming. The terrain system previously loaded every chunk at startup and never freed them; M4 adds a full ChunkState machine with a background worker thread per terrain instance that streams chunks in and out as the camera moves. A main-thread GL upload gate keeps all OpenGL calls on the render thread (OpenGL contexts are not thread-safe). Dirty-distance gating avoids redundant streaming recalculations when the camera has not moved far enough to change the active set. Two new Lua bindings expose the feature to game scripts. Twenty new tests bring the total to 1379 passing.
+
+A secondary fix addressed a showcase regression: the camera.lua terrain-aware Y clamp was missing on hilly terrain, causing the camera to clip below the ground surface on levels 1 and 3. The clamp now queries `getTerrainHeight` and enforces a minimum eye height above the terrain.
+
+A process update was also landed: multi-instance agent parallelism (running the same agent type in multiple simultaneous subagent slots) is now explicitly documented in CLAUDE.md and in the relevant agent definition files. An `examples-map.md` was created to give PM a quick reference for which demo games cover which subsystems, reducing the planning overhead for screenshot and demo sessions.
+
+### Delivered
+
+**Phase 9 M4 — World Streaming:**
+
+- **engine/renderer/terrain_internal.h** — `ChunkState` enum (EAGER, UNLOADED, QUEUED, GENERATING, READY_TO_UPLOAD, LOADED, UNLOADING); extended `TerrainChunk` with state field and upload-ready mesh buffer; `TerrainStreamingConfig` (radius, max-chunks-per-frame).
+- **engine/renderer/terrain.h** — `setStreamingRadius` / `getChunkCount` public API; internal `StreamingWorker` thread handle and job queue.
+- **engine/renderer/terrain.cpp** — Background worker thread per terrain: pops QUEUED chunks, generates mesh geometry, transitions to READY_TO_UPLOAD. Main-thread `tickStreaming()` called from the render loop: computes chunk distances, enqueues/dequeues chunks, uploads READY_TO_UPLOAD meshes to GL (VAO/VBO/EBO creation stays on render thread), transitions LOADED chunks to UNLOADING and frees GL resources. Dirty-distance gating: streaming recalc only triggers when camera moves more than half a chunk width since last recalc.
+- **engine/renderer/terrain_renderer.cpp** — `tickStreaming()` called each frame before draw; only LOADED chunks are submitted for rendering.
+- **engine/scripting/script_engine.cpp** — 2 new Lua bindings: `setTerrainStreamingRadius(handle, radius)`, `getTerrainChunkCount(handle)` → integer.
+- **engine/renderer/.context.md** — Streaming section added: ChunkState lifecycle, thread safety contract (no GL on worker thread), Lua binding signatures, usage example.
+- **tests/renderer/test_terrain_streaming.cpp** — 20 new CPU-only tests covering: state machine transitions, dirty-distance gating logic, chunk count reporting, radius validation, worker thread lifecycle (start/stop without crash), and streaming config defaults.
+- **tests/CMakeLists.txt** — `test_terrain_streaming` target registered.
+- **docs/architecture/adr-phase9-m4-world-streaming.md** — ADR documenting the ChunkState design, thread safety decisions, GL upload gate rationale, and dirty-distance optimisation.
+
+**Showcase camera fix:**
+
+- **examples/showcase/lib/camera.lua** — Terrain-aware Y clamp: each frame the camera queries `getTerrainHeight` at the current XZ position and enforces `eye.y >= terrain_y + MIN_EYE_HEIGHT`. Prevents camera from clipping into hillsides on levels 1 and 3 where terrain elevation varies significantly.
+- **examples/showcase/levels/level1.lua**, **level3.lua** — Minor constant updates to MIN_EYE_HEIGHT defaults matching camera clamp.
+
+**Process updates:**
+
+- **.claude/CLAUDE.md** — Multi-instance agent parallelism section added to Section 7: PM may dispatch the same agent type in multiple simultaneous slots when work is file-disjoint (e.g., two `engine-dev` instances writing to different directories in parallel). Claude executes these as separate concurrent subagent invocations.
+- **.claude/agents/project-manager.md**, **performance-critic.md**, **security-auditor.md**, **api-designer.md** — Multi-instance parallelism notes added where relevant. PM agent file includes reference to `docs/examples-map.md` for demo planning.
+
+**Screenshots (3 refreshed):**
+
+- `docs/assets/screenshots/showcase_menu.png`, `showcase_level1.png`, `showcase_level3.png`
+- `website/docs/assets/screenshots/showcase_menu.png`, `showcase_level1.png`, `showcase_level3.png`
+
+### Reviews
+
+- **performance-critic:** PASS. ChunkState machine is zero-allocation in steady state (chunk slots pre-allocated at terrain load). Background worker uses a bounded job queue. Dirty-distance gating eliminates per-frame distance recomputation. GL upload gated to max-chunks-per-frame to bound frame spike.
+- **security-auditor:** PASS. No new attack surface; streaming radius and chunk count are engine-internal values, not user-supplied file paths. Existing path security on heightmap loading unchanged.
+- **api-designer:** PASS. `.context.md` updated with thread-safety contract and streaming lifecycle. Two Lua bindings follow existing naming convention.
+
+### Build
+
+- **FAST build (Clang-18):** 1379 tests passing, zero warnings.
+
+### Next Session
+
+**Phase 9, Milestone 5 — Procedural Terrain Generation.** Noise-based heightmap generation (Perlin/simplex), hydraulic erosion simulation, and vegetation/object placement on the generated terrain. Target tier: LEGACY.
+
+---
+
 ## 2026-03-08 — Session 107: Director Process Review + Screenshot Pipeline Refresh
 
 ### Summary

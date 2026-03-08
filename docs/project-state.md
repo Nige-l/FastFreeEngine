@@ -6,9 +6,9 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 107 |
-| Total tests | 1358 |
-| Total Lua bindings | ~207 |
+| Last session | 108 |
+| Total tests | 1379 |
+| Total Lua bindings | ~209 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
 | Phase 2 (3D Foundation) | COMPLETE |
 | Phase 3 (Standalone Editor) | MVP COMPLETE (6 milestones, Sessions 51-56) |
@@ -17,7 +17,7 @@
 | Phase 6 (Showcase Game) | COMPLETE (Sessions 66-73) |
 | Phase 7 (Rendering Pipeline) | COMPLETE (Sessions 74-84) |
 | Phase 8 (Vulkan Backend) | COMPLETE (Sessions 85-89) |
-| Phase 9 (Terrain/Open World) | COMPLETE (Sessions 90-95) |
+| Phase 9 (Terrain/Open World) | IN PROGRESS — M1-M4 done, M5 next |
 | Windows build | DONE (MinGW-w64 cross-compilation) |
 | macOS build | DISABLED (upstream LuaJIT arm64-osx vcpkg issue) |
 | GitHub Actions CI | DONE (Linux Clang-18, Linux GCC-13) |
@@ -46,12 +46,11 @@
 
 | Session | Summary |
 |---------|---------|
+| 108 | Phase 9 M4 World Streaming -- ChunkState machine, background worker thread, main-thread GL upload, dirty-distance gating, 2 new Lua bindings (setTerrainStreamingRadius, getTerrainChunkCount), 20 new tests (1379 total). Showcase camera Y clamp fix. Process: multi-instance parallelism documented in CLAUDE.md + agent files. |
 | 107 | Director Process Review + Screenshot Pipeline Refresh -- selective screenshot policy in build-engineer.md + project-manager.md (capture only when PM specifies list), all 8 demo screenshots refreshed to reflect Sessions 105-106 visual fixes. No engine changes. 1358 tests. |
 | 106 | Real-Hardware Bug Fixes Round 3 -- mouse axis inversion fixed (FLIP_BOTH=true), terrain spawn height dynamic (getTerrainHeight + 2.5m), F-key + held-F attack fallbacks, combat debug logs removed, .context.md Terrain section added. 1358 tests. |
 | 105 | Keyboard Input Latch + fox.glb Mesh Fix -- latched keyboard press/release detection (`pressedThisTick[512]`/`releasedThisTick[512]`), flat normal computation for unindexed glTF meshes (fixes fox.glb blob), fox.glb restored in showcase guardians, .context.md updates. +11 tests (1358 total). |
 | 104 | Real-Hardware Bug Fixes -- deferred cursor capture (mouse grab fix), HDR FBO clear colour (black sky fix), terrain AABB/UV centring (floating wedge fix), inverted mouse Y fix, fox.glb replaced with cube.glb, crosshair removed, F-key attack fallback. +11 tests (1347 total). |
-| 102 | CMake Lua Asset Copy at Build-Time -- new CopyExampleAssets.cmake helper (ffe_copy_example_lua/dir), all 6 examples use POST_BUILD copy, showcase CMakeLists simplified, deleted 30MB Pixel Crown.wav duplicate. 1336 tests. |
-| 101 | Input Race Condition + Physics Transform Fix -- mouse click latching (fixes LMB attack), fillTransform3D reads Jolt body (fixes floating player), Level 2 artifact bypass fix, kinematic bridges/platforms, deleted tone placeholders. 1336 tests. |
 
 ## Phase 8 — Vulkan Backend (COMPLETE, Sessions 85-89)
 
@@ -65,7 +64,7 @@
 - [x] M4 (Session 88): Vulkan Mesh Rendering -- vk_resource_manager (256 buffer/texture, 32 shader handle pools, 1-based handles), full RHI impl (createBuffer/updateBuffer/destroyBuffer, createTexture/destroyTexture/bindTexture, createShader/destroyShader/useShader, setUniformMat4/Vec3/Float/Int via FNV-1a hash, drawArrays/drawIndexed), SceneUBO (256B) + LightUBO (64B), Blinn-Phong SPIR-V headers (placeholder, glslc TODO), render pass restructured for multi-draw-call frames. 17 new CPU-only tests.
 - [x] M5 (Session 89): Vulkan Depth Buffer + Build-Time SPIR-V -- VkImage depth attachment (VMA, D32_SFLOAT/D32_SFLOAT_S8/D24_UNORM_S8 format selection), PipelineConfig depth state, CMake glslc/glslangValidator pipeline (embed_spirv.cmake, constexpr u32 arrays), 6 GLSL 450 shader source files (triangle/textured/blinn_phong vert+frag), full Blinn-Phong directional lighting. 10 new tests. FULL build: 1234 tests, zero warnings, Clang-18 + GCC-13. **PHASE 8 COMPLETE.**
 
-## Phase 9 — Terrain and Open World (COMPLETE, Sessions 90-95)
+## Phase 9 — Terrain and Open World (IN PROGRESS, Sessions 90+)
 
 **Goal:** Large-scale outdoor environment support with terrain rendering, LOD, and streaming. ADR: `docs/architecture/adr-phase9-terrain.md`. See `docs/ROADMAP.md` for full deliverables.
 
@@ -74,7 +73,8 @@
 - [x] M1 (Session 90): Heightmap Terrain Rendering -- TerrainHandle, TerrainConfig, raw float + PNG heightmap loading (stb_image), chunked mesh generation (configurable resolution up to 128x128 per chunk), normal computation via finite differences, bilinear height queries, path security, NaN rejection, terrain renderer (MESH_BLINN_PHONG, directional + point lights, shadows, fog), Terrain ECS component (8B), 4 Lua bindings, 18 new tests.
 - [x] M2 (Session 91): Terrain Texturing -- RGBA splat map (4 texture layers), triplanar projection for steep surfaces (threshold-gated), TerrainMaterial struct (splatTexture + 4 TerrainLayers with uvScale), TERRAIN shader (GLSL 330 core, Blinn-Phong + shadow PCF + point lights + fog + splat blending + triplanar), 3 Lua bindings (setTerrainSplatMap, setTerrainLayer, setTerrainTriplanar), 16 new tests.
 - [x] M3 (Session 92): Terrain LOD + Frustum Culling -- 3 LOD levels per chunk (full/half/quarter resolution), pre-generated at load time, distance-based LOD selection with configurable distances, reusable frustum culling utility (Griess-Hartmann plane extraction, p-vertex AABB test, O(1) per chunk), TerrainLodConfig, 1 Lua binding (setTerrainLodDistances), 13 new tests.
-- [ ] M4: World Streaming -- chunk loading/unloading based on camera position, async loading.
+- [x] M4 (Session 108): World Streaming -- ChunkState machine (EAGER/UNLOADED/QUEUED/GENERATING/READY_TO_UPLOAD/LOADED/UNLOADING), per-terrain background worker thread, main-thread GL upload gate, dirty-distance gating, 2 Lua bindings (setTerrainStreamingRadius, getTerrainChunkCount), 20 new tests (1379 total). ADR: `docs/architecture/adr-phase9-m4-world-streaming.md`.
+- [ ] M5: Procedural Terrain Generation -- noise-based heightmap generation, erosion simulation, vegetation placement.
 
 ## Build Commands
 
