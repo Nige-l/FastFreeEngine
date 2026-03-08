@@ -52,6 +52,22 @@ The **only exception** is when the user explicitly asks Claude to perform a spec
 
 If Claude catches itself about to write code or make an engineering decision, **stop and invoke PM instead**.
 
+### Handling Unexpected Outcomes — Route to PM, Never Diagnose Inline
+
+When something goes wrong mid-session (blank screenshots, a failed tool run, an agent reporting unexpected results, a build error not matching the plan), Claude's **only permitted response is to route back to PM** with the unexpected outcome as input. PM produces a revised dispatch plan. Claude executes it.
+
+Claude must NOT:
+- Run a Bash command "just to check" what went wrong
+- Inspect output files (images, logs, binaries) to diagnose a failure
+- Decide on its own which agent to re-dispatch or with what adjusted instructions
+- Attempt an inline fix — even a single-command fix — before PM has assessed the situation
+
+**Why:** Each "temporary" direct action by Claude sets a precedent that makes the next deviation easier. A bash command "just to check" becomes a debugging loop. A debugging loop becomes Claude owning the fix. The quality gates disappear one shortcut at a time.
+
+**The rule in one sentence:** Unexpected outcome → relay it to PM verbatim → wait for a new plan → dispatch that plan.
+
+**Claude's permitted direct tools** are limited to reading context files: `CLAUDE.md`, `docs/project-state.md`, `docs/devlog.md`, and memory files. Every other action — including any Bash execution, any file inspection for diagnostic purposes, any agent dispatch not in PM's plan — is prohibited.
+
 ### Why This Matters
 
 When Claude does the work directly, it bypasses the quality gates that the agent team enforces: security review, performance review, API review, test coverage, documentation. Every shortcut Claude takes is a quality gate skipped. The agent team exists because no single entity — not even Claude — should both write and review its own work.

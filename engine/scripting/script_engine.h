@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/types.h"
+#include "core/prefab_system.h"
 #include "renderer/vegetation.h"
 #include "renderer/water.h"
 
@@ -138,6 +139,11 @@ private:
     // Cast to lua_State* in the .cpp file where lua.h is included.
     void* m_luaState = nullptr;
     bool  m_initialised = false;
+
+    // Prefab system — data-driven entity template loader/instantiator.
+    // setAssetRoot is called lazily from ffe.loadPrefab binding using
+    // the engine's m_assetRoot. No explicit init/shutdown needed.
+    ffe::PrefabSystem m_prefabSystem;
 
     // Vegetation system — GPU-instanced billboard grass + trees.
     // init() must be called after the OpenGL context exists (deferred until

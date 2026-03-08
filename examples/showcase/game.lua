@@ -239,6 +239,42 @@ if Menus then Menus.resetTitle() end
 ffe.setBackgroundColor(0.04, 0.03, 0.06)
 
 --------------------------------------------------------------------
+-- Direct level startup via command-line argument (for screenshots
+-- and automated testing). Usage: ffe_runtime game.lua level1
+-- Falls back to ffe.loadData("screenshot_level") if arg is nil
+-- (sandbox may not expose arg in all configurations).
+--------------------------------------------------------------------
+local function tryDirectLevelStart()
+    local levelMap = { level1 = 1, level2 = 2, level3 = 3 }
+    local startLevel = nil
+
+    -- Try arg table first (standard LuaJIT global)
+    if arg and arg[1] then
+        startLevel = levelMap[arg[1]]
+        if startLevel then
+            ffe.log("[Showcase] Direct level start from arg[1]: " .. arg[1])
+        else
+            ffe.log("[Showcase] arg[1] not a valid level name: " .. tostring(arg[1]))
+        end
+    end
+
+    -- Fallback: saved config key (set by screenshot tooling)
+    if not startLevel then
+        local saved = ffe.loadData and ffe.loadData("screenshot_level")
+        if saved and levelMap[saved] then
+            startLevel = levelMap[saved]
+            ffe.log("[Showcase] Direct level start from ffe.loadData: " .. saved)
+        end
+    end
+
+    if startLevel then
+        ffe.setBackgroundColor(0.12, 0.14, 0.22)
+        loadLevel(startLevel)
+    end
+end
+tryDirectLevelStart()
+
+--------------------------------------------------------------------
 -- FPS tracking
 --------------------------------------------------------------------
 local fpsTimer   = 0

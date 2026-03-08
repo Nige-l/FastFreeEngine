@@ -251,29 +251,49 @@ This document defines the phased development plan for FFE. Each phase builds on 
 
 ---
 
-## Phase 9: Terrain and Open World
+## Phase 9: Terrain and Open World — COMPLETE (Sessions 90-92, 108-110)
 
 **Goal:** Large-scale outdoor environment support with terrain rendering, LOD, and streaming.
 
-### Deliverables (planned)
-- [ ] Heightmap terrain rendering (chunked, LOD)
-- [ ] Terrain texturing (splat maps, triplanar projection)
-- [ ] Vegetation system (grass, trees with billboarding)
-- [ ] World streaming (load/unload chunks based on camera position)
-- [ ] Water rendering (reflections, refractions on STANDARD+ tier)
+### Delivered (Sessions 90-92, 108-110)
+- [x] M1 (Session 90): Heightmap terrain rendering (chunked, LOD, bilinear height queries)
+- [x] M2 (Session 91): Terrain texturing (splat maps, triplanar projection, TERRAIN shader GLSL 330)
+- [x] M3 (Session 92): 3-level LOD + frustum culling (distance-based selection, Griess-Hartmann frustum)
+- [x] M4 (Session 108): World streaming (ChunkState machine, background worker thread, dirty-distance gating)
+- [x] M5 (Session 109): GPU-instanced vegetation (billboard grass 256/chunk, tree placement 512 trees, VEGETATION shader)
+- [x] M6 (Session 110): Water rendering (reflection FBO half-res, Fresnel blend, animated UV scroll)
 
 ---
 
-## Phase 10: Advanced Editor
+## Phase 10: Advanced Editor — IN PROGRESS
 
 **Goal:** Bring the editor to feature parity with commercial engines for common workflows.
 
-### Deliverables (planned)
-- [ ] Visual scripting (node-based graph editor as alternative to Lua)
-- [ ] Prefab system (reusable entity templates with overrides)
+### Current Phase Marker: M2 (next after M1 Prefab System)
+
+### Milestones
+
+#### M1: Prefab System — COMPLETE (Session 111)
+- [x] Prefab asset format (JSON templates with component definitions)
+- [x] PrefabSystem (load/instantiate/unload with security hardening, path traversal prevention)
+- [x] PrefabOverride support (per-instance component field overrides)
+- [x] Lua bindings: ffe.loadPrefab / ffe.instantiatePrefab / ffe.unloadPrefab
+- [x] 21 Catch2 tests, 4 JSON fixtures
+- [x] engine/core/.context.md: Prefab System section added
+- [x] ADR: docs/architecture/adr-phase10-m1-prefab-system.md
+
+#### M2: Visual Scripting (planned)
+- [ ] Node-based graph editor as alternative to Lua
+- [ ] Visual scripting nodes for common game logic patterns
+
+#### M3: LLM Integration Panel (planned)
 - [ ] LLM integration panel (connect AI assistant, generate code, explain systems)
+
+#### M4: Editor Preferences and Project Wizard (planned)
 - [ ] Editor preferences and project wizard
 - [ ] Installer / easy setup wizard (install FFE, connect AI model, start making games without build complexity)
+
+#### M5: Animation Editor (planned)
 - [ ] Animation editor (timeline, keyframes, state machine visualization)
 
 ---
@@ -301,6 +321,25 @@ This document defines the phased development plan for FFE. Each phase builds on 
 - [ ] Plugin API (C++ shared libraries, versioned ABI)
 - [ ] Lua plugin distribution (package format, dependency resolution)
 - [ ] Asset store integration (browse, download, import community assets)
+
+---
+
+## Phase 13: Procedural Music Generation
+
+**Goal:** Algorithmic music synthesis built into the engine runtime. No VST dependency. Generates ambient and adaptive music tracks from harmonic rules and rhythm patterns, enabling games to have dynamically evolving soundscapes without pre-composed audio assets.
+
+### Deliverables (planned)
+- [ ] Built-in synthesiser (oscillators, envelopes, filters — no external audio plugin dependency)
+- [ ] Harmonic rule engine (key/scale/chord progression definitions)
+- [ ] Rhythm pattern system (beat grids, note quantisation, tempo control)
+- [ ] Adaptive music triggers (Lua API to shift intensity, key, or mood at runtime)
+- [ ] LEGACY+ compatible (all synthesis runs on CPU, no GPU audio)
+- [ ] Lua bindings for full music control
+
+### Architecture Constraints
+- All synthesis happens in the existing miniaudio thread — no new audio thread
+- CPU budget must not exceed 2ms/frame on LEGACY tier
+- Must coexist with existing WAV/OGG streaming (music tracks are a separate channel)
 
 ---
 

@@ -3,6 +3,60 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-08 — Session 111: Phase 10 M1 Prefab System
+
+### Goal
+
+Phase 10 Milestone 1: Prefab System — reusable JSON entity templates with per-instance component overrides, full security hardening, Lua bindings, and 21 Catch2 tests.
+
+### Delivered
+
+**Phase 10 M1 — Prefab System:**
+
+- **engine/core/prefab_system.h** — `PrefabHandle`, `PrefabOverride`, `PrefabOverrides`, `PrefabSystem` class with `loadPrefab`/`instantiatePrefab`/`unloadPrefab` API
+- **engine/core/prefab_system.cpp** — full implementation: JSON template loading, security pipeline (path traversal prevention, schema validation), ECS instantiation with per-instance component overrides
+- **engine/core/CMakeLists.txt** — `prefab_system.cpp` registered in build
+- **engine/scripting/script_engine.h / script_engine.cpp** — 3 new Lua bindings: `ffe.loadPrefab`, `ffe.instantiatePrefab`, `ffe.unloadPrefab`
+- **engine/core/.context.md** — Prefab System section added (837 → 1089 lines)
+- **tests/core/test_prefab_system.cpp** — 21 Catch2 tests covering load, instantiate, override, unload, and security rejection cases
+- **tests/core/fixtures/** — 4 JSON fixture files (valid prefab, override prefab, malformed prefab, path-traversal prefab)
+- **tests/CMakeLists.txt** — `test_prefab_system.cpp` registered
+- **docs/architecture/adr-phase10-m1-prefab-system.md** — 553-line ADR covering design rationale, security model, override resolution, and tier compatibility
+
+**Build result:** 1451/1451 PASS — Clang-18 + GCC-13, zero warnings (FULL build)
+
+**Screenshot / tooling fixes:**
+
+- **tools/take_screenshot.sh** — real-display auto-detect, `scrot -a` region syntax fix, `xdotool` window-by-PID capture
+- **examples/showcase/game.lua** — `arg[1]` direct level startup (`tryDirectLevelStart`) for reliable screenshot capture
+- **examples/showcase/levels/level1.lua** + **level3.lua** — `Camera.setYawPitch(180, -20)` for better initial camera angle
+
+**README.md** — updated: Phase 10 M1 prefab system noted, test count updated to 1451, screenshot pipeline note added
+
+**Process improvements (director):**
+
+- **.claude/CLAUDE.md** — process discipline additions: off-track deviation prevention rules
+- **.claude/agents/project-manager.md** — unexpected outcomes protocol added
+- **/home/nigel/.claude/projects/*/memory/MEMORY.md** — process discipline section added
+
+### Build
+
+1451/1451 PASS — Clang-18 + GCC-13, zero warnings. FULL dual-compiler build.
+
+### game-dev-tester
+
+Skipped. No demo code changes required for Prefab M1 — prefabs are not yet used in any example game. Demo integration deferred to a future session when prefab-authored entities appear in gameplay.
+
+### Known Issues
+
+- **Mesh path-to-handle resolution gap:** `MeshLoader` does not expose a `findHandleByPath` method. Mesh components instantiated from prefabs receive an invalid handle and must be resolved manually by the game script after instantiation. Deferred to backlog — requires `MeshLoader` API extension in a future session.
+
+### Next Session Goal
+
+**Phase 10 M2 — Visual Scripting:** Node-based graph editor as alternative to Lua. Visual scripting nodes for common game logic patterns (see ROADMAP.md Phase 10 M2).
+
+---
+
 ## 2026-03-08 — Session 110: Phase 9 M6 Water Rendering (Phase 9 COMPLETE)
 
 ### Summary

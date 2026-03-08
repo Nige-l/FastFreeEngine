@@ -709,7 +709,7 @@ ffe.log("[Level1] Terrain surface at spawn XZ(0,-12): " .. tostring(terrainSurfa
 local SPAWN_Y = math.max(terrainSurfaceY + 2.5, 2.5)
 Player.create(0, SPAWN_Y, -12, cesiumMesh)
 Camera.setPosition(0, SPAWN_Y + 2, -12)
-Camera.setYawPitch(180, 25)  -- Camera behind (south), looking north into courtyard toward fountain
+Camera.setYawPitch(180, -20)  -- Camera behind (south), looking north into courtyard; negative pitch = looking up toward horizon
 
 if HUD then
     HUD.showPrompt("The Courtyard -- Find the Ancient Artifact", 4.0)

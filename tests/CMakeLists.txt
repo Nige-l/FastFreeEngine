@@ -9,6 +9,7 @@ add_executable(ffe_tests
     core/test_input.cpp
     core/test_gamepad.cpp
     core/test_particles.cpp
+    core/test_prefab_system.cpp
     physics/test_narrow_phase.cpp
     renderer/test_ttf_font.cpp
     renderer/test_mesh_loader.cpp

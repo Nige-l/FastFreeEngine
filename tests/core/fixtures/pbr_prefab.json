@@ -1,0 +1,7 @@
+{
+  "name": "metal_sphere",
+  "components": {
+    "Transform3D": { "x": 1.0, "y": 2.0, "z": 3.0, "rotX": 0.0, "rotY": 0.0, "rotZ": 0.0, "scaleX": 1.0, "scaleY": 1.0, "scaleZ": 1.0 },
+    "PBRMaterial": { "metallic": 0.9, "roughness": 0.1 }
+  }
+}

@@ -723,7 +723,7 @@ ffe.log("[Level3] Terrain surface at spawn XZ(0,-11): " .. tostring(terrainSurfa
 local SPAWN_Y = math.max(terrainSurfaceY + 2.5, 2.5)
 Player.create(0, SPAWN_Y, -11, cesiumMesh)
 Camera.setPosition(0, SPAWN_Y + 3, -14)
-Camera.setYawPitch(180, 22)  -- Camera behind (south), looking north toward arena and floating platforms
+Camera.setYawPitch(180, -20)  -- Camera behind (south), looking north toward arena and floating platforms; negative pitch = looking up toward horizon
 
 if HUD then
     HUD.showPrompt("The Summit -- Reach the central altar and claim the final artifact!", 5.0)

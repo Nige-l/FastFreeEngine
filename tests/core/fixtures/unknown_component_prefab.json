@@ -1,0 +1,7 @@
+{
+  "name": "test",
+  "components": {
+    "Transform3D": { "x": 5.0, "y": 0.0, "z": 0.0 },
+    "UnknownComponent": { "someField": 42 }
+  }
+}

@@ -8,6 +8,7 @@ extern "C" {
 }
 
 #include "scripting/script_engine.h"
+#include "core/prefab_system.h"
 #include "core/logging.h"
 #include "core/ecs.h"
 #include "core/input.h"
@@ -7960,6 +7961,200 @@ void ScriptEngine::registerEcsBindings() {
         return 0;
     });
     lua_setfield(L, -2, "setWaterSurfaceReflection");
+
+    // ================================================================
+    // Prefab system bindings (Phase 10 M1)
+    // ================================================================
+    //
+    // ffe.loadPrefab(path: string) -> integer
+    //   Load a prefab JSON file from a path relative to the asset root.
+    //   Returns integer handle id > 0 on success, 0 on failure.
+    //   Cold path only — call at startup or scene load, not per frame.
+    //
+    // ffe.instantiatePrefab(handle: integer [, overrides: table]) -> integer
+    //   Create a new entity from a prefab template, applying optional overrides.
+    //   overrides table format: { ComponentName = { field = value, ... }, ... }
+    //   Returns entity id on success, ffe.NULL_ENTITY (or 0) on failure.
+    //
+    // ffe.unloadPrefab(handle: integer) -> nothing
+    //   Release a prefab slot. The handle becomes invalid immediately.
+    // ================================================================
+
+    // ffe.loadPrefab(path: string) -> integer
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TSTRING) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.loadPrefab: argument 1 must be a string (path)");
+            lua_pushinteger(state, 0);
+            return 1;
+        }
+        const char* path = lua_tostring(state, 1);
+        if (path == nullptr || path[0] == '\0') {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.loadPrefab: path is null or empty");
+            lua_pushinteger(state, 0);
+            return 1;
+        }
+
+        // Retrieve ScriptEngine pointer from registry (for prefab system + asset root).
+        lua_pushlightuserdata(state, &s_engineRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            FFE_LOG_ERROR("ScriptEngine", "ffe.loadPrefab: ScriptEngine not in registry");
+            lua_pushinteger(state, 0);
+            return 1;
+        }
+        auto* engine = static_cast<ffe::ScriptEngine*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        // Lazily propagate the engine's asset root to the prefab system.
+        // This is safe to call repeatedly — setAssetRoot is idempotent.
+        if (engine->m_assetRoot[0] != '\0') {
+            engine->m_prefabSystem.setAssetRoot(engine->m_assetRoot);
+        }
+
+        const ffe::PrefabHandle handle = engine->m_prefabSystem.loadPrefab(path);
+        lua_pushinteger(state, static_cast<lua_Integer>(handle.id));
+        return 1;
+    });
+    lua_setfield(L, -2, "loadPrefab");
+
+    // ffe.instantiatePrefab(handle: integer [, overrides: table]) -> integer
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TNUMBER) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.instantiatePrefab: argument 1 must be a number (handle)");
+            lua_pushinteger(state, static_cast<lua_Integer>(ffe::NULL_ENTITY));
+            return 1;
+        }
+
+        // Retrieve World pointer.
+        lua_pushlightuserdata(state, &s_worldRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            FFE_LOG_ERROR("ScriptEngine", "ffe.instantiatePrefab: world not registered");
+            lua_pushinteger(state, static_cast<lua_Integer>(ffe::NULL_ENTITY));
+            return 1;
+        }
+        auto* world = static_cast<ffe::World*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        // Retrieve ScriptEngine pointer.
+        lua_pushlightuserdata(state, &s_engineRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            FFE_LOG_ERROR("ScriptEngine", "ffe.instantiatePrefab: ScriptEngine not in registry");
+            lua_pushinteger(state, static_cast<lua_Integer>(ffe::NULL_ENTITY));
+            return 1;
+        }
+        auto* engine = static_cast<ffe::ScriptEngine*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        // Validate and extract handle id.
+        const lua_Integer rawHandle = lua_tointeger(state, 1);
+        if (rawHandle <= 0) {
+            FFE_LOG_ERROR("ScriptEngine",
+                          "ffe.instantiatePrefab: invalid handle %" PRId64,
+                          static_cast<long long>(rawHandle));
+            lua_pushinteger(state, static_cast<lua_Integer>(ffe::NULL_ENTITY));
+            return 1;
+        }
+        const ffe::PrefabHandle handle{static_cast<ffe::u32>(rawHandle)};
+
+        // Build PrefabOverrides from the optional second argument (table).
+        ffe::PrefabOverrides overrides{};
+        if (lua_istable(state, 2)) {
+            // Iterate top-level keys (component names).
+            lua_pushnil(state);  // first key
+            while (lua_next(state, 2) != 0 && overrides.count < ffe::PrefabOverrides::MAX) {
+                // stack: ... | compKey (-2) | compVal (-1)
+                if (lua_type(state, -2) != LUA_TSTRING || !lua_istable(state, -1)) {
+                    lua_pop(state, 1);  // pop value, keep key for next()
+                    continue;
+                }
+
+                const char* compName = lua_tostring(state, -2);
+                if (compName == nullptr) {
+                    lua_pop(state, 1);
+                    continue;
+                }
+
+                // Truncate component name to 31 chars.
+                char compBuf[32];
+                strncpy(compBuf, compName, 31);
+                compBuf[31] = '\0';
+
+                // Iterate inner table (field names and values).
+                const int innerTblIdx = lua_gettop(state);  // absolute index of inner table
+                lua_pushnil(state);  // first field key
+                while (lua_next(state, innerTblIdx) != 0 && overrides.count < ffe::PrefabOverrides::MAX) {
+                    // stack: ... | compKey | compVal | fieldKey (-2) | fieldVal (-1)
+                    if (lua_type(state, -2) != LUA_TSTRING) {
+                        lua_pop(state, 1);
+                        continue;
+                    }
+
+                    const char* fieldName = lua_tostring(state, -2);
+                    if (fieldName == nullptr) {
+                        lua_pop(state, 1);
+                        continue;
+                    }
+
+                    // Truncate field name to 31 chars.
+                    char fieldBuf[32];
+                    strncpy(fieldBuf, fieldName, 31);
+                    fieldBuf[31] = '\0';
+
+                    if (lua_isnumber(state, -1)) {
+                        const float v = static_cast<float>(lua_tonumber(state, -1));
+                        overrides.set(compBuf, fieldBuf, v);
+                    } else if (lua_isboolean(state, -1)) {
+                        const bool v = lua_toboolean(state, -1) != 0;
+                        overrides.set(compBuf, fieldBuf, v);
+                    } else {
+                        FFE_LOG_WARN("ScriptEngine",
+                                     "ffe.instantiatePrefab: override '%s.%s' has unsupported type — ignored",
+                                     compBuf, fieldBuf);
+                    }
+
+                    lua_pop(state, 1);  // pop field value, keep field key for next()
+                }
+                // Pop inner table value; key stays for outer next().
+                lua_pop(state, 1);
+            }
+        }
+
+        const ffe::EntityId eid = engine->m_prefabSystem.instantiatePrefab(*world, handle, overrides);
+        lua_pushinteger(state, static_cast<lua_Integer>(eid));
+        return 1;
+    });
+    lua_setfield(L, -2, "instantiatePrefab");
+
+    // ffe.unloadPrefab(handle: integer) -> nothing
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        if (lua_type(state, 1) != LUA_TNUMBER) {
+            FFE_LOG_ERROR("ScriptEngine", "ffe.unloadPrefab: argument 1 must be a number (handle)");
+            return 0;
+        }
+        const lua_Integer rawHandle = lua_tointeger(state, 1);
+        if (rawHandle <= 0) {
+            return 0;  // invalid handle — no-op
+        }
+
+        lua_pushlightuserdata(state, &s_engineRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            FFE_LOG_ERROR("ScriptEngine", "ffe.unloadPrefab: ScriptEngine not in registry");
+            return 0;
+        }
+        auto* engine = static_cast<ffe::ScriptEngine*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        engine->m_prefabSystem.unloadPrefab(ffe::PrefabHandle{static_cast<ffe::u32>(rawHandle)});
+        return 0;
+    });
+    lua_setfield(L, -2, "unloadPrefab");
 
     lua_setglobal(L, "ffe");
 }

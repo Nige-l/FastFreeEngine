@@ -1,20 +1,39 @@
 #!/usr/bin/env bash
-# tools/take_screenshot.sh — Capture a screenshot of an FFE demo running under Xvfb
+# tools/take_screenshot.sh — Capture a screenshot of an FFE demo binary
+#
+# Modes:
+#   Real display (auto, default when DISPLAY is set): Launches demo on existing X display,
+#     captures with scrot/ImageMagick. Reflects real GPU rendering. Preferred for local dev.
+#   Headless (auto when DISPLAY is unset, or --headless flag): Xvfb + llvmpipe. For CI.
 #
 # Usage:
-#   ./tools/take_screenshot.sh <demo_binary> <output_png> [wait_seconds] [lua_script]
+#   ./tools/take_screenshot.sh [--headless] <demo_binary> <output_png> [wait_seconds] [lua_script]
 #
 # Arguments:
+#   --headless    Force headless mode (Xvfb + llvmpipe) even if DISPLAY is set
 #   demo_binary   Path to the compiled demo executable (e.g., build/clang-release/examples/3d_demo/ffe_3d_demo)
 #   output_png    Path where the screenshot PNG will be saved (e.g., docs/screenshots/3d_demo.png)
 #   wait_seconds  How long to let the demo run before capture (default: 3)
 #   lua_script    Optional Lua script path for ffe_runtime (passed as first arg to the demo)
 #
-# Requirements:
-#   xvfb, xwd, imagemagick (convert), xdotool
-#   All installed via: sudo apt-get install -y xvfb xdotool imagemagick
+# Requirements (headless mode):
+#   xvfb, xwd, imagemagick (convert)
+#   Install with: sudo apt-get install -y xvfb imagemagick
 #
-# How it works:
+# Requirements (real display mode):
+#   scrot (preferred) or imagemagick (convert)
+#   Install with: sudo apt-get install -y scrot
+#
+# How it works (real display mode):
+#   1. Detects a usable X display via DISPLAY + xdpyinfo
+#   2. Launches the demo binary on the existing display
+#   3. Waits the specified time for the demo to initialise and render
+#   4. Finds the demo window by PID via xdotool, captures it with ImageMagick import
+#      (falls back to scrot --window, then position-based scrot as last resort)
+#   5. Kills the demo
+#   6. Reports success or failure
+#
+# How it works (headless mode):
 #   1. Starts Xvfb on an auto-selected display
 #   2. Launches the demo binary against that display
 #   3. Waits the specified time for the demo to initialise and render
@@ -31,13 +50,21 @@
 
 set -euo pipefail
 
+# --- Flag parsing ---
+FORCE_HEADLESS=0
+if [ "${1:-}" = "--headless" ]; then
+    FORCE_HEADLESS=1
+    shift
+fi
+
 # --- Argument parsing ---
 if [ $# -lt 2 ]; then
-    echo "Usage: $0 <demo_binary> <output_png> [wait_seconds] [lua_script]"
+    echo "Usage: $0 [--headless] <demo_binary> <output_png> [wait_seconds] [lua_script]"
     echo ""
     echo "Examples:"
     echo "  $0 build/clang-release/examples/3d_demo/ffe_3d_demo docs/screenshots/3d_demo.png"
     echo "  $0 build/clang-release/examples/runtime/ffe_runtime docs/screenshots/showcase.png 5 examples/showcase/game.lua"
+    echo "  $0 --headless build/clang-release/examples/3d_demo/ffe_3d_demo docs/screenshots/3d_demo.png"
     exit 1
 fi
 
@@ -52,6 +79,138 @@ if [ ! -x "$DEMO_BINARY" ]; then
     exit 1
 fi
 
+# Create output directory if needed
+OUTPUT_DIR="$(dirname "$OUTPUT_PNG")"
+mkdir -p "$OUTPUT_DIR"
+
+# --- Mode detection ---
+USE_REAL_DISPLAY=0
+if [ "$FORCE_HEADLESS" -eq 0 ] && [ -n "${DISPLAY:-}" ]; then
+    if command -v xdpyinfo &>/dev/null && xdpyinfo -display "$DISPLAY" &>/dev/null; then
+        USE_REAL_DISPLAY=1
+    fi
+fi
+
+# ==============================================================================
+# REAL DISPLAY MODE
+# ==============================================================================
+if [ "$USE_REAL_DISPLAY" -eq 1 ]; then
+    echo "[screenshot] Mode: real display ($DISPLAY)"
+
+    # Check we have at least one capture tool (scrot or imagemagick import).
+    # xdotool is used for window-by-PID lookup; warn if missing but don't abort
+    # (the position-based fallback will be used instead).
+    if ! command -v scrot &>/dev/null && ! command -v import &>/dev/null; then
+        echo "ERROR: No capture tool found. Install scrot or imagemagick."
+        echo "Install with: sudo apt-get install -y scrot imagemagick"
+        exit 1
+    fi
+    if ! command -v xdotool &>/dev/null; then
+        echo "[screenshot] WARNING: xdotool not found — window-by-PID capture unavailable."
+        echo "             Install with: sudo apt-get install -y xdotool"
+        echo "             Falling back to fixed-region capture (may capture wrong area)."
+    fi
+
+    DEMO_PID=""
+
+    cleanup_real() {
+        local exit_code=$?
+        if [ -n "${DEMO_PID:-}" ] && kill -0 "$DEMO_PID" 2>/dev/null; then
+            kill "$DEMO_PID" 2>/dev/null || true
+            wait "$DEMO_PID" 2>/dev/null || true
+        fi
+        exit "$exit_code"
+    }
+    trap cleanup_real EXIT
+
+    # Launch demo
+    echo "[screenshot] Launching: $DEMO_BINARY ${LUA_SCRIPT:+$LUA_SCRIPT}"
+    if [ -n "$LUA_SCRIPT" ]; then
+        "$DEMO_BINARY" "$LUA_SCRIPT" &>/dev/null &
+    else
+        "$DEMO_BINARY" &>/dev/null &
+    fi
+    DEMO_PID=$!
+
+    # Wait for demo to initialise and render
+    echo "[screenshot] Waiting ${WAIT_SECONDS}s for demo to render..."
+    sleep "$WAIT_SECONDS"
+
+    # Verify demo is still running
+    if ! kill -0 "$DEMO_PID" 2>/dev/null; then
+        echo "ERROR: Demo process exited before capture (PID $DEMO_PID)"
+        echo "       Try running the demo manually to diagnose:"
+        echo "       $DEMO_BINARY ${LUA_SCRIPT:-}"
+        exit 2
+    fi
+
+    # Capture — find the window by PID and capture it directly
+    echo "[screenshot] Capturing demo window (PID $DEMO_PID)..."
+    CAPTURE_OK=0
+    WINDOW_ID=""
+
+    # Find window belonging to this process
+    if command -v xdotool &>/dev/null; then
+        WINDOW_ID=$(xdotool search --onlyvisible --pid "$DEMO_PID" 2>/dev/null | head -1)
+    fi
+
+    if [ -n "$WINDOW_ID" ]; then
+        # Capture the specific window via ImageMagick import
+        if command -v import &>/dev/null; then
+            if import -window "$WINDOW_ID" "$OUTPUT_PNG" 2>/dev/null; then
+                CAPTURE_OK=1
+                echo "[screenshot] Captured window $WINDOW_ID via ImageMagick import"
+            fi
+        fi
+        # Fallback: scrot --window
+        if [ "$CAPTURE_OK" -eq 0 ] && command -v scrot &>/dev/null; then
+            if scrot --window "$WINDOW_ID" "$OUTPUT_PNG" 2>/dev/null; then
+                CAPTURE_OK=1
+                echo "[screenshot] Captured window $WINDOW_ID via scrot"
+            fi
+        fi
+    fi
+
+    # Last resort: full screen crop (position-based fallback)
+    if [ "$CAPTURE_OK" -eq 0 ] && command -v scrot &>/dev/null; then
+        if scrot -a 0,0,1280,720 "$OUTPUT_PNG" 2>/dev/null; then
+            CAPTURE_OK=1
+            echo "[screenshot] WARNING: Captured fixed region (window not found), may be wrong area"
+        fi
+    fi
+
+    if [ "$CAPTURE_OK" -eq 0 ]; then
+        echo "ERROR: All capture methods failed"
+        exit 3
+    fi
+
+    # Kill demo (cleanup trap will also catch this)
+    kill "$DEMO_PID" 2>/dev/null || true
+    wait "$DEMO_PID" 2>/dev/null || true
+    DEMO_PID=""
+
+    # Verify output
+    if [ ! -f "$OUTPUT_PNG" ]; then
+        echo "ERROR: Output file was not created: $OUTPUT_PNG"
+        exit 3
+    fi
+
+    FILE_SIZE=$(stat -c%s "$OUTPUT_PNG" 2>/dev/null || echo 0)
+    if [ "$FILE_SIZE" -lt 1000 ]; then
+        echo "WARNING: Output file is suspiciously small (${FILE_SIZE} bytes): $OUTPUT_PNG"
+        echo "         The capture may be blank. Check the image manually."
+    fi
+
+    DIMENSIONS=$(identify "$OUTPUT_PNG" 2>/dev/null | awk '{print $3}' || echo "unknown")
+    echo "[screenshot] SUCCESS: $OUTPUT_PNG (${DIMENSIONS}, ${FILE_SIZE} bytes)"
+    exit 0
+fi
+
+# ==============================================================================
+# HEADLESS MODE (Xvfb + llvmpipe)
+# ==============================================================================
+echo "[screenshot] Mode: headless (Xvfb + llvmpipe)"
+
 # Check required tools
 for tool in Xvfb xwd convert; do
     if ! command -v "$tool" &>/dev/null; then
@@ -60,10 +219,6 @@ for tool in Xvfb xwd convert; do
         exit 1
     fi
 done
-
-# Create output directory if needed
-OUTPUT_DIR="$(dirname "$OUTPUT_PNG")"
-mkdir -p "$OUTPUT_DIR"
 
 # --- Start Xvfb ---
 # Find a free display number
@@ -80,8 +235,10 @@ echo "[screenshot] Starting Xvfb on :${DISPLAY_NUM} (1920x1080x24)"
 Xvfb ":${DISPLAY_NUM}" -screen 0 1920x1080x24 &>/dev/null &
 XVFB_PID=$!
 
-# Cleanup function
-cleanup() {
+DEMO_PID=""
+TEMP_XWD=""
+
+cleanup_headless() {
     local exit_code=$?
     if [ -n "${DEMO_PID:-}" ] && kill -0 "$DEMO_PID" 2>/dev/null; then
         kill "$DEMO_PID" 2>/dev/null || true
@@ -91,11 +248,10 @@ cleanup() {
         kill "$XVFB_PID" 2>/dev/null || true
         wait "$XVFB_PID" 2>/dev/null || true
     fi
-    # Clean up temp file
     rm -f "${TEMP_XWD:-}" 2>/dev/null || true
     exit "$exit_code"
 }
-trap cleanup EXIT
+trap cleanup_headless EXIT
 
 # Wait for Xvfb to be ready
 sleep 0.5

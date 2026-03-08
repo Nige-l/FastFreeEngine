@@ -5,6 +5,7 @@ add_library(ffe_core STATIC
     arena_allocator.cpp
     input.cpp
     logging.cpp
+    prefab_system.cpp
 )
 
 target_include_directories(ffe_core

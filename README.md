@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-1336 tests | Zero warnings | Clang-18 + GCC-13 | 200+ Lua bindings | 6 demo games
+1451 tests | Zero warnings | Clang-18 + GCC-13 | 200+ Lua bindings | 6 demo games
 
 ---
 
@@ -99,6 +99,7 @@ All subsystems below are implemented and working together in six demo games incl
 - **Input System** -- State-based keyboard, mouse, and gamepad input (pressed/held/released) with action mapping (64 actions, 4 bindings each). Up to 4 controllers. Xbox controller supported.
 - **Timers** -- `ffe.after()` and `ffe.every()` with cancel support. 256 max concurrent timers, fixed-size array.
 - **Save/Load** -- JSON-based game state persistence with security hardening (path traversal prevention, size limits, atomic writes).
+- **Prefab System** -- Reusable entity templates defined as JSON files and instantiated at runtime with per-instance overrides. Zero heap allocation in the instantiation hot path. Security hardened (path traversal prevention, 1 MB file limit, JSON depth limit). Lua bindings: `ffe.loadPrefab()`, `ffe.instantiatePrefab()`, `ffe.unloadPrefab()`.
 - **Scene Management** -- `destroyAllEntities`, `cancelAllTimers`, `loadScene` for clean scene transitions.
 - **Logging** -- printf-style logging with compile-time macro filtering and minimal lock scope.
 
@@ -186,7 +187,7 @@ Built-in client-server multiplayer for both 2D and 3D games:
 
 ### Utilities
 
-- **Screenshot** -- In-engine screenshot capture to PNG via `ffe.screenshot()`.
+- **Screenshot** -- In-engine screenshot capture to PNG via `ffe.screenshot()`. The screenshot pipeline uses real-GPU window-based capture when a display is available, falling back to headless mode for CI.
 - **Camera Shake** -- `ffe.cameraShake()` for screen effects.
 - **Clear Color** -- `ffe.setBackgroundColor()` for viewport background.
 
@@ -286,7 +287,7 @@ cmake --build build-mingw
 
 ### Running Tests
 
-1336 Catch2 tests covering core, renderer (2D and 3D), scripting, audio, physics, networking, terrain, and more:
+1451 Catch2 tests covering core, renderer (2D and 3D), scripting, audio, physics, networking, terrain, and more:
 
 ```bash
 ctest --test-dir build --output-on-failure --parallel $(nproc)
@@ -430,7 +431,7 @@ engine/
   networking/   ENet transport, replication, server/client, prediction, lobby, lag compensation
   editor/       Standalone editor application (ImGui, hierarchy, inspector, viewport, gizmos)
 
-tests/          1336 Catch2 tests (core, renderer, scripting, audio, physics, networking, terrain)
+tests/          1451 Catch2 tests (core, renderer, scripting, audio, physics, networking, terrain)
 examples/       Demo games (showcase, lua_demo, pong, breakout, 3d_demo, net_demo, hello_sprites, headless_test)
 assets/
   textures/     PNG textures and spritesheets
@@ -549,7 +550,7 @@ FFE has an ambitious roadmap ahead. Planned work includes:
 - **AI Tooling** -- LLM integration panel in the editor, AI-assisted level design, code generation from natural language
 - **Advanced Vulkan Features** -- Compute shaders, GPU-driven rendering, ray tracing on MODERN tier
 
-1336 tests pass on both compilers with zero warnings. The engine supports full 2D and 3D game development with PBR rendering, post-processing, GPU instancing, MSAA/FXAA, SSAO, heightmap terrain, water rendering, a Vulkan backend, multiplayer networking, a standalone editor, 3D physics, skeletal animation with crossfade blending, shadow mapping, and more -- demonstrated across six playable demos including the flagship "Echoes of the Ancients" showcase.
+1451 tests pass on both compilers with zero warnings. The engine supports full 2D and 3D game development with PBR rendering, post-processing, GPU instancing, MSAA/FXAA, SSAO, heightmap terrain, water rendering, a Vulkan backend, multiplayer networking, a standalone editor, 3D physics, skeletal animation with crossfade blending, shadow mapping, and more -- demonstrated across six playable demos including the flagship "Echoes of the Ancients" showcase.
 
 See `docs/devlog.md` for the full session-by-session development history.
 

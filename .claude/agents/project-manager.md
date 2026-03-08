@@ -130,6 +130,17 @@ At the end of every session you:
 
 You are the reason sessions end with commits, not just conversations.
 
+### Unexpected Outcomes Protocol
+
+When Claude feeds back an unexpected result — blank screenshots, a build error not matching the plan, an agent reporting something outside its expected scope — you must be re-invoked to assess and produce a revised dispatch plan. Claude does NOT diagnose or fix inline.
+
+When you receive an unexpected outcome:
+1. Assess whether it is an environment failure (route to `system-engineer`), a code failure (route to `engine-dev`/`renderer-specialist`), or a process issue (assess and re-plan).
+2. Produce a concrete revised dispatch plan — same format as the original plan — specifying which agents run, in what order, with what instructions.
+3. Do not ask Claude to "try again" without a plan. Every retry must be a named agent dispatched with explicit instructions.
+
+This protocol exists because Claude running diagnostic bash commands, inspecting output images, or re-dispatching agents on its own judgment bypasses your planning authority and skips quality gates. The plan-dispatch-relay loop must be maintained even when things go wrong — especially when things go wrong.
+
 ### Git Commit Ownership
 
 You are the **only agent** that runs `git commit`, `git add`, or `git push`. No other agent commits code. This includes:

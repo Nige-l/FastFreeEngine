@@ -6,9 +6,9 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 110 |
-| Total tests | 1430 |
-| Total Lua bindings | ~217 |
+| Last session | 111 |
+| Total tests | 1451 |
+| Total Lua bindings | ~220 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
 | Phase 2 (3D Foundation) | COMPLETE |
 | Phase 3 (Standalone Editor) | MVP COMPLETE (6 milestones, Sessions 51-56) |
@@ -18,7 +18,7 @@
 | Phase 7 (Rendering Pipeline) | COMPLETE (Sessions 74-84) |
 | Phase 8 (Vulkan Backend) | COMPLETE (Sessions 85-89) |
 | Phase 9 (Terrain/Open World) | COMPLETE (Sessions 90-92, 108-110) |
-| Phase 10 (Prefab System) | NEXT |
+| Phase 10 (Advanced Editor) | IN PROGRESS — M1 COMPLETE, M2 next |
 | Windows build | DONE (MinGW-w64 cross-compilation) |
 | macOS build | DISABLED (upstream LuaJIT arm64-osx vcpkg issue) |
 | GitHub Actions CI | DONE (Linux Clang-18, Linux GCC-13) |
@@ -40,19 +40,28 @@
 - set3DCameraFPS lacks NaN/Inf guards (MINOR -- backlog)
 - NAT traversal / relay server -- deferred to backlog
 - Installer / easy setup wizard -- user request (Session 75), backlog
-- **Procedural Music Generation** -- algorithmic music system using built-in synthesis/instruments
-- **3D particle system** -- showcase uses geometry workaround; proper system needed for fire/smoke/impact
+- **Procedural Music Generation** -- algorithmic music system, no VST dependency (Phase 13)
+- **3D particle system** -- showcase uses geometry workaround; proper system needed
 - Water surface (2x2m fountain basin) not visible in Level 1 screenshot -- cosmetic, low priority
+- **Mesh path-to-handle gap** -- `findHandleByPath` missing from MeshLoader; prefab Mesh components need manual resolve after instantiation
 
 ## Recent Sessions (last 5)
 
 | Session | Summary |
 |---------|---------|
+| 111 | Phase 10 M1 Prefab System -- PrefabSystem (JSON load, ECS instantiate, override, security hardening), 3 Lua bindings (loadPrefab, instantiatePrefab, unloadPrefab), 21 tests (1451 total, Clang-18 + GCC-13 FULL). Screenshot pipeline fixes (xdotool, real-display, camera angle). Process discipline additions (director). |
 | 110 | Phase 9 M6 Water Rendering -- WaterManager, reflection FBO (half-res), Fresnel blend, animated UV scroll, 4 Lua bindings (createWaterSurface, destroyWaterSurface, setWaterScrollSpeed, setWaterFresnelParams), 21 new tests (1430 total). Level 1 water surface. Phase 9 COMPLETE. Process: multi-instance parallelism, PM pre-plan rule, selective screenshots, examples-map.md, agent-quickref.md. |
 | 109 | Phase 9 M5 Vegetation -- GPU-instanced billboard grass (256/chunk) + tree placement (512 trees), VEGETATION shader (GLSL 330, alpha-test, distance fade), 4 Lua bindings, 27 new tests (1406 total). Showcase Levels 1+3 updated. PM pre-plans-ahead pattern encoded. |
 | 108 | Phase 9 M4 World Streaming -- ChunkState machine, background worker thread, main-thread GL upload, dirty-distance gating, 2 Lua bindings, 20 new tests (1379 total). Showcase camera Y clamp fix. Multi-instance parallelism documented. |
 | 107 | Director Process Review + Screenshot Pipeline Refresh -- selective screenshot policy, all 8 demo screenshots refreshed. No engine changes. 1358 tests. |
-| 106 | Real-Hardware Bug Fixes Round 3 -- mouse axis inversion, terrain spawn height, F-key attack fallbacks, combat debug logs removed. 1358 tests. |
+
+## Phase 10 — Advanced Editor (IN PROGRESS)
+
+- [x] M1 (Session 111): Prefab System -- PrefabSystem (JSON load, security hardening, ECS instantiate, PrefabOverride), 3 Lua bindings, 21 tests, ADR (553 lines), .context.md updated.
+- [ ] M2: Visual Scripting -- node-based graph editor as alternative to Lua (NEXT)
+- [ ] M3: LLM Integration Panel
+- [ ] M4: Editor Preferences and Project Wizard / Installer
+- [ ] M5: Animation Editor
 
 ## Phase 9 — Terrain and Open World (COMPLETE, Sessions 90-92, 108-110)
 
