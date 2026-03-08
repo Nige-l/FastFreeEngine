@@ -3,6 +3,47 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-08 — Session 109: Phase 9 M5 Vegetation System
+
+### Summary
+
+Session 109 delivered Phase 9 Milestone 5: a GPU-instanced vegetation system for billboard grass patches and tree placement. The VegetationSystem integrates with the terrain renderer, placing grass instances per chunk (up to 256) and trees across the world (up to 512). A dedicated VEGETATION shader (GLSL 330 core) handles Y-axis cylindrical billboarding so grass faces the camera horizontally, alpha-test for leaf transparency, and distance fade to avoid hard pop-in at the render boundary. GrassInstance is 24 bytes (position + halfSize + texOffset) and TreeInstance is 16 bytes (position + scale), both designed for cache-friendly GPU upload.
+
+Four new Lua bindings give game scripts full control: `addVegetationPatch` places a grass cluster at a world position with configurable density and radius, `removeVegetationPatch` removes it by handle, `addTree` places a single tree with scale, and `clearTrees` removes all trees on a terrain. The Showcase Levels 1 and 3 were updated with grass and tree placement to demonstrate the system in the context of the full open-world scene.
+
+Twenty-seven new CPU-only Catch2 tests cover struct size assertions (verifying the 24B/16B layout guarantees), config defaults, shader constant values (MAX_GRASS_PER_CHUNK = 256, MAX_TREES = 512), and the COUNT == 22 shader enum assertion updated in test_water and test_gpu_instancing. The build brings the total to 1406 passing tests.
+
+Process improvements also landed this session: a 70-line agent quick-reference card (`docs/agent-quickref.md`) was added to give agents a single-page lookup for common decisions. The PM pre-plans-ahead pattern — where PM drafts the next milestone plan while the current phase is building — was encoded in CLAUDE.md and the relevant agent definition files.
+
+### Delivered
+
+**Phase 9 M5 — Vegetation System:**
+
+- **engine/renderer/vegetation.h** — `GrassInstance` (24B: position xyz, halfSize, texOffset xy), `TreeInstance` (16B: position xyz, scale), `VegetationConfig` (maxGrassPerChunk=256, maxTrees=512, fadeStart/fadeEnd), `VegetationPatchHandle`, `VegetationSystem` class with `addPatch`/`removePatch`/`addTree`/`clearTrees`/`render` API.
+- **engine/renderer/vegetation.cpp** — GPU instancing via instance VBO per patch; cylindrical billboard matrix computed on GPU via VEGETATION shader; distance fade uniform set per draw; tree placement uses static impostor quads (VEGETATION shader reused); render skips patches/trees beyond fadeEnd.
+- **engine/renderer/shader_library.h / shader_library.cpp** — VEGETATION shader added to `ShaderType` enum; COUNT updated to 22; VEGETATION GLSL 330 core source: vertex stage computes Y-axis billboard rotation from camera position, fragment stage samples diffuse texture, applies alpha-test (discard < 0.1) and distance fade.
+- **engine/renderer/CMakeLists.txt** — `vegetation.cpp` added to renderer source list; `terrain_internal.h` GLAD include path fix applied.
+- **engine/scripting/script_engine.h / script_engine.cpp** — 4 new Lua bindings: `ffe.addVegetationPatch(terrainHandle, x, y, z, density, radius)` → patchHandle; `ffe.removeVegetationPatch(terrainHandle, patchHandle)`; `ffe.addTree(terrainHandle, x, y, z, scale)` → treeHandle; `ffe.clearTrees(terrainHandle)`.
+- **tests/renderer/test_vegetation.cpp** — 27 new CPU-only tests: GrassInstance sizeof == 24, TreeInstance sizeof == 16, VegetationConfig defaults (maxGrassPerChunk=256, maxTrees=512, fadeStart/fadeEnd values), MAX_GRASS_PER_CHUNK and MAX_TREES constants, patch handle validity, clear semantics.
+- **tests/renderer/test_water.cpp** — COUNT == 22 assertion updated (was 21).
+- **tests/renderer/test_gpu_instancing.cpp** — COUNT == 22 assertion updated (was 21).
+- **tests/CMakeLists.txt** — `test_vegetation` target registered.
+- **examples/showcase/game.lua** — vegetation system initialised on game start; VegetationSystem enabled for the scene.
+- **examples/showcase/levels/level1.lua** — grass patches and trees placed across the terrain using `addVegetationPatch` and `addTree`.
+- **examples/showcase/levels/level3.lua** -- grass patches and trees placed across the terrain using `addVegetationPatch` and `addTree`.
+- **docs/architecture/adr-phase9-m5-vegetation.md** -- ADR documenting billboard approach, struct size rationale, shader design decisions, and integration with the terrain chunk system.
+- **docs/assets/screenshots/showcase_level1.png**, **showcase_level3.png** -- updated screenshots showing grass and trees in the open-world scene.
+- **website/docs/assets/screenshots/showcase_level1.png**, **showcase_level3.png** -- mirrored to website asset directory.
+
+**Process improvements:**
+
+- **docs/agent-quickref.md** — new 70-line agent quick-reference card covering: tier defaults, performance rules, naming conventions, agent routing, and common decision table.
+- **CLAUDE.md + agent definition files** — PM pre-plans-ahead pattern encoded: PM drafts the next milestone dispatch plan in the devlog entry while the current phase's build is running, so the next session can begin immediately without a planning round-trip.
+
+### Next Session Goal
+
+**Phase 9 M6 — Water Rendering:** reflective/refractive water plane with shoreline blending and animated surface. Planned approach: dual FBO render (reflection pass with clipped above-plane geometry, refraction pass with clipped below-plane geometry), Fresnel blend in WATER shader (GLSL 330 core), animated normal map for surface ripples, shoreline foam via depth buffer comparison.
+
 ## 2026-03-08 — Session 108: Phase 9 M4 World Streaming + Showcase Camera Fix
 
 ### Summary
