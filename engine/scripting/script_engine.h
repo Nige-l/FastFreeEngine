@@ -178,6 +178,15 @@ private:
 
     // Registers ffe.* Lua bindings (ffe.log, etc.).
     void registerEcsBindings();
+
+#ifdef FFE_EDITOR
+    // Registers editor-only LLM Lua bindings:
+    //   ffe.llmQuery(prompt: string) -> string|nil, string|nil
+    //   ffe.isLLMConfigured() -> boolean
+    // These bindings are ONLY compiled and registered in editor builds.
+    // They are NOT available in ffe_runtime game builds (sandbox guarantee).
+    void registerLLMBindings();
+#endif
 };
 
 } // namespace ffe

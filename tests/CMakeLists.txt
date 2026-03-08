@@ -198,6 +198,49 @@ target_include_directories(ffe_tests_editor
 
 catch_discover_tests(ffe_tests_editor)
 
+# --- LLM panel tests ---
+# Separate executable because LLMPanel links ImGui (used in render methods).
+# FFE_TEST=1 is defined so that llm_panel.cpp skips ImGui render methods,
+# allowing compilation and linking without ImGui. No real HTTP calls are made.
+add_executable(ffe_tests_llm_panel
+    test_main.cpp
+    editor/test_llm_panel.cpp
+    ${CMAKE_SOURCE_DIR}/engine/editor/llm_panel.cpp
+)
+
+target_link_libraries(ffe_tests_llm_panel
+    PRIVATE
+        ffe_core          # logging, platform (canonicalizePath), types
+        Catch2::Catch2WithMain
+)
+
+target_include_directories(ffe_tests_llm_panel
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}/engine
+        ${CMAKE_SOURCE_DIR}/third_party
+)
+
+# FFE_EDITOR: enables the LLM panel code paths in llm_panel.h and llm_panel.cpp.
+# FFE_TEST:   disables ImGui render methods so ImGui does not need to be linked.
+target_compile_definitions(ffe_tests_llm_panel
+    PRIVATE
+        FFE_EDITOR
+        FFE_TEST
+)
+
+# Link nlohmann-json used by LLMPanel::doRequest (JSON payload + response parse).
+find_package(nlohmann_json CONFIG REQUIRED)
+target_link_libraries(ffe_tests_llm_panel PRIVATE nlohmann_json::nlohmann_json)
+
+# OpenSSL for cpp-httplib HTTPS — same as engine/editor/CMakeLists.txt.
+find_package(OpenSSL QUIET)
+if(OpenSSL_FOUND OR OPENSSL_FOUND)
+    target_link_libraries(ffe_tests_llm_panel PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+    target_compile_definitions(ffe_tests_llm_panel PRIVATE CPPHTTPLIB_OPENSSL_SUPPORT=1)
+endif()
+
+catch_discover_tests(ffe_tests_llm_panel)
+
 # --- Networking tests ---
 # Separate executable because networking tests use ENet (loopback sockets)
 # and init/shutdown global state that must be isolated from other test suites.

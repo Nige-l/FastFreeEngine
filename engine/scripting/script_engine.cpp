@@ -55,6 +55,22 @@ extern "C" {
 #include <sys/stat.h> // stat
 #include "core/platform.h"
 
+// Editor-only: LLM panel + httplib for ffe.llmQuery / ffe.isLLMConfigured.
+// These headers are only compiled when FFE_EDITOR is defined.
+#ifdef FFE_EDITOR
+#ifndef CPPHTTPLIB_OPENSSL_SUPPORT
+#define CPPHTTPLIB_OPENSSL_SUPPORT
+#endif
+#include "editor/llm_panel.h"       // LLMConfig, LLMResponse, LLMPanel::doRequest
+#include <fstream>     // std::ifstream for loadLLMConfig
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <unistd.h>   // getuid
+#include <pwd.h>      // getpwuid
+#endif
+#endif // FFE_EDITOR
+
 // ---------------------------------------------------------------------------
 // Registry key for the World pointer
 // ---------------------------------------------------------------------------
@@ -404,6 +420,12 @@ bool ScriptEngine::init() {
 
     // Step 5: Register ffe.* bindings.
     registerEcsBindings();
+
+#ifdef FFE_EDITOR
+    // Step 5b: Register editor-only LLM bindings (ffe.llmQuery, ffe.isLLMConfigured).
+    // These are NOT registered in ffe_runtime builds — sandbox guarantee (CLAUDE.md §5).
+    registerLLMBindings();
+#endif
 
     // Step 6: Store ScriptEngine pointer in Lua registry for timer bindings.
     lua_pushlightuserdata(L, &s_engineRegistryKey);
@@ -8356,5 +8378,173 @@ void ScriptEngine::registerEcsBindings() {
 
     lua_setglobal(L, "ffe");
 }
+
+// ---------------------------------------------------------------------------
+// registerLLMBindings — editor-only; compiled only when FFE_EDITOR is defined.
+// Registers ffe.llmQuery and ffe.isLLMConfigured into the ffe.* global table.
+//
+// Security: these bindings make outbound HTTP calls. They must NEVER be
+// registered in ffe_runtime builds (sandbox guarantee — CLAUDE.md §5).
+// The #ifdef FFE_EDITOR guard at the declaration and the call site in init()
+// ensures this.
+// ---------------------------------------------------------------------------
+
+#ifdef FFE_EDITOR
+
+namespace {
+
+// File-static LLM config for the scripting engine Lua bindings.
+// Populated once at editor init time from ~/.ffe/preferences.json.
+// The API key is never written to any log or error output.
+ffe::editor::LLMConfig s_llmConfig;
+
+// File-static flag: true once s_llmConfig has been populated.
+bool s_llmConfigLoaded = false;
+
+// Load LLM configuration from ~/.ffe/preferences.json.
+// Called lazily on first ffe.llmQuery / ffe.isLLMConfigured call.
+// Returns false if the file cannot be opened or parsed.
+bool loadLLMConfig() {
+    if (s_llmConfigLoaded) return !s_llmConfig.apiKey.empty();
+
+    // Locate ~/.ffe/preferences.json
+    const char* home = ::getenv("HOME");
+#ifndef _WIN32
+    if (!home) {
+        const struct passwd* pw = ::getpwuid(::getuid());
+        if (pw) { home = pw->pw_dir; }
+    }
+#endif
+    if (!home) return false;
+
+    const std::string prefsPath = std::string(home) + "/.ffe/preferences.json";
+
+    std::ifstream f(prefsPath, std::ios::in);
+    if (!f.is_open()) return false;
+
+    try {
+        auto json = nlohmann::json::parse(f, nullptr, /*throwOnError=*/false);
+        if (json.is_discarded()) return false;
+
+        if (!json.contains("llm")) return false;
+        const auto& llm = json["llm"];
+
+        if (llm.contains("baseUrl"))
+            s_llmConfig.baseUrl = llm["baseUrl"].get<std::string>();
+        if (llm.contains("apiKey"))
+            s_llmConfig.apiKey = llm["apiKey"].get<std::string>();
+        if (llm.contains("model"))
+            s_llmConfig.model = llm["model"].get<std::string>();
+        if (llm.contains("timeoutSecs"))
+            s_llmConfig.timeoutSecs = llm["timeoutSecs"].get<int>();
+        if (llm.contains("maxResponseBytes")) {
+            size_t v = llm["maxResponseBytes"].get<size_t>();
+            if (v < 512)   v = 512;
+            if (v > 65536) v = 65536;
+            s_llmConfig.maxResponseBytes = v;
+        }
+        if (llm.contains("caBundle"))
+            s_llmConfig.caBundle = llm["caBundle"].get<std::string>();
+
+        s_llmConfigLoaded = true;
+    } catch (...) {
+        return false;
+    }
+
+    return !s_llmConfig.apiKey.empty();
+}
+
+// ffe.isLLMConfigured() -> boolean
+// Returns true if both baseUrl and apiKey are non-empty.
+// EDITOR ONLY.
+static int lua_isLLMConfigured(lua_State* L) {
+    loadLLMConfig();
+    const bool configured =
+        !s_llmConfig.baseUrl.empty() && !s_llmConfig.apiKey.empty();
+    lua_pushboolean(L, configured ? 1 : 0);
+    return 1;
+}
+
+// ffe.llmQuery(prompt: string) -> string|nil, string|nil
+// Synchronous LLM request with a 5-second timeout (OQ-5: independent of
+// LLMConfig.timeoutSecs which is the editor panel timeout).
+// Returns: responseText on success, nil+errorMsg on failure.
+// The Lua instruction counter is not decremented during the I/O wait.
+// EDITOR ONLY.
+static int lua_llmQuery(lua_State* L) {
+    if (!lua_isstring(L, 1)) {
+        lua_pushnil(L);
+        lua_pushstring(L, "ffe.llmQuery: expected string prompt");
+        return 2;
+    }
+    const char* prompt = lua_tostring(L, 1);
+    if (!prompt || prompt[0] == '\0') {
+        lua_pushnil(L);
+        lua_pushstring(L, "ffe.llmQuery: prompt must be non-empty");
+        return 2;
+    }
+
+    loadLLMConfig();
+
+    if (s_llmConfig.baseUrl.empty() || s_llmConfig.apiKey.empty()) {
+        lua_pushnil(L);
+        lua_pushstring(L, "LLM not configured");
+        return 2;
+    }
+
+    // Use a 5-second timeout for Lua binding calls (OQ-5).
+    ffe::editor::LLMConfig queryCfg = s_llmConfig;
+    queryCfg.timeoutSecs = 5;
+
+    // Assemble a minimal system prompt (no context files for scripting API call).
+    const std::string systemPrompt =
+        "You are an AI assistant for the FastFreeEngine (FFE) game engine. "
+        "Produce Lua code compatible with FFE's LuaJIT scripting layer.";
+
+    // Fire the synchronous request. The Lua instruction budget hook does not
+    // fire during blocking I/O — this call occupies the Lua coroutine thread
+    // but consumes zero Lua VM instructions while waiting.
+    ffe::editor::LLMResponse response;
+    ffe::editor::LLMPanel::doRequest(queryCfg, systemPrompt, prompt, &response);
+
+    if (response.success) {
+        lua_pushlstring(L, response.text.c_str(), response.text.size());
+        lua_pushnil(L);
+        return 2;
+    } else {
+        lua_pushnil(L);
+        // errorMsg has already been scrubbed of the API key in doRequest().
+        lua_pushlstring(L, response.errorMsg.c_str(), response.errorMsg.size());
+        return 2;
+    }
+}
+
+} // anonymous namespace
+
+void ScriptEngine::registerLLMBindings() {
+    auto* L = static_cast<lua_State*>(m_luaState);
+    if (!L) return;
+
+    // Push the existing ffe global table onto the stack so we can add fields.
+    lua_getglobal(L, "ffe");
+    if (!lua_istable(L, -1)) {
+        lua_pop(L, 1);
+        FFE_LOG_ERROR("ScriptEngine", "registerLLMBindings: ffe global is not a table");
+        return;
+    }
+
+    // ffe.isLLMConfigured() -> boolean
+    lua_pushcfunction(L, lua_isLLMConfigured);
+    lua_setfield(L, -2, "isLLMConfigured");
+
+    // ffe.llmQuery(prompt: string) -> string|nil, string|nil
+    lua_pushcfunction(L, lua_llmQuery);
+    lua_setfield(L, -2, "llmQuery");
+
+    // Pop the ffe table.
+    lua_pop(L, 1);
+}
+
+#endif // FFE_EDITOR
 
 } // namespace ffe
