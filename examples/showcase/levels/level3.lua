@@ -47,12 +47,12 @@ local sfxCollect = ffe.loadSound("audio/sfx_collect.wav")
 local sfxHit     = ffe.loadSound("audio/sfx_hit.wav")
 local sfxGate    = ffe.loadSound("audio/sfx_gate.wav")
 
--- Music: epic outdoor theme for the summit climax
-local musicHandle = ffe.loadMusic("audio/music_courtyard.ogg")
+-- Music: epic battle theme for the summit climax
+local musicHandle = ffe.loadMusic("audio/BattleMusic.mp3")
 if musicHandle and musicHandle ~= 0 then
     ffe.playMusic(musicHandle, true)
     ffe.setMusicVolume(0.4)
-    ffe.log("[Level3] Music playing: music_courtyard.ogg")
+    ffe.log("[Level3] Music playing: BattleMusic.mp3")
 else
     ffe.log("[Level3] No music loaded (file missing or audio unavailable)")
 end
@@ -218,13 +218,38 @@ for _, p in ipairs(staticPlatforms) do
 end
 
 --------------------------------------------------------------------
+-- Helper: create a kinematic box entity (for moving platforms)
+-- Kinematic bodies can be repositioned each frame and correctly
+-- interact with dynamic bodies (player, enemies). Static bodies
+-- should NOT be moved after creation — their physics stays fixed.
+--------------------------------------------------------------------
+local function createKinematicBox(x, y, z, sx, sy, sz, r, g, b)
+    local ent = 0
+    if cubeMesh ~= 0 then
+        ent = ffe.createEntity3D(cubeMesh, x, y, z)
+        if ent ~= 0 then
+            ffe.setTransform3D(ent, x, y, z, 0, 0, 0, sx, sy, sz)
+            ffe.setMeshColor(ent, r, g, b, 1.0)
+            ffe.setMeshSpecular(ent, 0.2, 0.15, 0.1, 16)
+            ffe.createPhysicsBody(ent, {
+                shape       = "box",
+                halfExtents = { sx * 0.5, sy * 0.5, sz * 0.5 },
+                motion      = "kinematic",
+            })
+        end
+    end
+    return ent
+end
+
+--------------------------------------------------------------------
 -- MOVING PLATFORMS: 3 platforms oscillate on sine/cosine paths
 -- Period ~3-4 seconds. Updated via ffe.every timer.
+-- Uses kinematic bodies so physics position tracks the visual.
 --------------------------------------------------------------------
 local movingPlatforms = {}
 
 -- Moving platform A: oscillates on X axis (connects NE region)
-local movPlatA = createStaticBox(7, 2.0, -3, 1.5, 0.2, 1.5, 0.55, 0.45, 0.3)
+local movPlatA = createKinematicBox(7, 2.0, -3, 1.5, 0.2, 1.5, 0.55, 0.45, 0.3)
 if movPlatA ~= 0 then
     movingPlatforms[#movingPlatforms + 1] = {
         entity = movPlatA,
@@ -237,7 +262,7 @@ if movPlatA ~= 0 then
 end
 
 -- Moving platform B: oscillates on Y axis (vertical elevator near SW)
-local movPlatB = createStaticBox(-7, 1.5, 5, 1.5, 0.2, 1.5, 0.55, 0.45, 0.3)
+local movPlatB = createKinematicBox(-7, 1.5, 5, 1.5, 0.2, 1.5, 0.55, 0.45, 0.3)
 if movPlatB ~= 0 then
     movingPlatforms[#movingPlatforms + 1] = {
         entity = movPlatB,
@@ -250,7 +275,7 @@ if movPlatB ~= 0 then
 end
 
 -- Moving platform C: oscillates on Z axis (connects to far north, hard to reach)
-local movPlatC = createStaticBox(0, 5.5, 9, 1.2, 0.2, 1.2, 0.6, 0.5, 0.35)
+local movPlatC = createKinematicBox(0, 5.5, 9, 1.2, 0.2, 1.2, 0.6, 0.5, 0.35)
 if movPlatC ~= 0 then
     movingPlatforms[#movingPlatforms + 1] = {
         entity = movPlatC,

@@ -45,12 +45,12 @@ local sfxCollect = ffe.loadSound("audio/sfx_collect.wav")
 local sfxHit     = ffe.loadSound("audio/sfx_hit.wav")
 local sfxGate    = ffe.loadSound("audio/sfx_gate.wav")
 
--- Music: courtyard theme (OGG format)
-local musicHandle = ffe.loadMusic("audio/music_courtyard.ogg")
+-- Music: Pixel Crown theme
+local musicHandle = ffe.loadMusic("audio/music_pixelcrown.ogg")
 if musicHandle and musicHandle ~= 0 then
     ffe.playMusic(musicHandle, true)
     ffe.setMusicVolume(0.35)
-    ffe.log("[Level1] Music playing: music_courtyard.ogg")
+    ffe.log("[Level1] Music playing: music_pixelcrown.ogg")
 else
     ffe.log("[Level1] No music loaded (file missing or audio unavailable)")
 end
@@ -673,7 +673,7 @@ end
 -- Player spawn (south side of courtyard, at the entrance)
 -- Ground plane top is at Y=0; spawn player above it.
 --------------------------------------------------------------------
-local SPAWN_Y = 1.5
+local SPAWN_Y = 0.6
 Player.create(0, SPAWN_Y, -12, cesiumMesh)
 Camera.setPosition(0, SPAWN_Y + 2, -12)
 Camera.setYawPitch(180, 25)  -- Camera behind (south), looking north into courtyard toward fountain

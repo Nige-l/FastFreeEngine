@@ -27,6 +27,11 @@ struct MouseState {
     f64 scrollY = 0.0;
     bool currentButtons[MAX_MOUSE_BUTTONS];
     bool previousButtons[MAX_MOUSE_BUTTONS];
+    // Latched press/release flags — set true if ANY press (or release) event
+    // arrived in the pending queue this tick. Prevents quick click-release
+    // within a single glfwPollEvents() batch from swallowing the press edge.
+    bool pressedThisTick[MAX_MOUSE_BUTTONS];
+    bool releasedThisTick[MAX_MOUSE_BUTTONS];
     bool cursorCaptured = false;
     bool firstMouseInput = true;
 };
@@ -246,12 +251,23 @@ void updateInput() {
     }
     g_pendingKeyCount = 0;
 
-    // 3. Mouse buttons: copy current -> previous
+    // 3. Mouse buttons: copy current -> previous, clear latched flags
     std::memcpy(g_mouse.previousButtons, g_mouse.currentButtons, MAX_MOUSE_BUTTONS);
+    std::memset(g_mouse.pressedThisTick, 0, MAX_MOUSE_BUTTONS);
+    std::memset(g_mouse.releasedThisTick, 0, MAX_MOUSE_BUTTONS);
 
-    // 4. Process pending mouse button events
+    // 4. Process pending mouse button events.
+    // Latch press/release flags so that a quick click-release within a single
+    // glfwPollEvents() batch does not swallow the press edge. The last event
+    // still determines currentButtons (for "held" queries), but the latched
+    // flags ensure isMouseButtonPressed/Released detect the edge.
     for (i32 i = 0; i < g_pendingMouseButtonCount; ++i) {
         const auto& event = g_pendingMouseButtonEvents[i];
+        if (event.down) {
+            g_mouse.pressedThisTick[event.button] = true;
+        } else {
+            g_mouse.releasedThisTick[event.button] = true;
+        }
         g_mouse.currentButtons[event.button] = event.down;
     }
     g_pendingMouseButtonCount = 0;
@@ -394,7 +410,12 @@ f64 scrollDeltaY() { return g_mouse.scrollY; }
 bool isMouseButtonPressed(const MouseButton btn) {
     const i32 b = static_cast<i32>(btn);
     if (b < 0 || b >= MAX_MOUSE_BUTTONS) return false;
-    return g_mouse.currentButtons[b] && !g_mouse.previousButtons[b];
+    // Use latched flag: true if a press event arrived this tick, AND the
+    // button was not already down last tick (avoids re-triggering on hold).
+    // The latch handles the case where both press+release arrive in one
+    // glfwPollEvents() batch — without it, currentButtons ends up false
+    // and the press edge is silently lost.
+    return g_mouse.pressedThisTick[b] && !g_mouse.previousButtons[b];
 }
 
 bool isMouseButtonHeld(const MouseButton btn) {
@@ -406,7 +427,9 @@ bool isMouseButtonHeld(const MouseButton btn) {
 bool isMouseButtonReleased(const MouseButton btn) {
     const i32 b = static_cast<i32>(btn);
     if (b < 0 || b >= MAX_MOUSE_BUTTONS) return false;
-    return !g_mouse.currentButtons[b] && g_mouse.previousButtons[b];
+    // Use latched flag: true if a release event arrived this tick, AND the
+    // button was down last tick. Handles quick click-release in one batch.
+    return g_mouse.releasedThisTick[b] && g_mouse.previousButtons[b];
 }
 
 bool isMouseButtonUp(const MouseButton btn) {

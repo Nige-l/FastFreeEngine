@@ -187,10 +187,34 @@ createStaticBox(0, -0.35, -9, 1, 0.15, 4, 0.3, 0.28, 0.26)
 createStaticBox(0, -0.35, 9, 1, 0.15, 3, 0.3, 0.28, 0.26)
 
 --------------------------------------------------------------------
+-- Helper: create a kinematic box (for timed/moving platforms)
+-- Kinematic bodies can be repositioned each frame and correctly
+-- interact with dynamic bodies. Static bodies should NOT be moved.
+--------------------------------------------------------------------
+local function createKinematicBox(x, y, z, sx, sy, sz, r, g, b)
+    local ent = 0
+    if cubeMesh ~= 0 then
+        ent = ffe.createEntity3D(cubeMesh, x, y, z)
+        if ent ~= 0 then
+            ffe.setTransform3D(ent, x, y, z, 0, 0, 0, sx, sy, sz)
+            ffe.setMeshColor(ent, r, g, b, 1.0)
+            ffe.setMeshSpecular(ent, 0.15, 0.15, 0.15, 16)
+            ffe.createPhysicsBody(ent, {
+                shape       = "box",
+                halfExtents = { sx * 0.5, sy * 0.5, sz * 0.5 },
+                motion      = "kinematic",
+            })
+        end
+    end
+    return ent
+end
+
+--------------------------------------------------------------------
 -- TIMED PLATFORMS: East and west bridges appear/disappear on 3s cycle
 -- When disappeared: move below floor (Y = -10)
 -- When appeared: move to bridge height (Y = -0.35)
 -- Visual warning: bridge flashes before disappearing
+-- Uses kinematic bodies so physics position tracks the visual.
 --------------------------------------------------------------------
 local TIMED_BRIDGE_Y_UP   = -0.35
 local TIMED_BRIDGE_Y_DOWN = -10.0
@@ -200,7 +224,7 @@ local TIMED_BRIDGE_WARN   = 0.8   -- seconds of flashing before disappearing
 local timedBridges = {}
 
 -- East timed bridge
-local eastBridge = createStaticBox(9, TIMED_BRIDGE_Y_UP, 0, 3.5, 0.15, 1, 0.3, 0.28, 0.26)
+local eastBridge = createKinematicBox(9, TIMED_BRIDGE_Y_UP, 0, 3.5, 0.15, 1, 0.3, 0.28, 0.26)
 if eastBridge ~= 0 then
     timedBridges[#timedBridges + 1] = {
         entity  = eastBridge,
@@ -215,7 +239,7 @@ if eastBridge ~= 0 then
 end
 
 -- West timed bridge (offset by half a cycle so they alternate)
-local westBridge = createStaticBox(-9, TIMED_BRIDGE_Y_UP, 0, 3.5, 0.15, 1, 0.3, 0.28, 0.26)
+local westBridge = createKinematicBox(-9, TIMED_BRIDGE_Y_UP, 0, 3.5, 0.15, 1, 0.3, 0.28, 0.26)
 if westBridge ~= 0 then
     timedBridges[#timedBridges + 1] = {
         entity  = westBridge,
@@ -510,8 +534,9 @@ createVisualBox( 3, 2.5, -19, 0.6, 2.5, 0.6, 0.3, 0.27, 0.25, 1.0)
 createVisualBox(0, 5.2, -19, 3.5, 0.4, 0.6, 0.3, 0.27, 0.25, 1.0)
 
 --------------------------------------------------------------------
--- MAIN ARTIFACT: Gold artifact on central altar (rotating)
--- Can be collected at any time for bonus (not required for portal)
+-- MAIN ARTIFACT: Gold artifact on central altar (rotating, bonus pickup)
+-- Collecting this does NOT complete the level — the portal is the
+-- only way to advance. The portal auto-credits the artifact if needed.
 --------------------------------------------------------------------
 local mainArtifact = 0
 local mainArtifactPos = { x = 0, y = 1.5, z = 0 }
@@ -723,32 +748,20 @@ ffe.onCollision3D(function(entityA, entityB, px, py, pz, nx, ny, nz, eventType)
     end
     if not otherEnt then return end
 
-    -- Check if player walks into active portal
+    -- Check if player walks into active portal (the ONLY way to complete Level 2)
     if otherEnt == portalTrigger and portalActive and not levelComplete then
         levelComplete = true
         ffe.log("[Level2] Player reached the portal! Level complete!")
         if sfxGate then ffe.playSound(sfxGate, 1.0) end
         ffe.cameraShake(0.5, 0.15)
-        -- Trigger level complete in game.lua
-        -- Use collectArtifact if main artifact was not already collected
-        if not mainCollected and collectArtifact then
-            collectArtifact()
-        end
-        -- If main artifact was already collected, just ensure game state transitions
-        if mainCollected then
-            -- Force level completion via game state
-            if getGameState and getGameState() == "PLAYING" then
-                -- The artifact was already collected, so game.lua already
-                -- transitioned to LEVEL_COMPLETE. Just show prompt.
-                if HUD then HUD.showPrompt("The Temple conquered!", 3.0) end
-            end
-        else
-            if HUD then HUD.showPrompt("The Temple conquered!", 3.0) end
-        end
+        -- Always call collectArtifact to trigger LEVEL_COMPLETE in game.lua
+        if collectArtifact then collectArtifact() end
+        if HUD then HUD.showPrompt("The Temple conquered!", 3.0) end
         return
     end
 
-    -- Check if it is the main artifact
+    -- Check if it is the main artifact (bonus pickup — does NOT complete the level;
+    -- the portal is the only way to complete Level 2)
     if otherEnt == mainArtifact and not mainCollected then
         mainCollected = true
         ffe.destroyPhysicsBody(otherEnt)
@@ -765,9 +778,10 @@ ffe.onCollision3D(function(entityA, entityB, px, py, pz, nx, ny, nz, eventType)
 
         if sfxCollect then ffe.playSound(sfxCollect, 1.0) end
         ffe.cameraShake(0.5, 0.15)
-        if collectArtifact then collectArtifact() end
-        if HUD then HUD.showPrompt("Temple Artifact acquired!", 3.0) end
-        ffe.log("[Level2] Main artifact collected!")
+        -- NOTE: Do NOT call collectArtifact() here — the artifact is a bonus.
+        -- The portal trigger calls collectArtifact() when the player enters it.
+        if HUD then HUD.showPrompt("Temple Artifact acquired! Now find the portal!", 3.0) end
+        ffe.log("[Level2] Main artifact collected (bonus)!")
         return
     end
 
@@ -801,7 +815,7 @@ end)
 --------------------------------------------------------------------
 -- Player spawn (south entrance bridge)
 --------------------------------------------------------------------
-Player.create(0, 1.5, -13, cubeMesh)
+Player.create(0, 1.0, -13, cubeMesh)
 Camera.setPosition(0, 2.5, -13)
 Camera.setYawPitch(180, 28)  -- Camera behind (south), looking north toward altar, lava, crystals
 
@@ -1015,7 +1029,7 @@ ffe.every(TICK_RATE, function()
         local px, py, pz = Player.getPosition()
         if py < -3 then
             Player.cleanup()
-            Player.create(0, 1.5, -13, cubeMesh)
+            Player.create(0, 1.0, -13, cubeMesh)
             Camera.setPosition(0, 2.5, -13)
             if HUD then HUD.showPrompt("The lava claims another...", 2.0) end
         end

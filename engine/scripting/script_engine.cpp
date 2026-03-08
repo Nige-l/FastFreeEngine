@@ -4273,15 +4273,33 @@ void ScriptEngine::registerEcsBindings() {
             return 0;
         }
 
+        // If the entity has an active RigidBody3D, read position and rotation
+        // directly from the Jolt physics body instead of the ECS Transform3D.
+        // This guarantees the caller always sees the physics-driven values,
+        // even if physics3dSyncSystem hasn't run yet this tick (e.g., Lua
+        // systems at lower priority than Physics3DSync, or future refactors
+        // that reorder system priorities). Without this, fillTransform3D
+        // could return stale ECS values that, when written back via
+        // setTransform3D, fight the physics solver and cause hovering.
+        glm::vec3 position = t3d->position;
+        glm::quat rotation = t3d->rotation;
+
+        const auto* rb = world->registry().try_get<ffe::RigidBody3D>(
+            static_cast<entt::entity>(entityId));
+        if (rb != nullptr && rb->initialized && ffe::physics::isValid(rb->handle)) {
+            position = ffe::physics::getBodyPosition(rb->handle);
+            rotation = ffe::physics::getBodyRotation(rb->handle);
+        }
+
         // Convert quaternion back to Euler angles in degrees.
         // glm::eulerAngles inverts glm::quat(glm::radians(vec3{rx, ry, rz})),
         // returning radians in the same component order (intrinsic XYZ).
-        const glm::vec3 eulerDeg = glm::degrees(glm::eulerAngles(t3d->rotation));
+        const glm::vec3 eulerDeg = glm::degrees(glm::eulerAngles(rotation));
 
         // Fill the caller's table in-place — no new table allocation.
-        lua_pushnumber(state, static_cast<lua_Number>(t3d->position.x)); lua_setfield(state, 2, "x");
-        lua_pushnumber(state, static_cast<lua_Number>(t3d->position.y)); lua_setfield(state, 2, "y");
-        lua_pushnumber(state, static_cast<lua_Number>(t3d->position.z)); lua_setfield(state, 2, "z");
+        lua_pushnumber(state, static_cast<lua_Number>(position.x)); lua_setfield(state, 2, "x");
+        lua_pushnumber(state, static_cast<lua_Number>(position.y)); lua_setfield(state, 2, "y");
+        lua_pushnumber(state, static_cast<lua_Number>(position.z)); lua_setfield(state, 2, "z");
         lua_pushnumber(state, static_cast<lua_Number>(eulerDeg.x));      lua_setfield(state, 2, "rx");
         lua_pushnumber(state, static_cast<lua_Number>(eulerDeg.y));      lua_setfield(state, 2, "ry");
         lua_pushnumber(state, static_cast<lua_Number>(eulerDeg.z));      lua_setfield(state, 2, "rz");
