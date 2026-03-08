@@ -374,3 +374,35 @@ These apply throughout development and are never "done":
 5. When a phase is completed, update both this file and `project-state.md`
 
 This roadmap is a living document. Update it as priorities shift and new requirements emerge.
+
+---
+
+## Polish Sprint: Visual Quality and Release Hardening
+
+**Goal:** Make the showcase game look production-quality and cut the first public release. No new engine systems — focused entirely on polish, scene composition, and remaining hardening tasks.
+
+### Milestones
+
+#### M1: Terrain Textures for Outdoor Levels
+- [ ] CC0 terrain textures (grass, rock, dirt) placed in `examples/showcase/assets/terrain/textures/`
+- [ ] level1.lua (The Courtyard): splat-mapped grass + stone layers via `setTerrainSplatTexture`
+- [ ] level3.lua (The Summit): splat-mapped rock + snow layers appropriate to high-altitude setting
+
+#### M2: Skybox for Outdoor Levels
+- [ ] CC0 HDR panorama (6-face cubemap) for daytime sky (Level 1 — The Courtyard)
+- [ ] CC0 HDR panorama (6-face cubemap) for golden-hour/sunset sky (Level 3 — The Summit)
+- [ ] level1.lua: `ffe.loadSkybox(...)` call added
+- [ ] level3.lua: `ffe.unloadSkybox()` replaced with `ffe.loadSkybox(...)`
+
+#### M3: Level 1 Scene Polish
+- [ ] Fountain water surface visibility fix
+- [ ] Fog range tightened for scenic terrain horizon visibility
+
+#### M4: v0.1.0 Public Release
+- [ ] `v0.1.0` git tag
+- [ ] GitHub Release entry with changelog
+
+#### M5: LuaJIT / Lua 5.4 Compile-Time Switch
+- [ ] `FFE_LUA_BACKEND=LuaJIT|Lua54` CMake option
+- [ ] Lua 5.4 functional correctness, full test suite passes both backends
+- [ ] macOS arm64 CI re-enabled using Lua 5.4 backend
