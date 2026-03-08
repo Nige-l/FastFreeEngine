@@ -30,6 +30,7 @@ local victoryScreenTimer = 0   -- animation timer for congratulations screen
 -- Per-level vegetation state (cleaned up at every level transition)
 local grassHandle  = nil
 local treesActive  = false
+local waterHandle  = nil
 
 --------------------------------------------------------------------
 -- Level registry — maps level number to its loader script path
@@ -108,6 +109,10 @@ local function loadLevel(levelNum)
             ffe.clearTrees()
             treesActive = false
         end
+        if waterHandle then
+            ffe.destroyWater(waterHandle)
+            waterHandle = nil
+        end
         -- Unload terrain and disable post-processing BEFORE destroying entities
         ffe.unloadTerrain()
         ffe.disablePostProcessing()
@@ -146,6 +151,7 @@ end
 --------------------------------------------------------------------
 function setGrassHandle(h)  grassHandle = h end
 function setTreesActive(v)  treesActive = v end
+function setWaterHandle(h)  waterHandle = h end
 
 --------------------------------------------------------------------
 -- Global accessors for level scripts
@@ -190,6 +196,10 @@ local function cleanupToMenu()
         if treesActive then
             ffe.clearTrees()
             treesActive = false
+        end
+        if waterHandle then
+            ffe.destroyWater(waterHandle)
+            waterHandle = nil
         end
         -- Unload terrain and disable post-processing BEFORE destroying entities
         ffe.unloadTerrain()
@@ -626,6 +636,10 @@ function shutdown()
     if treesActive then
         ffe.clearTrees()
         treesActive = false
+    end
+    if waterHandle then
+        ffe.destroyWater(waterHandle)
+        waterHandle = nil
     end
     ffe.unloadTerrain()
     ffe.disablePostProcessing()

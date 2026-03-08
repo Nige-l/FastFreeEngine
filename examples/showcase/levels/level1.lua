@@ -125,6 +125,22 @@ if terrainHandle and terrainHandle ~= 0 then
 end
 
 --------------------------------------------------------------------
+-- Water: courtyard fountain basin
+-- The fountain base pool top face is at y=0.6 (base at y=0.3,
+-- half-height 0.3). Water sits at y=0.65, inside the 2.2x2.2 inner
+-- rim (rim top at y=0.8), sized 2.0x2.0 to clear the rim walls.
+--------------------------------------------------------------------
+local wh = ffe.createWater(0, 0.65, 0, 2.0, 2.0)
+if wh and wh ~= 0 then
+    ffe.setWaterColor(wh, 0.1, 0.4, 0.6)
+    ffe.setWaterWave(wh, 0.3, 2.0, 0.05)
+    ffe.setWaterFresnel(wh, 3.0, 0.6)
+    ffe.setWaterReflection(wh, true)
+    setWaterHandle(wh)
+    ffe.log("[Level1] Fountain water surface created")
+end
+
+--------------------------------------------------------------------
 -- Helper: create a static box entity with mesh, color, and physics
 --------------------------------------------------------------------
 local function createStaticBox(x, y, z, sx, sy, sz, r, g, b, rx, ry, rz)

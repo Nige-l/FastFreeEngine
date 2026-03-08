@@ -2,9 +2,11 @@
 //
 // Tests WaterConfig defaults, WaterVertex layout, Water component sizing,
 // constants validation, reflection camera Y-flip math, and shader enum.
-// No GL context required.
+// Also tests Phase 9 M6 WaterManager types (WaterHandle, WaterPlane, WaterConfig
+// defaults from water.h) — all CPU-only, no GL context required.
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 #include "renderer/water.h"
 #include "renderer/shader_library.h"
@@ -260,4 +262,170 @@ TEST_CASE("BuiltinShader::WATER exists at index 20", "[water]") {
 
 TEST_CASE("BuiltinShader::COUNT is 22 after VEGETATION addition", "[water]") {
     CHECK(static_cast<ffe::u32>(ffe::renderer::BuiltinShader::COUNT) == 22);
+}
+
+// -----------------------------------------------------------------------
+// Phase 9 M6 — WaterManager types (water.h)
+// CPU-only tests. No GL context required.
+// These test WaterHandle, WaterPlane, WaterConfig from the WaterManager API.
+// -----------------------------------------------------------------------
+
+TEST_CASE("WaterHandle default id is 0", "[water][wm]") {
+    const ffe::renderer::WaterHandle h;
+    CHECK(h.id == 0u);
+}
+
+TEST_CASE("WaterHandle default isValid returns false", "[water][wm]") {
+    const ffe::renderer::WaterHandle h;
+    CHECK_FALSE(h.isValid());
+}
+
+TEST_CASE("WaterHandle with id 0 isValid returns false", "[water][wm]") {
+    const ffe::renderer::WaterHandle h{0u};
+    CHECK_FALSE(h.isValid());
+}
+
+TEST_CASE("WaterHandle with id 1 isValid returns true", "[water][wm]") {
+    const ffe::renderer::WaterHandle h{1u};
+    CHECK(h.isValid());
+}
+
+TEST_CASE("WaterHandle is 4 bytes", "[water][wm]") {
+    STATIC_CHECK(sizeof(ffe::renderer::WaterHandle) == 4u);
+}
+
+TEST_CASE("WaterPlane is 20 bytes", "[water][wm]") {
+    STATIC_CHECK(sizeof(ffe::renderer::WaterPlane) == 20u);
+}
+
+TEST_CASE("WaterPlane width and depth are independent fields", "[water][wm]") {
+    ffe::renderer::WaterPlane plane{0.0f, 0.0f, 0.0f, 100.0f, 200.0f};
+    CHECK(plane.width == 100.0f);
+    CHECK(plane.depth == 200.0f);
+    // Mutating one does not affect the other.
+    plane.width = 50.0f;
+    CHECK(plane.width == 50.0f);
+    CHECK(plane.depth == 200.0f);
+}
+
+TEST_CASE("MAX_WATER_SURFACES is at least 4", "[water][wm]") {
+    STATIC_CHECK(ffe::renderer::MAX_WATER_SURFACES >= 4u);
+}
+
+TEST_CASE("MAX_WATER_SURFACES is exactly 8", "[water][wm]") {
+    STATIC_CHECK(ffe::renderer::MAX_WATER_SURFACES == 8u);
+}
+
+// WaterSurfaceConfig (WaterManager variant) defaults
+TEST_CASE("WaterManager WaterConfig default waveSpeed is 0.3", "[water][wm]") {
+    const ffe::renderer::WaterSurfaceConfig cfg;
+    CHECK(cfg.waveSpeed == 0.3f);
+}
+
+TEST_CASE("WaterManager WaterConfig default waveScale is 2.0", "[water][wm]") {
+    const ffe::renderer::WaterSurfaceConfig cfg;
+    CHECK(cfg.waveScale == 2.0f);
+}
+
+TEST_CASE("WaterManager WaterConfig default waveAmplitude is 0.05", "[water][wm]") {
+    const ffe::renderer::WaterSurfaceConfig cfg;
+    CHECK(cfg.waveAmplitude == 0.05f);
+}
+
+TEST_CASE("WaterManager WaterConfig default fresnelPower is 3.0", "[water][wm]") {
+    const ffe::renderer::WaterSurfaceConfig cfg;
+    CHECK(cfg.fresnelPower == 3.0f);
+}
+
+TEST_CASE("WaterManager WaterConfig fresnelPower default is positive", "[water][wm]") {
+    const ffe::renderer::WaterSurfaceConfig cfg;
+    CHECK(cfg.fresnelPower > 0.0f);
+}
+
+TEST_CASE("WaterManager WaterConfig default reflectionStrength is 0.6", "[water][wm]") {
+    const ffe::renderer::WaterSurfaceConfig cfg;
+    CHECK(cfg.reflectionStrength == 0.6f);
+}
+
+TEST_CASE("WaterManager WaterConfig default reflectionEnabled is true", "[water][wm]") {
+    const ffe::renderer::WaterSurfaceConfig cfg;
+    CHECK(cfg.reflectionEnabled);
+}
+
+TEST_CASE("WaterManager WaterConfig waterColor and deepColor are distinct by default", "[water][wm]") {
+    const ffe::renderer::WaterSurfaceConfig cfg;
+    // waterColor defaults to (0.1, 0.4, 0.6); deepColor to (0.02, 0.1, 0.2).
+    CHECK(cfg.waterColor != cfg.deepColor);
+}
+
+TEST_CASE("WaterManager WaterConfig default waveSpeed accepts zero when assigned", "[water][wm]") {
+    ffe::renderer::WaterSurfaceConfig cfg;
+    cfg.waveSpeed = 0.0f;
+    CHECK(cfg.waveSpeed == 0.0f);
+}
+
+TEST_CASE("WaterManager WaterConfig default waveAmplitude accepts zero when assigned", "[water][wm]") {
+    ffe::renderer::WaterSurfaceConfig cfg;
+    cfg.waveAmplitude = 0.0f;
+    CHECK(cfg.waveAmplitude == 0.0f);
+}
+
+// Fresnel Schlick approximation — pure arithmetic, no GPU required.
+// F(cosTheta) = F0 + (1 - F0) * (1 - cosTheta)^5
+// Water F0 is approximately 0.02 at normal incidence.
+
+TEST_CASE("Fresnel Schlick at normal incidence (cosTheta=1) equals F0", "[water][wm]") {
+    // F(1) = F0 + (1-F0)*(1-1)^5 = F0 + 0 = F0
+    constexpr float F0 = 0.02f;
+    constexpr float cosTheta = 1.0f;
+    const float oneMinusCos = 1.0f - cosTheta; // = 0
+    const float term = oneMinusCos * oneMinusCos * oneMinusCos *
+                       oneMinusCos * oneMinusCos;             // 0^5 = 0
+    const float fresnel = F0 + (1.0f - F0) * term;
+    CHECK(fresnel == Catch::Approx(F0).epsilon(1e-5f));
+}
+
+TEST_CASE("Fresnel Schlick at grazing angle (cosTheta~0) approaches 1.0", "[water][wm]") {
+    // F(0) = F0 + (1-F0)*(1)^5 = F0 + (1-F0) = 1.0
+    constexpr float F0 = 0.02f;
+    constexpr float cosTheta = 0.0f;
+    const float oneMinusCos = 1.0f - cosTheta; // = 1
+    const float term = oneMinusCos * oneMinusCos * oneMinusCos *
+                       oneMinusCos * oneMinusCos;             // 1^5 = 1
+    const float fresnel = F0 + (1.0f - F0) * term;
+    CHECK(fresnel == Catch::Approx(1.0f).epsilon(1e-5f));
+}
+
+TEST_CASE("Fresnel Schlick at cosTheta=0.5 is between F0 and 1.0", "[water][wm]") {
+    constexpr float F0 = 0.02f;
+    constexpr float cosTheta = 0.5f;
+    const float oneMinusCos = 1.0f - cosTheta; // = 0.5
+    const float term = oneMinusCos * oneMinusCos * oneMinusCos *
+                       oneMinusCos * oneMinusCos;             // 0.5^5 = 0.03125
+    const float fresnel = F0 + (1.0f - F0) * term;
+    CHECK(fresnel > F0);
+    CHECK(fresnel < 1.0f);
+    CHECK(fresnel == Catch::Approx(F0 + (1.0f - F0) * 0.03125f).epsilon(1e-5f));
+}
+
+// UV scroll accumulation — pure arithmetic.
+TEST_CASE("UV scroll accumulates correctly: dt=0.5, speed=0.3 -> time=0.15", "[water][wm]") {
+    // Simulates one tick of WaterManager::update(dt=0.5) with waveSpeed=0.3.
+    // The time accumulator advances by dt each frame; the UV offset = time * waveSpeed.
+    float time = 0.0f;
+    const float dt = 0.5f;
+    const float speed = 0.3f;
+    time += dt;
+    const float uvScroll = time * speed;
+    CHECK(uvScroll == Catch::Approx(0.15f).epsilon(1e-5f));
+}
+
+TEST_CASE("UV scroll over multiple ticks is additive", "[water][wm]") {
+    float time = 0.0f;
+    const float dt = 0.1f;
+    const float speed = 1.0f;
+    for (int i = 0; i < 10; ++i) { time += dt; }
+    // After 10 ticks of dt=0.1: time = 1.0; uvScroll = 1.0 * 1.0 = 1.0
+    const float uvScroll = time * speed;
+    CHECK(uvScroll == Catch::Approx(1.0f).epsilon(1e-4f));
 }

@@ -448,6 +448,9 @@ void ScriptEngine::shutdown() {
     // Free vegetation GPU resources. Safe to call even if init() was never called.
     m_vegetationSystem.shutdown();
 
+    // Free WaterManager GPU resources. Safe to call even if init() was never called.
+    m_waterManager.shutdown();
+
     lua_close(L);
     m_luaState   = nullptr;
     m_initialised = false;
@@ -7763,6 +7766,200 @@ void ScriptEngine::registerEcsBindings() {
         return 0;
     });
     lua_setfield(L, -2, "removeWater");
+
+    // ----------------------------------------------------------------
+    // WaterManager bindings (Phase 9 M6)
+    // ----------------------------------------------------------------
+    // These bindings front the WaterManager (animated water planes,
+    // Fresnel blending, optional planar reflection). Each surface is
+    // identified by a uint32_t handle returned from ffe.createWaterSurface.
+    // All operations are cold-path only — do NOT call per frame.
+
+    // ffe.createWaterSurface(x, y, z, width, depth) -> integer
+    // Create a water plane centred at (x, y, z) with the given extents.
+    // Returns WaterHandle.id on success; 0 on error (at capacity or invalid args).
+    // NOTE: lambda stored in a local to avoid preprocessor misparse of braced
+    //       aggregate initializers inside the lua_pushcfunction macro argument.
+    {
+        auto fn_createWaterSurface = [](lua_State* state) -> int {
+            lua_pushlightuserdata(state, &s_engineRegistryKey);
+            lua_gettable(state, LUA_REGISTRYINDEX);
+            if (lua_isnil(state, -1)) { lua_pop(state, 1); lua_pushinteger(state, 0); return 1; }
+            auto* engine = static_cast<ffe::ScriptEngine*>(lua_touserdata(state, -1));
+            lua_pop(state, 1);
+
+            const double rawX     = lua_tonumber(state, 1);
+            const double rawY     = lua_tonumber(state, 2);
+            const double rawZ     = lua_tonumber(state, 3);
+            const double rawWidth = lua_tonumber(state, 4);
+            const double rawDepth = lua_tonumber(state, 5);
+
+            // Validate: all components must be finite.
+            if (!std::isfinite(rawX) || !std::isfinite(rawY) || !std::isfinite(rawZ) ||
+                !std::isfinite(rawWidth) || !std::isfinite(rawDepth)) {
+                FFE_LOG_ERROR("ScriptEngine",
+                              "ffe.createWaterSurface: all arguments must be finite numbers");
+                lua_pushinteger(state, 0);
+                return 1;
+            }
+            // width and depth must be positive.
+            if (rawWidth <= 0.0 || rawDepth <= 0.0) {
+                FFE_LOG_ERROR("ScriptEngine",
+                              "ffe.createWaterSurface: width and depth must be > 0, got width=%.3f depth=%.3f",
+                              rawWidth, rawDepth);
+                lua_pushinteger(state, 0);
+                return 1;
+            }
+
+            ffe::renderer::WaterPlane plane;
+            plane.x     = static_cast<ffe::f32>(rawX);
+            plane.y     = static_cast<ffe::f32>(rawY);
+            plane.z     = static_cast<ffe::f32>(rawZ);
+            plane.width = static_cast<ffe::f32>(rawWidth);
+            plane.depth = static_cast<ffe::f32>(rawDepth);
+            const ffe::renderer::WaterSurfaceConfig cfg{}; // defaults
+
+            const ffe::renderer::WaterHandle h =
+                engine->m_waterManager.createWater(plane, cfg);
+
+            lua_pushinteger(state, static_cast<lua_Integer>(h.id));
+            return 1;
+        };
+        lua_pushcfunction(L, fn_createWaterSurface);
+    }
+    lua_setfield(L, -2, "createWaterSurface");
+
+    // ffe.destroyWaterSurface(handle: integer) -> nil
+    // Destroy a water surface and free its GPU resources. No-op on invalid handle.
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_engineRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* engine = static_cast<ffe::ScriptEngine*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = lua_tointeger(state, 1);
+        engine->m_waterManager.destroyWater(
+            ffe::renderer::WaterHandle{static_cast<ffe::u32>(rawId > 0 ? rawId : 0)});
+        return 0;
+    });
+    lua_setfield(L, -2, "destroyWaterSurface");
+
+    // ffe.setWaterSurfaceColor(handle, r, g, b) -> nil
+    // Update the shallow water color on an existing surface.
+    // r, g, b are in [0, 1].
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_engineRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* engine = static_cast<ffe::ScriptEngine*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId = lua_tointeger(state, 1);
+        const ffe::f32 r = static_cast<ffe::f32>(lua_tonumber(state, 2));
+        const ffe::f32 g = static_cast<ffe::f32>(lua_tonumber(state, 3));
+        const ffe::f32 b = static_cast<ffe::f32>(lua_tonumber(state, 4));
+
+        ffe::renderer::WaterHandle h{static_cast<ffe::u32>(rawId > 0 ? rawId : 0)};
+        // WaterManager::setWaterConfig requires fetching the current config first.
+        // We store a temporary with the updated color and forward it.
+        // (WaterManager is not a singleton — retrieve via engine member.)
+        // There is no getWaterConfig() on WaterManager; construct defaults and update color only.
+        ffe::renderer::WaterSurfaceConfig cfg{};
+        cfg.waterColor = glm::vec3(r, g, b);
+        engine->m_waterManager.setWaterConfig(h, cfg);
+        return 0;
+    });
+    lua_setfield(L, -2, "setWaterSurfaceColor");
+
+    // ffe.setWaterSurfaceWave(handle, speed, scale, amplitude) -> nil
+    // Update wave animation parameters.
+    // speed and amplitude are clamped to [0, 10]; scale accepted as-is.
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_engineRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* engine = static_cast<ffe::ScriptEngine*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId   = lua_tointeger(state, 1);
+        const double rawSpeed     = lua_tonumber(state, 2);
+        const double rawScale     = lua_tonumber(state, 3);
+        const double rawAmplitude = lua_tonumber(state, 4);
+
+        // Clamp speed and amplitude to [0, 10]; reject negatives.
+        const ffe::f32 speed = static_cast<ffe::f32>(
+            rawSpeed < 0.0 ? 0.0 : (rawSpeed > 10.0 ? 10.0 : rawSpeed));
+        const ffe::f32 scale = static_cast<ffe::f32>(rawScale);
+        const ffe::f32 amplitude = static_cast<ffe::f32>(
+            rawAmplitude < 0.0 ? 0.0 : (rawAmplitude > 10.0 ? 10.0 : rawAmplitude));
+
+        ffe::renderer::WaterHandle h{static_cast<ffe::u32>(rawId > 0 ? rawId : 0)};
+        ffe::renderer::WaterSurfaceConfig cfg{};
+        cfg.waveSpeed     = speed;
+        cfg.waveScale     = scale;
+        cfg.waveAmplitude = amplitude;
+        engine->m_waterManager.setWaterConfig(h, cfg);
+        return 0;
+    });
+    lua_setfield(L, -2, "setWaterSurfaceWave");
+
+    // ffe.setWaterSurfaceFresnel(handle, power, reflectionStrength) -> nil
+    // Update Fresnel parameters.
+    // power must be > 0; reflectionStrength is clamped to [0, 1].
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_engineRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* engine = static_cast<ffe::ScriptEngine*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId      = lua_tointeger(state, 1);
+        const double rawPower        = lua_tonumber(state, 2);
+        const double rawReflStrength = lua_tonumber(state, 3);
+
+        if (rawPower <= 0.0) {
+            FFE_LOG_ERROR("ScriptEngine",
+                          "ffe.setWaterSurfaceFresnel: power must be > 0, got %.3f",
+                          rawPower);
+            return 0;
+        }
+
+        const ffe::f32 power = static_cast<ffe::f32>(rawPower);
+        // Clamp reflectionStrength to [0, 1].
+        const ffe::f32 reflStrength = static_cast<ffe::f32>(
+            rawReflStrength < 0.0 ? 0.0 : (rawReflStrength > 1.0 ? 1.0 : rawReflStrength));
+
+        ffe::renderer::WaterHandle h{static_cast<ffe::u32>(rawId > 0 ? rawId : 0)};
+        ffe::renderer::WaterSurfaceConfig cfg{};
+        cfg.fresnelPower        = power;
+        cfg.reflectionStrength  = reflStrength;
+        engine->m_waterManager.setWaterConfig(h, cfg);
+        return 0;
+    });
+    lua_setfield(L, -2, "setWaterSurfaceFresnel");
+
+    // ffe.setWaterSurfaceReflection(handle, enabled: boolean) -> nil
+    // Enable or disable planar reflection for a water surface.
+    // On LEGACY tier the reflection FBO is never allocated — this controls
+    // whether createWater() will attempt to allocate it on STANDARD+.
+    lua_pushcfunction(L, [](lua_State* state) -> int {
+        lua_pushlightuserdata(state, &s_engineRegistryKey);
+        lua_gettable(state, LUA_REGISTRYINDEX);
+        if (lua_isnil(state, -1)) { lua_pop(state, 1); return 0; }
+        auto* engine = static_cast<ffe::ScriptEngine*>(lua_touserdata(state, -1));
+        lua_pop(state, 1);
+
+        const lua_Integer rawId  = lua_tointeger(state, 1);
+        const bool enabled       = lua_toboolean(state, 2) != 0;
+
+        ffe::renderer::WaterHandle h{static_cast<ffe::u32>(rawId > 0 ? rawId : 0)};
+        ffe::renderer::WaterSurfaceConfig cfg{};
+        cfg.reflectionEnabled = enabled;
+        engine->m_waterManager.setWaterConfig(h, cfg);
+        return 0;
+    });
+    lua_setfield(L, -2, "setWaterSurfaceReflection");
 
     lua_setglobal(L, "ffe");
 }

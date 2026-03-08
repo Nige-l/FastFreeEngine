@@ -2,6 +2,7 @@
 
 #include "core/types.h"
 #include "renderer/vegetation.h"
+#include "renderer/water.h"
 
 // sol2 and lua headers are NOT included here.
 // They are heavyweight — include only in script_engine.cpp.
@@ -143,6 +144,10 @@ private:
     // first addPatch/addTree call via the render coordinator). shutdown() is
     // safe to call even if init() was never called.
     ffe::renderer::VegetationSystem m_vegetationSystem;
+
+    // WaterManager — Phase 9 M6 animated water planes with Fresnel blending.
+    // shutdown() is safe to call even if init() was never called.
+    ffe::renderer::WaterManager m_waterManager;
 
     // Sets up the whitelist sandbox: removes dangerous globals and
     // installs the ffe.* API table.
