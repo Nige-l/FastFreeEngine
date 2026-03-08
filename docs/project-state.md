@@ -6,7 +6,7 @@
 
 | Metric | Value |
 |--------|-------|
-| Last session | 101 |
+| Last session | 102 |
 | Total tests | 1336 (Clang-18, zero warnings) |
 | Total Lua bindings | ~207 |
 | Phase 1 (2D Foundation) | COMPLETE (Linux) |
@@ -45,11 +45,11 @@
 
 | Session | Summary |
 |---------|---------|
+| 102 | CMake Lua Asset Copy at Build-Time — new CopyExampleAssets.cmake helper (ffe_copy_example_lua/dir), all 6 examples use POST_BUILD copy, showcase CMakeLists simplified, deleted 30MB Pixel Crown.wav duplicate. 1336 tests. |
 | 101 | Input Race Condition + Physics Transform Fix — mouse click latching (fixes LMB attack), fillTransform3D reads Jolt body (fixes floating player), Level 2 artifact bypass fix, kinematic bridges/platforms, deleted tone placeholders. 1336 tests. |
 | 99 | Demo Visual Enrichment — point lights, flame tips, lava layers, gem pedestals, braziers, camera angle improvements across all 3 showcase levels. Retaken screenshots. 1336 tests. |
 | 98 | Screenshot Visual Quality Tuning — fog distances pushed out (60-200), material/ambient brightening on software renderer, camera angles face level geometry. Retaken screenshots. 1336 tests. |
 | 97 | Software Renderer Detection — isSoftwareRenderer() RHI API + Lua binding, showcase/3d_demo skip post-processing on software renderer, brighter fallback colors, retaken screenshots. 1336 tests. |
-| 96 | Physics Sync Fix + Demo Polish — setTransform3D syncs to Jolt body (fixes fall-through-ground), 3 new tests, showcase demo polish (player animation, AI color tracking, HUD crosshair/counters, music, guardian animations), README screenshots, Phase 9 marked complete. 1336 tests. |
 
 ## Phase 8 — Vulkan Backend (COMPLETE, Sessions 85-89)
 

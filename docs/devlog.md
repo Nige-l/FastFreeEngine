@@ -3,6 +3,45 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-08 — Session 102: CMake Lua Asset Copy at Build-Time
+
+### Summary
+
+Session 102 fixed a build-system issue where Lua example scripts were only copied at CMake configure time, not at build time. A new `cmake/CopyExampleAssets.cmake` helper module provides `ffe_copy_example_lua` and `ffe_copy_example_dir` functions that set up POST_BUILD copy commands. All 6 example projects now use these helpers, ensuring Lua files are always up to date after a build without needing to re-run CMake. The showcase CMakeLists was simplified from 60 lines of manual copy commands to 4 helper calls. Also deleted a 30MB uncompressed `Pixel Crown.wav` duplicate that was gitignored but taking up disk space.
+
+### Delivered
+
+- **cmake/CopyExampleAssets.cmake** -- new helper module with `ffe_copy_example_lua` (copies .lua files) and `ffe_copy_example_dir` (copies directories) as POST_BUILD commands
+- **All 6 examples updated** -- 3d_demo, breakout, lua_demo, net_demo, pong, showcase CMakeLists now use the helpers
+- **Showcase CMakeLists simplified** -- replaced 60-line manual copy block with 4 helper calls
+- **Root CMakeLists.txt** -- added `include(cmake/CopyExampleAssets.cmake)`
+- **Audio cleanup** -- deleted 30MB `assets/audio/Pixel Crown.wav` (uncompressed duplicate, was gitignored)
+
+### Files Modified (8)
+
+- `cmake/CopyExampleAssets.cmake` (new)
+- `CMakeLists.txt` (include helper module)
+- `examples/3d_demo/CMakeLists.txt` (use helper)
+- `examples/breakout/CMakeLists.txt` (use helper)
+- `examples/lua_demo/CMakeLists.txt` (use helper)
+- `examples/net_demo/CMakeLists.txt` (use helper)
+- `examples/pong/CMakeLists.txt` (use helper)
+- `examples/showcase/CMakeLists.txt` (simplified with helpers)
+
+### Reviews
+
+- Skipped (build-system infrastructure change, no engine code modified)
+
+### Build
+
+- No build this session (CMake-only changes, no new tests)
+
+### game-dev-tester
+
+- Not invoked (no demo changes)
+
+---
+
 ## 2026-03-08 — Session 101: Input Race Condition + Physics Transform Fix
 
 ### Summary
