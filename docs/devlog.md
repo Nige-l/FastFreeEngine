@@ -3,6 +3,46 @@
 > **Quick context:** Read `docs/project-state.md` first — it has the full project state in under 100 lines.
 > **Archive:** Sessions 1-50 are in `docs/devlog-archive.md`.
 
+## 2026-03-08 — Session 101: Input Race Condition + Physics Transform Fix
+
+### Summary
+
+Session 101 fixed two engine bugs and polished the showcase demo. The mouse input system had a race condition where a press and release arriving in the same poll batch would swallow the press event — fixed by latching flags so the pressed state survives until the next frame. The scripting layer's `fillTransform3D` was reading stale ECS position data instead of the live Jolt physics body transform, causing the player to float above the ground — fixed by reading from Jolt when the entity has a RigidBody3D component. Demo levels received gameplay and audio fixes: Level 2's artifact bypass was closed (portal is only completion path) and timed bridges changed to kinematic; Level 3's moving platforms changed to kinematic with BattleMusic.mp3; Level 1 switched to music_pixelcrown.ogg with lowered spawn height. Tone placeholder music files were deleted.
+
+### Delivered
+
+- **Mouse click race condition fix** -- latched press/release flags in input.cpp prevent click-release within single poll batch from swallowing the press (fixes LMB attack not working)
+- **Physics transform read fix** -- fillTransform3D in script_engine.cpp reads position/rotation from Jolt body when entity has RigidBody3D (fixes player floating above ground)
+- **Level 2 gameplay fix** -- artifact bypass closed (portal is only completion path), timed bridges changed to kinematic
+- **Level 3 kinematic platforms** -- moving platforms changed to kinematic, music changed to BattleMusic.mp3
+- **Level 1 audio/spawn fix** -- music changed to music_pixelcrown.ogg, spawn height lowered
+- **Deleted tone placeholders** -- music_courtyard.ogg, assets/audio/music.ogg, assets/audio/music_loop.ogg removed
+
+### Files Modified (8)
+
+- `engine/core/input.cpp` (latched press/release flags)
+- `engine/scripting/script_engine.cpp` (fillTransform3D reads Jolt body)
+- `examples/showcase/levels/level1.lua` (music, spawn height)
+- `examples/showcase/levels/level2.lua` (artifact bypass fix, kinematic bridges)
+- `examples/showcase/levels/level3.lua` (kinematic platforms, BattleMusic)
+- `examples/showcase/assets/audio/music_courtyard.ogg` (deleted)
+- `assets/audio/music.ogg` (deleted)
+- `assets/audio/music_loop.ogg` (deleted)
+
+### Reviews
+
+- Skipped (bug fix session, changes are targeted and small)
+
+### Build
+
+- No build this session (targeted fixes, no new tests)
+
+### game-dev-tester
+
+- Skipped (demo fixes authored directly, no new API)
+
+---
+
 ## 2026-03-08 — Session 99: Demo Visual Enrichment
 
 ### Summary
